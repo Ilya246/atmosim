@@ -24,13 +24,13 @@ leakedHeat = 0.0;
 bool exploded = false;
 int integrity = 3, leakCount = 0, tick = 0,
 tickCap = 30, pipeTickCap = 1000;
-bool stepTargetTemp = false;
+bool stepTargetTemp = false, setupRatio = false;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
 fireHydrogenEnergyReleased = 560000.0, minimumTritiumOxyburnEnergy = 430000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
 firePlasmaEnergyReleased = 3000000.0, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
 targetRadius = 0.0,
-temperatureStep = 1.0, ratioStep = 1.01;
+temperatureStep = 1.0, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
 
 void reset() {
 	for (GasType& g : gases) {
@@ -333,7 +333,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp += temperatureStep) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + 1.0 + temperatureStep;
 			for (float targetTemp = fireTemp + 1.0; targetTemp < targetTemp2; targetTemp += temperatureStep) {
-				for (float ratio = 1.0 / 10.0; ratio < 10.0; ratio *= ratioStep) {
+				for (float ratio = 1.0 / ratioFrom; ratio < ratioTo; ratio *= ratioStep) {
 					float fuelPressure;
 					reset();
 					fuelPressure = mixInputSetup(gas1, gas2, gas3, fuelTemp, thirTemp, targetTemp, ratio);
@@ -386,21 +386,28 @@ int main(int argc, char* argv[]) {
 	if (argc > 1) {
 		bool hasInputSpec = false;
 		for (int i = 0; i < argc; i++) {
-			char* arg = argv[i];
-            if (arg[0] != '-') continue;
-			switch (arg[1]) {
-				case 'c': {
-					cout << "Input desired tickcap: ";
-					cin >> tickCap;
-					break;
+			string arg(argv[i]);
+            if (arg[0] != '-' || arg.length() < 2) {
+				continue;
+			}
+			if (arg[1] == '-') {
+				if (arg.rfind("--radius", 0) == 0) {
+					std::string argstr(arg);
+					targetRadius = std::stod(argstr.substr(8));
 				}
+				if (arg.rfind("--ticks", 0) == 0) {
+					std::string argstr(arg);
+					tickCap = std::stod(argstr.substr(7));
+				}
+				continue;
+			}
+			switch (arg[1]) {
 				case 'H': {
 					heatCapInputSetup();
 					break;
 				}
 				case 'r': {
-					std::string argstr(arg);
-					targetRadius = std::stod(argstr.substr(2));
+					setupRatio = !setupRatio;
 					break;
 				}
 				case 's': {
@@ -480,6 +487,12 @@ int main(int argc, char* argv[]) {
 	cin >> gas1;
 	cout << "gas2: ";
 	cin >> gas2;
+	if (setupRatio) {
+		cout << "max gas1:gas2: ";
+		cin >> ratioFrom;
+		cout << "max gas2:gas1: ";
+		cin >> ratioTo;
+	}
 	cout << "gas3: ";
 	cin >> gas3;
 	cout << "mix temp1: ";
