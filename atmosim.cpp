@@ -493,6 +493,8 @@ int main(int argc, char* argv[]) {
 		cin >> ratioFrom;
 		cout << "max gas2:gas1: ";
 		cin >> ratioTo;
+		cout << "ratio step: ";
+		cin >> ratioStep;
 	}
 	cout << "gas3: ";
 	cin >> gas3;
