@@ -394,10 +394,12 @@ int main(int argc, char* argv[]) {
 				if (arg.rfind("--radius", 0) == 0) {
 					std::string argstr(arg);
 					targetRadius = std::stod(argstr.substr(8));
-				}
-				if (arg.rfind("--ticks", 0) == 0) {
+				} else if (arg.rfind("--ticks", 0) == 0) {
 					std::string argstr(arg);
-					tickCap = std::stod(argstr.substr(7));
+					tickCap = std::stoi(argstr.substr(7));
+				} else if (arg.rfind("--tstep", 0) == 0) {
+					std::string argstr(arg);
+					temperatureStep = std::stod(argstr.substr(7));
 				}
 				continue;
 			}
