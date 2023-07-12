@@ -392,14 +392,13 @@ int main(int argc, char* argv[]) {
 			}
 			if (arg[1] == '-') {
 				if (arg.rfind("--radius", 0) == 0) {
-					std::string argstr(arg);
-					targetRadius = std::stod(argstr.substr(8));
+					targetRadius = std::stod(arg.substr(8));
 				} else if (arg.rfind("--ticks", 0) == 0) {
-					std::string argstr(arg);
-					tickCap = std::stoi(argstr.substr(7));
+					tickCap = std::stoi(arg.substr(7));
 				} else if (arg.rfind("--tstep", 0) == 0) {
-					std::string argstr(arg);
-					temperatureStep = std::stod(argstr.substr(7));
+					temperatureStep = std::stod(arg.substr(7));
+				} else if (arg.rfind("--volume", 0) == 0) {
+					volume = std::stod(arg.substr(8));
 				}
 				continue;
 			}
