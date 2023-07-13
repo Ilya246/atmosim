@@ -332,7 +332,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp += temperatureStep) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp += temperatureStep) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + 1.0 + temperatureStep;
-			for (float targetTemp = fireTemp + 1.0; targetTemp < targetTemp2; targetTemp += temperatureStep) {
+			for (float targetTemp = fireTemp + temperatureStep; targetTemp < targetTemp2; targetTemp += temperatureStep) {
 				for (float ratio = 1.0 / ratioFrom; ratio < ratioTo; ratio *= ratioStep) {
 					float fuelPressure;
 					reset();
