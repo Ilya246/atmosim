@@ -336,10 +336,10 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 				for (float ratio = 1.0 / ratioFrom; ratio < ratioTo; ratio *= ratioStep) {
 					float fuelPressure;
 					reset();
-					fuelPressure = mixInputSetup(gas1, gas2, gas3, fuelTemp, thirTemp, targetTemp, ratio);
-					if (temperature < fireTemp) {
+					if (fuelTemp <= fireTemp && thirTemp <= fireTemp) {
 						continue;
 					}
+					fuelPressure = mixInputSetup(gas1, gas2, gas3, fuelTemp, thirTemp, targetTemp, ratio);
 					loop();
 					if (radius > targetRadius && (maximise == (*optimiseStat > bestResult))) {
 						bestRatio = ratio;
