@@ -405,6 +405,8 @@ int main(int argc, char* argv[]) {
 					temperatureStep = std::stod(arg.substr(7));
 				} else if (arg.rfind("--volume", 0) == 0) {
 					volume = std::stod(arg.substr(8));
+				} else {
+					cout << "Unrecognized argument '" << arg << "'." << endl;
 				}
 				continue;
 			}
@@ -473,6 +475,7 @@ int main(int argc, char* argv[]) {
 					return 0;
 				}
 				default: {
+					cout << "Unrecognized argument '" << arg << "'." << endl;
 					break;
 				}
 			}
