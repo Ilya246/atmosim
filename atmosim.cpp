@@ -30,7 +30,7 @@ tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosph
 fireHydrogenEnergyReleased = 560000.0, minimumTritiumOxyburnEnergy = 430000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
 firePlasmaEnergyReleased = 3000000.0, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
 targetRadius = 0.0,
-temperatureStep = 1.0, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
+overTemp = 0.1, temperatureStep = 1.0, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
 
 void reset() {
 	for (GasType& g : gases) {
@@ -332,7 +332,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp += temperatureStep) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp += temperatureStep) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + 1.0 + temperatureStep;
-			for (float targetTemp = fireTemp + temperatureStep; targetTemp < targetTemp2; targetTemp += temperatureStep) {
+			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp += temperatureStep) {
 				for (float ratio = 1.0 / ratioFrom; ratio < ratioTo; ratio *= ratioStep) {
 					float fuelPressure;
 					reset();
@@ -405,6 +405,8 @@ int main(int argc, char* argv[]) {
 					temperatureStep = std::stod(arg.substr(7));
 				} else if (arg.rfind("--volume", 0) == 0) {
 					volume = std::stod(arg.substr(8));
+				} else if (arg.rfind("--overtemp", 0) == 0) {
+					overTemp = std::stod(arg.substr(10));
 				} else {
 					cout << "Unrecognized argument '" << arg << "'." << endl;
 				}
