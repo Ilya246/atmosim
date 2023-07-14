@@ -268,7 +268,7 @@ void testOxyplasma() {
 			float oxyTemp = 293.15;
 			float fuelPressure;
 			reset();
-			fuelPressure = oxyplasmaInputSetup(fuelTemp, oxyTemp, fireTemp + 1.85);
+			fuelPressure = oxyplasmaInputSetup(fuelTemp, oxyTemp, fireTemp + 1.0);
 			loop();
 			if (exploded && getCurRange() > maxRadius) {
 				maxRadius = getCurRange();
@@ -331,7 +331,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 	int bestTicks;
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp += temperatureStep) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp += temperatureStep) {
-			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + 1.0 + temperatureStep;
+			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
 			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp += temperatureStep) {
 				for (float ratio = 1.0 / ratioFrom; ratio < ratioTo; ratio *= ratioStep) {
 					float fuelPressure;
@@ -437,6 +437,10 @@ int main(int argc, char* argv[]) {
 					cin >> capratio;
 					ratio = 100.0 / ratio - 1.0;
 					cout << "pressure ratio: " << 100.0 / (1.0 + ratio * t2 / t1) << "% first | temp " << (t1 + t2 * capratio) / (1.0 + capratio) << "K";
+					return 0;
+				}
+				case 'o': {
+					testOxyplasma();
 					return 0;
 				}
 				case 'f': {
