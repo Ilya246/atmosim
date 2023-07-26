@@ -23,7 +23,8 @@ radius = 0.0, // some stats here to be easily optimised for using the general-pu
 leakedHeat = 0.0;
 bool exploded = false;
 int integrity = 3, leakCount = 0, tick = 0,
-tickCap = 30, pipeTickCap = 1000;
+tickCap = 30, pipeTickCap = 1000,
+logLevel = 1;
 bool stepTargetTemp = false, setupRatio = false;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
@@ -325,10 +326,22 @@ void testOxyplasmaLeakbomb() {
 	}
 	cout << "Best oxyplasma: plasma " << bestFuelTemp << "K " << bestPressure << "kPa | oxygen " << bestOxygenTemp <<"K | leaks " << maxLeaks << " leaked heat " << bestLeakedHeat << endl; 
 }
+struct bombData {
+	float ratio, temp, pressure, thirTemp, radius;
+	int ticks;
+	float opstat;
+};
+ostream& operator<<(ostream& out, bombData data) {
+	out << "fuel " << 100.0 / (1.0 + data.ratio) << "% first " << data.temp << "K " << data.pressure << "kPa | third " << data.thirTemp << "K | range " << data.radius << " | ticks " << data.ticks << " | optstat " << data.opstat;
+	return out;
+}
 void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float mixt2, float thirt1, float thirt2, float* optimiseStat, bool maximise) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
 	float bestTemp, bestPressure, bestRatio, bestThirTemp, bestTargetTemp, bestRadius;
 	int bestTicks;
+	float bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
+	float bestTemp_L, bestPressure_L, bestRatio_L, bestThirTemp_L, bestTargetTemp_L, bestRadius_L;
+	int bestTicks_L;
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp += temperatureStep) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp += temperatureStep) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
@@ -357,12 +370,37 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 						bestTicks = tick;
 						bestResult = *optimiseStat;
 					}
+					if (logLevel >= 5) {
+						cout << "Current: " << bombData{ratio, fuelTemp, fuelPressure, thirTemp, radius, tick, *optimiseStat} << endl;
+					} else if (radius > targetRadius && (maximise == (*optimiseStat > bestResult_L))) {
+						bestRatio_L = ratio;
+						bestPressure_L = fuelPressure;
+						bestTemp_L = fuelTemp;
+						bestThirTemp_L = thirTemp;
+						bestTargetTemp_L = targetTemp;
+						bestRadius_L = radius;
+						bestTicks_L = tick;
+						bestResult_L = *optimiseStat;
+					}
+				}
+				if (logLevel == 4) {
+					cout << "Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
+					bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
 				}
 			}
+			if (logLevel == 3) {
+				cout << "Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
+				bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
+			}
 		}
-		cout << "Current: fuel " << 100.0 / (1.0 + bestRatio) << "% first " << bestTemp << "K " << bestPressure << "kPa | third " << bestThirTemp << "K | range " << bestRadius << " | ticks " << bestTicks << " | optstat " << bestResult << endl;
+		if (logLevel == 2) {
+			cout << "Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
+			bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
+		} else if (logLevel == 1) {
+			cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
+		}
 	}
-	cout << "Best: fuel " << 100.0 / (1.0 + bestRatio) << "% first " << bestTemp << "K " << bestPressure << "kPa | third " << bestThirTemp << "K | range " << bestRadius << " | ticks " << bestTicks << " | optstat " << bestResult << endl; 
+	cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
 }
 void testUnimix(GasType& gas1, GasType& gas2, float temp, float targetTemp) {
 	float closestTemp = std::numeric_limits<float>::min(), bestRatio;
@@ -407,6 +445,8 @@ int main(int argc, char* argv[]) {
 					volume = std::stod(arg.substr(8));
 				} else if (arg.rfind("--overtemp", 0) == 0) {
 					overTemp = std::stod(arg.substr(10));
+				} else if (arg.rfind("--loglevel", 0) == 0) {
+					logLevel = std::stoi(arg.substr(10));
 				} else {
 					cout << "Unrecognized argument '" << arg << "'." << endl;
 				}
@@ -468,15 +508,33 @@ int main(int argc, char* argv[]) {
 					cout << "Usage: " << argv[0] << " [-h] [-H] [-f] [-r]\n" <<
 					"options:\n" <<
 					"	-h\n" <<
-					"		shows this help message\n" <<
+					"		show help and exit\n" <<
 					"	-H\n" <<
 					"		redefine heat capacities\n" <<
+					"	-r\n" <<
+					"		set ratio iteration bounds+step\n" <<
+					"	-s\n" <<
+					"		step mix-to temp (may take a long time)\n" <<
+					"	-m\n" <<
+					"		different-temperature gas mixing mode\n" <<
+					"	-o\n" <<
+					"		oxyplasma mode\n" <<
 					"	-f\n" <<
 					"		try full input\n" <<
-					"	-r\n" <<
+					"	-u\n" <<
+					"		unimix mode\n" <<
+					"	--radius\n" <<
 					"		set target radius\n" <<
-					//"	-o\n" <<
-					//"		do tritium+plasma mixed into an oxygen canister\n"
+					"	--ticks\n" <<
+					"		set tick limit\n" <<
+					"	--tstep\n" <<
+					"		set temperature iteration step\n" <<
+					"	--volume\n" <<
+					"		set tank volume\n" <<
+					"	--overtemp\n" <<
+					"		delta from the fire temperature to iterate from\n" <<
+					"	--loglevel\n" <<
+					"		what level of the nested loop to log, 0-5: none, globalBest, thirTemp, fuelTemp, targetTemp, all\n" <<
 					"\nss14 maxcap atmos sim\n";
 					return 0;
 				}
