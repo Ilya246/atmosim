@@ -18,7 +18,7 @@ GasType& waterVapour = gases[3];
 GasType& carbonDioxide = gases[4];
 GasType& frezon = gases[5];
 
-float temperature = 293.15, volume = 15.0, pressureCap = 1013.2, pipeVolume = 200.0, pipePressureCap = 4500.0,
+float temperature = 293.15, volume = 15.0, pressureCap = 1013.2, pipePressureCap = 4500.0,
 radius = 0.0, // some stats here to be easily optimised for using the general-purpose method
 leakedHeat = 0.0;
 bool exploded = false;
@@ -254,9 +254,16 @@ float mixInputSetup(GasType& gas1, GasType& gas2, GasType& into, float fuelTemp,
 	temperature = mixGasTempsToTemp(fuel, specheat, fuelTemp, into, intoTemp);
 	return fuelPressure;
 }
-void unimixInputSetup(GasType& gas1, GasType& gas2, float temp, float secondPerFirst) {
+float unimixInputSetup(GasType& gas1, GasType& gas2, float temp1, float temp2, float targetTemp) {
+	float fuelPressure = (targetTemp / temp2 - 1.0) * pressureCap / (gas1.heatCap / gas2.heatCap - 1.0 + targetTemp * (1.0 / temp2 - gas1.heatCap / gas2.heatCap / temp1));
+	gas1.amount = pressureTempToMols(fuelPressure, temp1);
+	gas2.amount = pressureTempToMols(pressureCap - fuelPressure, temp2);
+	temperature = mixGasTempsToTemp(gas1.amount, gas1.heatCap, temp1, gas2, temp2);
+	return fuelPressure;
+}
+void unimixToInputSetup(GasType& gas1, GasType& gas2, float temp, float secondPerFirst) {
 	temperature = temp;
-	float total = pressureTempToMols(pipePressureCap, temperature);
+	float total = pressureTempToMols(pressureCap, temperature);
 	gas1.amount = total / (1.0 + secondPerFirst);
 	gas2.amount = total - gas1.amount;
 }
@@ -402,20 +409,54 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 	}
 	cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
 }
-void testUnimix(GasType& gas1, GasType& gas2, float temp, float targetTemp) {
+void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, float sect1, float sect2, float* optimiseStat, bool maximise) {
+	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
+	float bestTemp1, bestTemp2, bestRatio, bestRadius;
+	int bestTicks;
+	for (float temp1 = firstt1; temp1 <= firstt2; temp1 += temperatureStep) {
+		for (float temp2 = sect1; temp2 <= sect2; temp2 += temperatureStep) {
+			float targetTemp2 = stepTargetTemp ? std::max(temp1, temp2) : fireTemp + overTemp + temperatureStep;
+			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp += temperatureStep) {
+				reset();
+				if (temp1 <= fireTemp && temp2 <= fireTemp) {
+					continue;
+				}
+				if (targetTemp > temp1 == targetTemp > temp2) {
+					continue;
+				}
+				float firstPressure = unimixInputSetup(gas1, gas2, temp1, temp2, targetTemp);
+				if (firstPressure > pressureCap || firstPressure < 0.0) {
+					continue;
+				}
+				float ratio = gas2.amount / gas1.amount;
+				loop();
+				if (radius > targetRadius && (maximise == (*optimiseStat > bestResult))) {
+					bestTemp1 = temp1;
+					bestTemp2 = temp2;
+					bestRatio = ratio;
+					bestRadius = radius;
+					bestTicks = tick;
+					bestResult = *optimiseStat;
+				}
+			}
+		}
+		float first = 1.0 / (1.0 + bestRatio);
+		cout << "Current: " << first * pressureCap << "kPa/" << (1.0 - first) * pressureCap << "kPa first/second | temp " << bestTemp1 << "K/" << bestTemp2 << "K | radius " << bestRadius << " | ticks " << bestTicks << " | opstat " << bestResult << endl;
+	}
+	float first = 1.0 / (1.0 + bestRatio);
+	cout << "Best: " << first * pressureCap << "kPa/" << (1.0 - first) * pressureCap << "kPa first/second | temp " << bestTemp1 << "K/" << bestTemp2 << "K | radius " << bestRadius << " | ticks " << bestTicks << " | opstat " << bestResult << endl;
+}
+void testUnimixTo(GasType& gas1, GasType& gas2, float temp, float targetTemp) {
 	float closestTemp = std::numeric_limits<float>::min(), bestRatio;
-	float oldVolume = volume;
-	volume = pipeVolume;
 	for (float ratio = 1.0 / 100.0; ratio < 100.0; ratio *= ratioStep) {
 		reset();
-		unimixInputSetup(gas1, gas2, temp, ratio);
-		loop(pipeTickCap);
+		unimixToInputSetup(gas1, gas2, temp, ratio);
+		loop();
 		if (std::abs(targetTemp - temperature) < std::abs(targetTemp - closestTemp)) {
 			closestTemp = temperature;
 			bestRatio = ratio;
 		}
 	}
-	volume = oldVolume;
 	cout << "Best: " << 100.0 / (1.0 + bestRatio) << "% first | temp " << closestTemp << "K" << endl;
 }
 
@@ -492,6 +533,24 @@ int main(int argc, char* argv[]) {
 				}
 				case 'u': {
 					string gas1, gas2;
+					float t11, t12, t21, t22;
+					cout << "gas1: ";
+					cin >> gas1;
+					cout << "gas2: ";
+					cin >> gas2;
+					cout << "first temp1: ";
+					cin >> t11;
+					cout << "first temp2: ";
+					cin >> t12;
+					cout << "second temp1: ";
+					cin >> t21;
+					cout << "second temp2: ";
+					cin >> t22;
+					testUnimix(stog(gas1), stog(gas2), t11, t12, t21, t22, &radius, true);
+					return 0;
+				}
+				case 't': {
+					string gas1, gas2;
 					float ti, tt;
 					cout << "gas1: ";
 					cin >> gas1;
@@ -501,7 +560,7 @@ int main(int argc, char* argv[]) {
 					cin >> ti;
 					cout << "target temp: ";
 					cin >> tt;
-					testUnimix(stog(gas1), stog(gas2), ti, tt);
+					testUnimixTo(stog(gas1), stog(gas2), ti, tt);
 					return 0;
 				}
 				case 'h': {
@@ -523,6 +582,8 @@ int main(int argc, char* argv[]) {
 					"		try full input\n" <<
 					"	-u\n" <<
 					"		unimix mode\n" <<
+					"	-t\n" <<
+					"		unimix-to-temp mode\n" <<
 					"	--radius\n" <<
 					"		set target radius\n" <<
 					"	--ticks\n" <<
