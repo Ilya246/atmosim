@@ -18,7 +18,7 @@ GasType& waterVapour = gases[3];
 GasType& carbonDioxide = gases[4];
 GasType& frezon = gases[5];
 
-float temperature = 293.15, volume = 15.0, pressureCap = 1013.2, pipePressureCap = 4500.0,
+float temperature = 293.15, volume = 5.0, pressureCap = 1013.2, pipePressureCap = 4500.0,
 radius = 0.0, // some stats here to be easily optimised for using the general-purpose method
 leakedHeat = 0.0;
 bool exploded = false;
@@ -28,7 +28,7 @@ logLevel = 1;
 bool stepTargetTemp = false, setupRatio = false;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
-fireHydrogenEnergyReleased = 560000.0, minimumTritiumOxyburnEnergy = 430000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
+fireHydrogenEnergyReleased = 560000.0, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
 firePlasmaEnergyReleased = 3000000.0, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
 targetRadius = 0.0,
 overTemp = 0.1, temperatureStep = 1.0, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
@@ -202,7 +202,7 @@ void status() {
 	} else {
 		cout << "EXPLOSION: range " << getCurRange() << endl;
 	}
-	cout << "Status: pressure " << getPressure() << "kPA integrity " << integrity << " temperature " << temperature << "K" << endl;
+	cout << "Status: pressure " << getPressure() << "kPA integrity " << integrity << " temperature " << temperature << "K " << "tick " << tick << endl;
 	cout << "Contents: " << oxygen.amount << " o2 " << plasma.amount << " p " << tritium.amount << " t " << waterVapour.amount << " w " << carbonDioxide.amount << " co2" << endl; 
 }
 
