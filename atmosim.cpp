@@ -25,7 +25,7 @@ bool exploded = false;
 int integrity = 3, leakCount = 0, tick = 0,
 tickCap = 30, pipeTickCap = 1000,
 logLevel = 1;
-bool stepTargetTemp = false, setupRatio = false;
+bool stepTargetTemp = false;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
 fireHydrogenEnergyReleased = 560000.0, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
@@ -353,7 +353,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp += temperatureStep) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
 			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp += temperatureStep) {
-				for (float ratio = 1.0 / ratioFrom; ratio < ratioTo; ratio *= ratioStep) {
+				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
 					float fuelPressure;
 					reset();
 					if (fuelTemp <= fireTemp && thirTemp <= fireTemp) {
@@ -448,7 +448,7 @@ void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, floa
 }
 void testUnimixTo(GasType& gas1, GasType& gas2, float temp, float targetTemp) {
 	float closestTemp = std::numeric_limits<float>::min(), bestRatio;
-	for (float ratio = 1.0 / 100.0; ratio < 100.0; ratio *= ratioStep) {
+	for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
 		reset();
 		unimixToInputSetup(gas1, gas2, temp, ratio);
 		loop();
@@ -461,8 +461,8 @@ void testUnimixTo(GasType& gas1, GasType& gas2, float temp, float targetTemp) {
 }
 
 void heatCapInputSetup() {
-    cout << "Enter `dheat capacities for plasma, oxygen, tritium, water vapor, carbon dioxide: ";
-    for (GasType& g : gases) {
+	cout << "Enter `dheat capacities for plasma, oxygen, tritium, water vapor, carbon dioxide: ";
+	for (GasType& g : gases) {
 		cin >> g.heatCap;
 	};
 }
@@ -472,7 +472,7 @@ int main(int argc, char* argv[]) {
 		bool hasInputSpec = false;
 		for (int i = 0; i < argc; i++) {
 			string arg(argv[i]);
-            if (arg[0] != '-' || arg.length() < 2) {
+			if (arg[0] != '-' || arg.length() < 2) {
 				continue;
 			}
 			if (arg[1] == '-') {
@@ -499,7 +499,14 @@ int main(int argc, char* argv[]) {
 					break;
 				}
 				case 'r': {
-					setupRatio = !setupRatio;
+					if (setupRatio) {
+						cout << "max gas1:gas2: ";
+						cin >> ratioFrom;
+						cout << "max gas2:gas1: ";
+						cin >> ratioTo;
+						cout << "ratio step: ";
+						cin >> ratioStep;
+					}
 					break;
 				}
 				case 's': {
@@ -622,14 +629,6 @@ int main(int argc, char* argv[]) {
 	cin >> gas1;
 	cout << "gas2: ";
 	cin >> gas2;
-	if (setupRatio) {
-		cout << "max gas1:gas2: ";
-		cin >> ratioFrom;
-		cout << "max gas2:gas1: ";
-		cin >> ratioTo;
-		cout << "ratio step: ";
-		cin >> ratioStep;
-	}
 	cout << "gas3: ";
 	cin >> gas3;
 	cout << "mix temp1: ";
