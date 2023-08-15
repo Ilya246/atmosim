@@ -1,0 +1,1 @@
+g++ atmosim.cpp -o out\atmosim.exe -O3 -std=c++20
