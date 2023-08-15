@@ -468,6 +468,14 @@ void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, floa
 					bestTicks = tick;
 					bestResult = *optimiseStat;
 				}
+				if (logLevel == 3) {
+					float first = 1.0 / (1.0 + bestRatio);
+					cout << "Current: " << first * pressureCap << "kPa/" << (1.0 - first) * pressureCap << "kPa first/second | temp " << bestTemp1 << "K/" << bestTemp2 << "K | radius " << bestRadius << " | ticks " << bestTicks << " | opstat " << bestResult << endl;
+				}
+			}
+			if (logLevel == 2) {
+				float first = 1.0 / (1.0 + bestRatio);
+				cout << "Current: " << first * pressureCap << "kPa/" << (1.0 - first) * pressureCap << "kPa first/second | temp " << bestTemp1 << "K/" << bestTemp2 << "K | radius " << bestRadius << " | ticks " << bestTicks << " | opstat " << bestResult << endl;
 			}
 		}
 		float first = 1.0 / (1.0 + bestRatio);
