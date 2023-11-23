@@ -595,7 +595,7 @@ int main(int argc, char* argv[]) {
 					cout << "heat capacity ratio (second:first): ";
 					cin >> capratio;
 					ratio = 100.0 / ratio - 1.0;
-					cout << "pressure ratio: " << 100.0 / (1.0 + ratio * t2 / t1) << "% first | temp " << (t1 + t2 * capratio) / (1.0 + capratio) << "K";
+					cout << "pressure ratio: " << 100.0 / (1.0 + ratio * t2 / t1) << "% first | temp " << (t1 + t2 * capratio * ratio) / (1.0 + capratio * ratio) << "K";
 					return 0;
 				}
 				case 'o': {
