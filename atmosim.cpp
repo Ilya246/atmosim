@@ -372,7 +372,10 @@ ostream& operator<<(ostream& out, bombData data) {
 	out << "fuel " << 100.0 / (1.0 + data.ratio) << "% first " << data.temp << "K " << data.pressure << "kPa | third " << data.thirTemp << "K | range " << data.radius << " | ticks " << data.ticks << " | optstat " << data.opstat;
 	return out;
 }
-void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float mixt2, float thirt1, float thirt2, float* optimiseStat, bool maximise) {
+float optimiseStat() {
+	return radius;
+}
+void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measureBefore) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
 	float bestTemp, bestPressure, bestRatio, bestThirTemp, bestTargetTemp, bestRadius;
 	int bestTicks;
@@ -384,7 +387,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
 			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp *= temperatureStep) {
 				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
-					float fuelPressure;
+					float fuelPressure, stat;
 					reset();
 					if (fuelTemp <= fireTemp && thirTemp <= fireTemp) {
 						continue;
@@ -396,8 +399,14 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 					if (fuelPressure > pressureCap || fuelPressure < 0.0) {
 						continue;
 					}
+					if (measureBefore) {
+						stat = optimiseStat();
+					}
 					loop();
-					if (radius > targetRadius && (maximise == (*optimiseStat > bestResult))) {
+					if (!measureBefore) {
+						stat = optimiseStat();
+					}
+					if (radius > targetRadius && (maximise == (stat > bestResult))) {
 						bestRatio = ratio;
 						bestPressure = fuelPressure;
 						bestTemp = fuelTemp;
@@ -405,11 +414,11 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 						bestTargetTemp = targetTemp;
 						bestRadius = radius;
 						bestTicks = tick;
-						bestResult = *optimiseStat;
+						bestResult = stat;
 					}
 					if (logLevel >= 5) {
-						cout << "Current: " << bombData{ratio, fuelTemp, fuelPressure, thirTemp, radius, tick, *optimiseStat} << endl;
-					} else if (radius > targetRadius && (maximise == (*optimiseStat > bestResult_L))) {
+						cout << "Current: " << bombData{ratio, fuelTemp, fuelPressure, thirTemp, radius, tick, stat} << endl;
+					} else if (radius > targetRadius && (maximise == (stat > bestResult_L))) {
 						bestRatio_L = ratio;
 						bestPressure_L = fuelPressure;
 						bestTemp_L = fuelTemp;
@@ -417,7 +426,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 						bestTargetTemp_L = targetTemp;
 						bestRadius_L = radius;
 						bestTicks_L = tick;
-						bestResult_L = *optimiseStat;
+						bestResult_L = stat;
 					}
 				}
 				if (logLevel == 4) {
@@ -439,7 +448,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 	}
 	cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
 }
-void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, float sect1, float sect2, float* optimiseStat, bool maximise) {
+void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, float sect1, float sect2, bool maximise) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
 	float bestTemp1, bestTemp2, bestRatio, bestRadius;
 	int bestTicks;
@@ -460,13 +469,13 @@ void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, floa
 				}
 				float ratio = gas2.amount / gas1.amount;
 				loop();
-				if (radius > targetRadius && (maximise == (*optimiseStat > bestResult))) {
+				if (radius > targetRadius && (maximise == (optimiseStat() > bestResult))) {
 					bestTemp1 = temp1;
 					bestTemp2 = temp2;
 					bestRatio = ratio;
 					bestRadius = radius;
 					bestTicks = tick;
-					bestResult = *optimiseStat;
+					bestResult = optimiseStat();
 				}
 				if (logLevel == 3) {
 					float first = 1.0 / (1.0 + bestRatio);
@@ -623,7 +632,7 @@ int main(int argc, char* argv[]) {
 					cin >> t21;
 					cout << "second temp2: ";
 					cin >> t22;
-					testUnimix(stog(gas1), stog(gas2), t11, t12, t21, t22, &radius, true);
+					testUnimix(stog(gas1), stog(gas2), t11, t12, t21, t22, true);
 					return 0;
 				}
 				case 't': {
@@ -727,6 +736,6 @@ int main(int argc, char* argv[]) {
 	cin >> thirt1;
 	cout << "third temp2: ";
 	cin >> thirt2;
-	testTwomix(stog(gas1), stog(gas2), stog(gas3), mixt1, mixt2, thirt1, thirt2, &radius, true);
+	testTwomix(stog(gas1), stog(gas2), stog(gas3), mixt1, mixt2, thirt1, thirt2, true, false);
 	return 0;
 }

@@ -1,1 +1,1 @@
-g++ atmosim.cpp -o out\atmosim.exe -O3 -std=c++20
+g++ atmosim.cpp -o out\atmosim.exe -O3 -std=c++20 -mtune=native -march=native
