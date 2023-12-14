@@ -11,7 +11,9 @@ struct GasType {
 	float heatCap, amount;
 };
 
-vector<GasType> gases{{20.0, 0.0}, {200.0f, 0.0}, {10.0, 0.0}, {40.0, 0.0}, {30.0, 0.0}, {600.0, 0.0}};
+float heatScale = 1.f / 8.f;
+
+vector<GasType> gases{{20.f * heatScale, 0.0}, {200.f * heatScale, 0.0}, {10.f * heatScale, 0.0}, {40.f * heatScale, 0.0}, {30.f * heatScale, 0.0}, {600.f * heatScale, 0.0}};
 GasType& oxygen = gases[0];
 GasType& plasma = gases[1];
 GasType& tritium = gases[2];
@@ -33,8 +35,8 @@ bool stepTargetTemp = false,
 doScrub = false, checkStatus = true;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
-fireHydrogenEnergyReleased = 560000.0, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
-firePlasmaEnergyReleased = 3000000.0, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
+fireHydrogenEnergyReleased = 284000.0, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
+firePlasmaEnergyReleased = 16000.0, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
 targetRadius = 0.0,
 tickrate = 0.5,
 overTemp = 0.1, temperatureStep = 1.005, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
