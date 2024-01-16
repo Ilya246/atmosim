@@ -11,7 +11,7 @@ struct GasType {
 	float heatCap, amount;
 };
 
-float heatScale = 1.f / 8.f;
+float heatScale = 1.f;
 
 vector<GasType> gases{{20.f * heatScale, 0.0}, {200.f * heatScale, 0.0}, {10.f * heatScale, 0.0}, {40.f * heatScale, 0.0}, {30.f * heatScale, 0.0}, {600.f * heatScale, 0.0}};
 GasType& oxygen = gases[0];
@@ -32,14 +32,16 @@ int integrity = 3, leakCount = 0, tick = 0,
 tickCap = 30, pipeTickCap = 1000,
 logLevel = 1;
 bool stepTargetTemp = false,
-doScrub = false, checkStatus = true;
+doScrub = false, checkStatus = true,
+optimiseInt = false, optimiseMaximise = true, optimiseBefore = false;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
-fireHydrogenEnergyReleased = 284000.0, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
-firePlasmaEnergyReleased = 16000.0, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
+fireHydrogenEnergyReleased = 284000.0 * heatScale, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
+firePlasmaEnergyReleased = 160000.0 * heatScale, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
 targetRadius = 0.0,
 tickrate = 0.5,
 overTemp = 0.1, temperatureStep = 1.005, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
+void* optimisePtr = &radius;
 vector<GasType*> scrubGases;
 
 void reset() {
@@ -375,7 +377,7 @@ ostream& operator<<(ostream& out, bombData data) {
 	return out;
 }
 float optimiseStat() {
-	return radius;
+	return (optimiseInt ? (float)(*((int*)optimisePtr)) : *((float*)optimisePtr));
 }
 void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measureBefore) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
@@ -568,6 +570,30 @@ int main(int argc, char* argv[]) {
 							scrubGases.push_back(&(stog(gasName)));
 						}
 					} while (isGas(gasName));
+				} else if (arg.rfind("--param", 0) == 0) {
+					string optimiseWhat = "";
+					cout << "Possible optimisations: gas, radius, ticks" << endl;
+					cout << "Enter what to optimise: ";
+					cin >> optimiseWhat;
+					if (optimiseWhat == "gas") {
+						string whichGas = "";
+						cout << "Gas to optimise: ";
+						cin >> whichGas;
+						optimisePtr = &(stog(whichGas).amount);
+					} else if (optimiseWhat == "radius") {
+						optimisePtr = &radius;
+					} else if (optimiseWhat == "ticks") {
+						optimisePtr = &tick;
+						optimiseInt = true;
+					}
+					string doMaximise;
+					cout << "Maximise? y/n: ";
+					cin >> doMaximise;
+					optimiseMaximise = doMaximise == "y";
+					string doMeasureBefore;
+					cout << "Measure stat before ignition? y/n: ";
+					cin >> doMeasureBefore;
+					optimiseBefore = doMeasureBefore == "y";
 				} else {
 					cout << "Unrecognized argument '" << arg << "'." << endl;
 				}
@@ -634,7 +660,7 @@ int main(int argc, char* argv[]) {
 					cin >> t21;
 					cout << "second temp2: ";
 					cin >> t22;
-					testUnimix(stog(gas1), stog(gas2), t11, t12, t21, t22, true);
+					testUnimix(stog(gas1), stog(gas2), t11, t12, t21, t22, optimiseMaximise);
 					return 0;
 				}
 				case 't': {
@@ -671,7 +697,7 @@ int main(int argc, char* argv[]) {
 					"	-h\n" <<
 					"		show help and exit\n" <<
 					"	-n\n" <<
-					"       assume inside pipe: prevent tank-related effects" <<
+					"		assume inside pipe: prevent tank-related effects" <<
 					"	-H\n" <<
 					"		redefine heat capacities\n" <<
 					"	-r\n" <<
@@ -701,7 +727,9 @@ int main(int argc, char* argv[]) {
 					"	--loglevel\n" <<
 					"		what level of the nested loop to log, 0-5: none, globalBest, thirTemp, fuelTemp, targetTemp, all\n" <<
 					"	--scrub\n" <<
-					"       lets you configure scrubbing from the gas mix for utility usecases" <<
+					"		lets you configure scrubbing from the gas mix for utility usecases\n" <<
+					"	--param\n" <<
+					"		lets you configure what and how to optimise" <<
 					"\nss14 maxcap atmos sim\n";
 					return 0;
 				}
@@ -738,6 +766,6 @@ int main(int argc, char* argv[]) {
 	cin >> thirt1;
 	cout << "third temp2: ";
 	cin >> thirt2;
-	testTwomix(stog(gas1), stog(gas2), stog(gas3), mixt1, mixt2, thirt1, thirt2, true, false);
+	testTwomix(stog(gas1), stog(gas2), stog(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	return 0;
 }
