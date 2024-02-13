@@ -23,7 +23,7 @@ GasType& frezon = gases[5];
 GasType none;
 set<string> gasNames{"oxygen", "plasma", "tritium", "waterVapour", "carbonDioxide", "frezon"};
 
-float temperature = 293.15, volume = 5.0, pressureCap = 1013.2, pipePressureCap = 4500.0,
+float temperature = 293.15, volume = 5.0, pressureCap = 1013.2, pipePressureCap = 4500.0, requiredTransferVolume = 1400.0,
 scrubRate = 0.5,
 radius = 0.0, // some stats here to be easily optimised for using the general-purpose method
 leakedHeat = 0.0;
@@ -43,6 +43,7 @@ tickrate = 0.5,
 overTemp = 0.1, temperatureStep = 1.005, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
 void* optimisePtr = &radius;
 vector<GasType*> scrubGases;
+string selectedGases[]{"", "", ""};
 
 void reset() {
 	for (GasType& g : gases) {
@@ -373,8 +374,15 @@ struct bombData {
 	float opstat;
 };
 ostream& operator<<(ostream& out, bombData data) {
-	out << "fuel " << 100.0 / (1.0 + data.ratio) << "% first " << data.temp << "K " << data.pressure << "kPa | third " << data.thirTemp << "K | range " << data.radius << " | ticks " << data.ticks << " | optstat " << data.opstat;
+    float first_fraction = 1.f / (1.f + data.ratio);
+    float second_fraction = data.ratio * first_fraction;
+	out << "fuel " << 100.f * first_fraction << "% first " << data.temp << "K " << data.pressure << "kPa | third " << data.thirTemp << "K | range " << data.radius << " | ticks " << data.ticks << " | optstat " << data.opstat;
 	return out;
+}
+string extensiveOutput(bombData data) {
+    float first_fraction = 1.f / (1.f + data.ratio);
+    float second_fraction = data.ratio * first_fraction;
+    return "TANK \\ " + to_string(100.f * first_fraction) + "% " + selectedGases[0] + " \\ " + to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ " + to_string(data.temp) + "K " + to_string(data.pressure) + "kPa\nCANISTER \\ " + to_string(data.thirTemp) + "K " + selectedGases[2] + "\nSTATS \\ range " + to_string(data.radius) + " \\ ticks " + to_string(data.ticks) + " \\ optstat " + to_string(data.opstat) + "\nLEAST-MOLS \\ " + to_string(first_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[0] + " \\ " + to_string(second_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[1] + " \\ " + to_string(2.f * pressureCap * requiredTransferVolume / R / data.thirTemp) + "mol " + selectedGases[2];
 }
 float optimiseStat() {
 	return (optimiseInt ? (float)(*((int*)optimisePtr)) : *((float*)optimisePtr));
@@ -450,7 +458,7 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 			cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
 		}
 	}
-	cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
+	cout << "Best:\n" << extensiveOutput(bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult}) << endl;
 }
 void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, float sect1, float sect2, bool maximise) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
@@ -758,6 +766,9 @@ int main(int argc, char* argv[]) {
 	cin >> gas2;
 	cout << "gas3: ";
 	cin >> gas3;
+    selectedGases[0] = gas1;
+    selectedGases[1] = gas2;
+    selectedGases[2] = gas3;
 	cout << "mix temp1: ";
 	cin >> mixt1;
 	cout << "mix temp2: ";
