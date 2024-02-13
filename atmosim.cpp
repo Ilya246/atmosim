@@ -213,13 +213,10 @@ void tankCheckStatus() {
 }
 
 void status() {
-	if (!exploded) {
-		cout << "No explosion" << endl;
-	} else {
+	cout << "TICK: " << tick << " || Status: pressure " << getPressure() << "kPA \\ integrity " << integrity << " \\ temperature " << temperature << "K\nContents: " << oxygen.amount << " o2 \\ " << plasma.amount << " p \\ " << tritium.amount << " t \\ " << waterVapour.amount << " w \\ " << carbonDioxide.amount << " co2" << endl;
+	if (exploded) {
 		cout << "EXPLOSION: range " << getCurRange() << endl;
 	}
-	cout << "Status: pressure " << getPressure() << "kPA integrity " << integrity << " temperature " << temperature << "K " << "tick " << tick << endl;
-	cout << "Contents: " << oxygen.amount << " o2 " << plasma.amount << " p " << tritium.amount << " t " << waterVapour.amount << " w " << carbonDioxide.amount << " co2" << endl;
 }
 
 void scrub() {
@@ -248,6 +245,15 @@ void loop() {
 		tankCheckStatus();
 		scrub();
 		++tick;
+	}
+}
+void loopPrint() {
+    while (tick < tickCap && !exploded) {
+		react();
+        tankCheckStatus();
+		scrub();
+		++tick;
+        status();
 	}
 }
 
@@ -288,6 +294,14 @@ float mixInputSetup(GasType& gas1, GasType& gas2, GasType& into, float fuelTemp,
 	into.amount = pressureTempToMols(pressureCap - fuelPressure, intoTemp);
 	temperature = mixGasTempsToTemp(fuel, specheat, fuelTemp, into, intoTemp);
 	return fuelPressure;
+}
+void knownInputSetup(GasType& gas1, GasType& gas2, GasType& into, float fuelTemp, float intoTemp, float fuelPressure, float secondPerFirst) {
+	float specheat = (gas1.heatCap + gas2.heatCap * secondPerFirst) / (1.0 + secondPerFirst);
+	float fuel = pressureTempToMols(fuelPressure, fuelTemp);
+	gas1.amount = fuel / (1.0 + secondPerFirst);
+	gas2.amount = fuel - gas1.amount;
+	into.amount = pressureTempToMols(pressureCap - fuelPressure, intoTemp);
+	temperature = mixGasTempsToTemp(fuel, specheat, fuelTemp, into, intoTemp);
 }
 float unimixInputSetup(GasType& gas1, GasType& gas2, float temp1, float temp2, float targetTemp) {
 	float fuelPressure = (targetTemp / temp2 - 1.0) * pressureCap / (gas1.heatCap / gas2.heatCap - 1.0 + targetTemp * (1.0 / temp2 - gas1.heatCap / gas2.heatCap / temp1));
@@ -387,7 +401,7 @@ string extensiveOutput(bombData data) {
 float optimiseStat() {
 	return (optimiseInt ? (float)(*((int*)optimisePtr)) : *((float*)optimisePtr));
 }
-void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measureBefore) {
+bombData testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measureBefore) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
 	float bestTemp, bestPressure, bestRatio, bestThirTemp, bestTargetTemp, bestRadius;
 	int bestTicks;
@@ -458,7 +472,8 @@ void testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, float 
 			cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
 		}
 	}
-	cout << "Best:\n" << extensiveOutput(bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult}) << endl;
+    bombData endData = bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult};
+    return endData;
 }
 void testUnimix(GasType& gas1, GasType& gas2, float firstt1, float firstt2, float sect1, float sect2, bool maximise) {
 	float bestResult = maximise ? 0.0 : numeric_limits<float>::max();
@@ -777,6 +792,15 @@ int main(int argc, char* argv[]) {
 	cin >> thirt1;
 	cout << "third temp2: ";
 	cin >> thirt2;
-	testTwomix(stog(gas1), stog(gas2), stog(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
+	bombData bestBomb = testTwomix(stog(gas1), stog(gas2), stog(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
+	cout << "Best:\n" << extensiveOutput(bestBomb) << endl;
+    cout << "Retest and print ticks? y/n: ";
+    string doRetest;
+    cin >> doRetest;
+    if (doRetest == "y") {
+        reset();
+        knownInputSetup(stog(gas1), stog(gas2), stog(gas3), bestBomb.temp, bestBomb.thirTemp, bestBomb.pressure, bestBomb.ratio);
+        loopPrint();
+    }
 	return 0;
 }
