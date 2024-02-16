@@ -396,7 +396,10 @@ ostream& operator<<(ostream& out, bombData data) {
 string extensiveOutput(bombData data) {
     float first_fraction = 1.f / (1.f + data.ratio);
     float second_fraction = data.ratio * first_fraction;
-    return "TANK \\ " + to_string(100.f * first_fraction) + "% " + selectedGases[0] + " \\ " + to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ " + to_string(data.temp) + "K " + to_string(data.pressure) + "kPa\nCANISTER \\ " + to_string(data.thirTemp) + "K " + selectedGases[2] + "\nSTATS \\ range " + to_string(data.radius) + " \\ ticks " + to_string(data.ticks) + " \\ optstat " + to_string(data.opstat) + "\nLEAST-MOLS \\ " + to_string(first_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[0] + " \\ " + to_string(second_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[1] + " \\ " + to_string(2.f * pressureCap * requiredTransferVolume / R / data.thirTemp) + "mol " + selectedGases[2];
+    return
+    "TANK \\ " + to_string(100.f * first_fraction) + "% " + selectedGases[0] + " \\ " + to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ ratio " + to_string(data.ratio) + " \\ " + to_string(data.temp) + "K " + to_string(data.pressure) + "kPa\n" +
+    "CANISTER \\ " + to_string(data.thirTemp) + "K " + selectedGases[2] + "\n" +
+    "STATS \\ range " + to_string(data.radius) + " \\ ticks " + to_string(data.ticks) + " \\ optstat " + to_string(data.opstat) + "\n" + "LEAST-MOLS \\ " + to_string(first_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[0] + " \\ " + to_string(second_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[1] + " \\ " + to_string(2.f * pressureCap * requiredTransferVolume / R / data.thirTemp) + "mol " + selectedGases[2];
 }
 float optimiseStat() {
 	return (optimiseInt ? (float)(*((int*)optimisePtr)) : *((float*)optimisePtr));
