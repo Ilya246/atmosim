@@ -402,9 +402,9 @@ string extensiveOutput(bombData data) {
         to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ " +
         "ratio " + to_string(data.ratio) + " \\ " +
         to_string(data.temp) + "K " +
-        to_string(data.pressure) + "kPa \\ REVERSE "  + to_string(pressureCap - data.pressure) + "kPa\n" +
+        to_string(data.pressure) + "kPa\n" +
     "CANISTER \\ " +
-        to_string(data.thirTemp) + "K " + selectedGases[2] + "\n" +
+        to_string(data.thirTemp) + "K " + selectedGases[2] + " \\ REVERSE "  + to_string(pressureCap - data.pressure) + "kPa\n" +
     "STATS \\ " +
         "range " + to_string(data.radius) + " \\ " +
         "ticks " + to_string(data.ticks) + " \\ " +
