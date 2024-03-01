@@ -25,7 +25,7 @@ set<string> gasNames{"oxygen", "plasma", "tritium", "waterVapour", "carbonDioxid
 
 float temperature = 293.15, volume = 5.0, pressureCap = 1013.2, pipePressureCap = 4500.0, requiredTransferVolume = 1400.0,
 scrubRate = 0.5,
-radius = 0.0, // some stats here to be easily optimised for using the general-purpose method
+radius = 0.0,
 leakedHeat = 0.0;
 bool exploded = false;
 int integrity = 3, leakCount = 0, tick = 0,
@@ -397,9 +397,30 @@ string extensiveOutput(bombData data) {
     float first_fraction = 1.f / (1.f + data.ratio);
     float second_fraction = data.ratio * first_fraction;
     return
-    "TANK \\ " + to_string(100.f * first_fraction) + "% " + selectedGases[0] + " \\ " + to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ ratio " + to_string(data.ratio) + " \\ " + to_string(data.temp) + "K " + to_string(data.pressure) + "kPa\n" +
-    "CANISTER \\ " + to_string(data.thirTemp) + "K " + selectedGases[2] + "\n" +
-    "STATS \\ range " + to_string(data.radius) + " \\ ticks " + to_string(data.ticks) + " \\ optstat " + to_string(data.opstat) + "\n" + "LEAST-MOLS \\ " + to_string(first_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[0] + " \\ " + to_string(second_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[1] + " \\ " + to_string(2.f * pressureCap * requiredTransferVolume / R / data.thirTemp) + "mol " + selectedGases[2];
+    "TANK \\ " +
+        to_string(100.f * first_fraction) + "% " + selectedGases[0] + " \\ " +
+        to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ " +
+        "ratio " + to_string(data.ratio) + " \\ " +
+        to_string(data.temp) + "K "
+        + to_string(data.pressure) + "kPa\n" +
+    "CANISTER \\ " +
+        to_string(data.thirTemp) + "K " + selectedGases[2] + "\n" +
+    "STATS \\ " +
+        "range " + to_string(data.radius) + " \\ " +
+        "ticks " + to_string(data.ticks) + " \\ " +
+        "optstat " + to_string(data.opstat) + "\n" +
+    "LEAST-MOLS \\ " +
+        to_string(first_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[0] + " \\ " +
+        to_string(second_fraction * data.pressure * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[1] + " \\ " +
+        to_string(2.f * pressureCap * requiredTransferVolume / R / data.thirTemp) + "mol " + selectedGases[2] + "\n" +
+    "TANK-MOLS \\ " +
+        to_string(first_fraction * data.pressure * volume / data.temp / R) + "mol " + selectedGases[0] + " \\ " +
+        to_string(second_fraction * data.pressure * volume / data.temp / R) + "mol " + selectedGases[1] + " \\ " +
+        to_string((pressureCap - data.pressure) * volume / data.thirTemp / R) + "mol " + selectedGases[2] + "\n" +
+    "REVERSE-LEAST-MOLS \\ " +
+        to_string(first_fraction * 2.f * pressureCap * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[0] + " \\ " +
+        to_string(second_fraction * 2.f * pressureCap * requiredTransferVolume / data.temp / R) + "mol " + selectedGases[1] + " \\ " +
+        to_string((pressureCap - data.pressure) * requiredTransferVolume / R / data.thirTemp) + "mol " + selectedGases[2];
 }
 float optimiseStat() {
 	return (optimiseInt ? (float)(*((int*)optimisePtr)) : *((float*)optimisePtr));
