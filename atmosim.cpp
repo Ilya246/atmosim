@@ -213,7 +213,7 @@ void tankCheckStatus() {
 }
 
 void status() {
-	cout << "TICK: " << tick << " || Status: pressure " << getPressure() << "kPA \\ integrity " << integrity << " \\ temperature " << temperature << "K\nContents: " << oxygen.amount << " o2 \\ " << plasma.amount << " p \\ " << tritium.amount << " t \\ " << waterVapour.amount << " w \\ " << carbonDioxide.amount << " co2" << endl;
+	cout << "TICK: " << tick << " || Status: pressure " << getPressure() << "kPa \\ integrity " << integrity << " \\ temperature " << temperature << "K\nContents: " << oxygen.amount << " o2 \\ " << plasma.amount << " p \\ " << tritium.amount << " t \\ " << waterVapour.amount << " w \\ " << carbonDioxide.amount << " co2" << endl;
 	if (exploded) {
 		cout << "EXPLOSION: range " << getCurRange() << endl;
 	}
@@ -260,19 +260,19 @@ void loopPrint() {
 
 void fullInputSetup() {
 	float tpressure, ttemp, sumheat;
-	cout << "Oxygen kPA + K: " << endl;
+	cout << "Oxygen kPa + K: " << endl;
 	cin >> tpressure >> ttemp;
 	oxygen.amount = pressureTempToMols(tpressure, ttemp);
 	sumheat += oxygen.amount * oxygen.heatCap * ttemp;
-	cout << "Plasma kPA + K: " << endl;
+	cout << "Plasma kPa + K: " << endl;
 	cin >> tpressure >> ttemp;
 	plasma.amount = pressureTempToMols(tpressure, ttemp);
 	sumheat += plasma.amount * plasma.heatCap * ttemp;
-	cout << "Trit kPA + K: " << endl;
+	cout << "Trit kPa + K: " << endl;
 	cin >> tpressure >> ttemp;
 	tritium.amount = pressureTempToMols(tpressure, ttemp);
 	sumheat += tritium.amount * tritium.heatCap * ttemp;
-	cout << "frezon kPA + K: " << endl;
+	cout << "frezon kPa + K: " << endl;
 	cin >> tpressure >> ttemp;
 	frezon.amount = pressureTempToMols(tpressure, ttemp);
 	sumheat += frezon.amount * frezon.heatCap * ttemp;
@@ -336,7 +336,7 @@ void testOxyplasma() {
 			}
 		//}
 	}
-	cout << "Best oxyplasma: plasma " << bestFuelTemp << "K " << bestPressure << "kPA | oxygen " << bestOxygenTemp <<"K | range " << maxRadius << " ticks " << bestTicks << endl;
+	cout << "Best oxyplasma: plasma " << bestFuelTemp << "K " << bestPressure << "kPa | oxygen " << bestOxygenTemp <<"K | range " << maxRadius << " ticks " << bestTicks << endl;
 }
 void testOxyplasmaFuse() {
 	int bestTicks;
@@ -401,8 +401,8 @@ string extensiveOutput(bombData data) {
         to_string(100.f * first_fraction) + "% " + selectedGases[0] + " \\ " +
         to_string(100.f * second_fraction) + "% " + selectedGases[1] + " \\ " +
         "ratio " + to_string(data.ratio) + " \\ " +
-        to_string(data.temp) + "K "
-        + to_string(data.pressure) + "kPa\n" +
+        to_string(data.temp) + "K " +
+        to_string(data.pressure) + "kPa \\ REVERSE "  + to_string(pressureCap - data.pressure) + "kPa\n" +
     "CANISTER \\ " +
         to_string(data.thirTemp) + "K " + selectedGases[2] + "\n" +
     "STATS \\ " +
