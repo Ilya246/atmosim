@@ -23,7 +23,7 @@ GasType& frezon = gases[5];
 GasType none;
 set<string> gasNames{"oxygen", "plasma", "tritium", "waterVapour", "carbonDioxide", "frezon"};
 
-float temperature = 293.15, volume = 5.0, pressureCap = 1013.2, pipePressureCap = 4500.0, requiredTransferVolume = 1400.0,
+float temperature = 293.15, volume = 5.0, pressureCap = 1013.25, pipePressureCap = 4500.0, requiredTransferVolume = 1400.0,
 scrubRate = 0.5,
 radius = 0.0,
 leakedHeat = 0.0;
