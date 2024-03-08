@@ -44,6 +44,14 @@ overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1
 void* optimisePtr = &radius;
 vector<GasType*> scrubGases;
 string selectedGases[]{"", "", ""};
+string rotator = "|/-\\";
+int rotatorChars = 4;
+int rotatorIndex = rotatorChars - 1;
+
+char getRotator() {
+    rotatorIndex = (rotatorIndex + 1) % rotatorChars;
+    return rotator[rotatorIndex];
+}
 
 void reset() {
 	for (GasType& g : gases) {
@@ -467,7 +475,7 @@ bombData testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, fl
 						bestResult = stat;
 					}
 					if (logLevel >= 5) {
-						cout << "Current: " << bombData{ratio, fuelTemp, fuelPressure, thirTemp, radius, tick, stat} << endl;
+						cout << getRotator() << " Current: " << bombData{ratio, fuelTemp, fuelPressure, thirTemp, radius, tick, stat} << endl;
 					} else if (radius > targetRadius && (maximise == (stat > bestResult_L))) {
 						bestRatio_L = ratio;
 						bestPressure_L = fuelPressure;
@@ -480,20 +488,20 @@ bombData testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, fl
 					}
 				}
 				if (logLevel == 4) {
-					cout << "Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
+					cout << getRotator() << " Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
 					bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
 				}
 			}
 			if (logLevel == 3) {
-				cout << "Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
+				cout << getRotator() << " Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
 				bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
 			}
 		}
 		if (logLevel == 2) {
-			cout << "Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
+			cout << getRotator() << " Current: " << bombData{bestRatio_L, bestTemp_L, bestPressure_L, bestThirTemp_L, bestRadius_L, bestTicks_L, bestResult_L} << endl;
 			bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
 		} else if (logLevel == 1) {
-			cout << "Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
+			cout << getRotator() << " Best: " << bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult} << endl;
 		}
 	}
     bombData endData = bombData{bestRatio, bestTemp, bestPressure, bestThirTemp, bestRadius, bestTicks, bestResult};
