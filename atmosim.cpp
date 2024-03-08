@@ -40,7 +40,7 @@ fireHydrogenEnergyReleased = 284000.0 * heatScale, minimumTritiumOxyburnEnergy =
 firePlasmaEnergyReleased = 160000.0 * heatScale, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
 targetRadius = 0.0,
 tickrate = 0.5,
-overTemp = 0.1, temperatureStep = 1.005, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
+overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
 void* optimisePtr = &radius;
 vector<GasType*> scrubGases;
 string selectedGases[]{"", "", ""};
@@ -432,10 +432,10 @@ bombData testTwomix(GasType& gas1, GasType& gas2, GasType& gas3, float mixt1, fl
 	float bestResult_L = maximise ? 0.0 : numeric_limits<float>::max();
 	float bestTemp_L, bestPressure_L, bestRatio_L, bestThirTemp_L, bestTargetTemp_L, bestRadius_L;
 	int bestTicks_L;
-	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp *= temperatureStep) {
-		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp *= temperatureStep) {
+	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
+		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
-			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp *= temperatureStep) {
+			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp = std::max(targetTemp * temperatureStep, targetTemp + temperatureStepMin)) {
 				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
 					float fuelPressure, stat;
 					reset();
@@ -593,6 +593,8 @@ int main(int argc, char* argv[]) {
 					tickCap = std::stoi(arg.substr(7));
 				} else if (arg.rfind("--tstep", 0) == 0) {
 					temperatureStep = std::stod(arg.substr(7));
+                } else if (arg.rfind("--tstepm", 0) == 0) {
+					temperatureStepMin = std::stod(arg.substr(8));
 				} else if (arg.rfind("--volume", 0) == 0) {
 					volume = std::stod(arg.substr(8));
 				} else if (arg.rfind("--pressureCap", 0) == 0) {
@@ -766,7 +768,9 @@ int main(int argc, char* argv[]) {
 					"	--ticks\n" <<
 					"		set tick limit\n" <<
 					"	--tstep\n" <<
-					"		set temperature iteration step\n" <<
+					"		set temperature iteration multiplier\n" <<
+                    "	--tstepm\n" <<
+					"		set minimum temperature iteration step\n" <<
 					"	--volume\n" <<
 					"		set tank volume\n" <<
 					"	--overtemp\n" <<
