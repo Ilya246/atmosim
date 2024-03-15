@@ -758,33 +758,33 @@ int main(int argc, char* argv[]) {
 					"	-H\n" <<
 					"		redefine heat capacities\n" <<
 					"	-r\n" <<
-					"		set ratio iteration bounds+step\n" <<
+					"		set gas ratio iteration bounds+step\n" <<
 					"	-s\n" <<
-					"		step mix-to temp (may take a long time)\n" <<
+					"		provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)\n" <<
 					"	-m\n" <<
-					"		different-temperature gas mixing mode\n" <<
+					"		different-temperature gas mixer ratio calculator\n" <<
 					"	-o\n" <<
-					"		oxyplasma mode\n" <<
+					"		oxyplasma mode (i don't think this works currently)\n" <<
 					"	-f\n" <<
-					"		try full input\n" <<
+					"		try full input: lets you manually input and test a tank's contents\n" <<
 					"	-u\n" <<
-					"		unimix mode\n" <<
+					"		unimix mode (i don't think this works either)\n" <<
 					"	-t\n" <<
-					"		unimix-to-temp mode\n" <<
-					"	--radius\n" <<
-					"		set target radius\n" <<
-					"	--ticks\n" <<
-					"		set tick limit\n" <<
-					"	--tstep\n" <<
-					"		set temperature iteration multiplier\n" <<
-                    "	--tstepm\n" <<
-					"		set minimum temperature iteration step\n" <<
-					"	--volume\n" <<
-					"		set tank volume\n" <<
-					"	--overtemp\n" <<
-					"		delta from the fire temperature to iterate from\n" <<
-					"	--loglevel\n" <<
-					"		what level of the nested loop to log, 0-5: none, globalBest, thirTemp, fuelTemp, targetTemp, all\n" <<
+					"		unimix-to-temp mode: tries to pick a ratio of 2 gases that will burn to target temperature after a while\n" <<
+					"	--radius<value>\n" <<
+					"		set target radius: will discard bombs with a radius below this: default " << targetRadius << "\n" <<
+					"	--ticks<value>\n" <<
+					"		set tick limit: aborts if a bomb takes longer than this to detonate: default " << tickCap << "\n" <<
+					"	--tstep<value>\n" <<
+					"		set temperature iteration multiplier: default " << temperatureStep << "\n" <<
+                    "	--tstepm<value>\n" <<
+					"		set minimum temperature iteration step: default " << temperatureStepMin << "\n" <<
+					"	--volume<value>\n" <<
+					"		set tank volume: default " << volume << "\n" <<
+					"	--overtemp<value>\n" <<
+					"		delta from the fire temperature to iterate from: default " << overTemp << "\n" <<
+					"	--loglevel<value>\n" <<
+					"		what level of the nested loop to log, 0-5: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all\n" <<
 					"	--scrub\n" <<
 					"		lets you configure scrubbing from the gas mix for utility usecases\n" <<
 					"	--param\n" <<
