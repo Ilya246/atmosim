@@ -686,7 +686,7 @@ int main(int argc, char* argv[]) {
 					cin >> t2;
 					cout << "molar ratio (first%): ";
 					cin >> ratio;
-					cout << "heat capacity ratio (second:first): ";
+					cout << "second:first heat capacity ratio (omit if end temperature does not matter): ";
 					cin >> capratio;
 					ratio = 100.0 / ratio - 1.0;
 					cout << "pressure ratio: " << 100.0 / (1.0 + ratio * t2 / t1) << "% first | temp " << (t1 + t2 * capratio * ratio) / (1.0 + capratio * ratio) << "K";
