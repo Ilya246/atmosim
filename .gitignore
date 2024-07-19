@@ -1,4 +1,4 @@
-out/*
+deploy/*
 check.bat
 build*.bat
 atmosim.exe
