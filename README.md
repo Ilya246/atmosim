@@ -1,10 +1,19 @@
 # usage instructions
 
+## getting a ready release
+
+1. go to the releases tab (.../atmosim/releases)
+2. get the latest release depending on your system
+
+## compiling it yourself (will run faster)
+
+just make sure you have gcc/g++ ready and run build.bat or build_linux.sh depending on your OS (both *should* work for linux, though)
+
 ## running
 
-1. make sure you have gcc/g++ ready and run build.bat or build_linux.sh depending on your OS (both *should* work for linux, though)
-2. run `atmosim.exe -h` in your favourite console terminal
-3. read it
+1. open a console (windows: win+r->cmd, linux: you should know), then `cd path/to/atmosim`
+2. run `atmosim -h` or `atmosim.exe -h`
+3. read the help window, also read this README
 4. enjoy
 
 ## using
