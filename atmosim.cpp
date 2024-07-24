@@ -31,7 +31,7 @@ T& getDyn(DynVal val) {
 
 // generic system for specifying what you don't want atmosim to give you
 struct BaseRestriction {
-	virtual bool OK();
+	virtual bool OK() = 0;
 };
 
 template <typename T>
@@ -39,6 +39,8 @@ struct NumRestriction : BaseRestriction {
 	T* valuePtr;
 	T minValue;
 	T maxValue;
+
+	NumRestriction(T* ptr, T min, T max): valuePtr(ptr), minValue(min), maxValue(max) {}
 
 	bool OK() override {
 		return *valuePtr >= minValue
@@ -49,6 +51,8 @@ struct NumRestriction : BaseRestriction {
 struct BoolRestriction : BaseRestriction {
 	bool* valuePtr;
 	bool targetValue;
+
+	BoolRestriction(bool* ptr, bool target): valuePtr(ptr), targetValue(target) {}
 
 	bool OK() override {
 		return *valuePtr == targetValue;
@@ -440,13 +444,13 @@ void unimixToInputSetup(GasType gas1, GasType gas2, float temp, float secondPerF
 
 struct BombData {
 	GasType gas1, gas2, gas3;
-	float ratio, fuelTemp, fuelPressure, thirTemp, mixTemp;
+	float ratio, fuelTemp, fuelPressure, thirTemp, mixPressure, mixTemp;
 	TankState state = intact;
 	float radius, finTemp, finPressure, finHeatLeak, optstat;
 	int ticks;
 
-	BombData(float ratio, float fuelTemp, float fuelPressure, float thirTemp, float mixTemp, GasType gas1, GasType gas2, GasType gas3):
-		ratio(ratio), fuelTemp(fuelTemp), fuelPressure(fuelPressure), thirTemp(thirTemp), mixTemp(mixTemp), gas1(gas1), gas2(gas2), gas3(gas3) {};
+	BombData(float ratio, float fuelTemp, float fuelPressure, float thirTemp, float mixPressure, float mixTemp, GasType gas1, GasType gas2, GasType gas3):
+		ratio(ratio), fuelTemp(fuelTemp), fuelPressure(fuelPressure), thirTemp(thirTemp), mixPressure(mixPressure), mixTemp(mixTemp), gas1(gas1), gas2(gas2), gas3(gas3) {};
 
 	void results(float n_radius, float n_finTemp, float n_finPressure, float n_optstat, int n_ticks, TankState n_state) {
 		radius = n_radius;
@@ -470,13 +474,13 @@ struct BombData {
 			"third: [ " +
 				"temp " + to_string(thirTemp) + "K " +
 			"]; " +
-			"explosion: [ " + (
+			"end state: [ " +
+				"ticks " + to_string(ticks) + "t | " + (
 				state == exploded ?
-				"radius " + to_string(radius) + "til | " +
-				"ticks " + to_string(ticks) + "t | " +
-				"optstat " + to_string(optstat) + " "
-				: "no explosion " ) +
+				"radius " + to_string(radius) + "til "
+				: state == ruptured ? "ruptured " : "no explosion " ) +
 			"] " +
+			"optstat: " + to_string(optstat) + " ";
 		"}";
 	}
 
@@ -489,23 +493,24 @@ struct BombData {
 		"TANK: {\n" ) +
 		"	initial state: [ " +
 				"temp " + to_string(mixTemp) + "K | " +
+				"pressure " + to_string(mixPressure) + "kPa | " +
 				to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp)) + "mol " + gas1.name() + " | " +
 				to_string(pressureTempToMols(secondFraction * fuelPressure, fuelTemp)) + "mol " + gas2.name() + " | " +
 				to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp)) + "mol " + gas3.name() + " " +
 			"];\n" +
-		"	explosion: [ " + (
-				state == exploded ?
-				"radius " + to_string(radius) + "til | " +
+		"	end state: [ " +
 				"ticks " + to_string(ticks) + "t | " +
-				"finTemp " + to_string(finTemp) + "K | " +
 				"finPressure " + to_string(finPressure) + "kPa | " +
-				"optstat " + to_string(optstat) + " "
-				: "no explosion " ) +
+				"finTemp " + to_string(finTemp) + "K | " + (
+				state == exploded ?
+				"radius " + to_string(radius) + "til "
+				: state == ruptured ? "ruptured " : "no explosion " ) +
 			"]\n" +
+		"	optstat: " + to_string(optstat) + "\n" +
 		"}\n" +
 		"REQUIREMENTS: {\n" +
 		"	mix-canister (fuel): [ " +
-				to_string(100.f * firstFraction) + "%:" + to_string(100.f * secondFraction) + "%=" + to_string(ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
+				to_string(100.f * firstFraction) + "%:" + to_string(100.f * secondFraction) + "%=" + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
 				"temp " + to_string(fuelTemp) + "K | " +
 				"pressure " + to_string(fuelPressure * addedRatio) + "kPa | " +
 				"least-mols: [ " + to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas1.name() + " | " +
@@ -513,7 +518,7 @@ struct BombData {
 			"];\n" +
 		"	third-canister (primer): [ " +
 				"temp " + to_string(thirTemp) + "K | " +
-				"pressure " + to_string((pressureCap * 2.0 - fuelPressure) * addedRatio) + "kPa + " +
+				"pressure " + to_string((pressureCap * 2.0 - fuelPressure) * addedRatio) + "kPa | " +
 				"least-mols: " + to_string(pressureTempToMols(pressureCap * 2.0 - fuelPressure, thirTemp) * volumeRatio) + "mol " + gas3.name() + " " +
 			"]\n" +
 		"}\n" +
@@ -525,7 +530,7 @@ struct BombData {
 			"];\n" +
 		"	third-canister (fuel): [ " +
 				"temp " + to_string(thirTemp) + "K | " +
-				"pressure " + to_string((pressureCap - fuelPressure) * addedRatio) + "kPa + " +
+				"pressure " + to_string((pressureCap - fuelPressure) * addedRatio) + "kPa | " +
 				"least-mols: " + to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp) * volumeRatio) + "mol " + gas3.name() + " " +
 			"]\n" +
 		"}";
@@ -537,11 +542,11 @@ float optimiseStat() {
 }
 BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measureBefore) {
 	// parameters of the tank with the best result we have so far
-	BombData bestBomb(0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
+	BombData bestBomb(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
 	bestBomb.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
 	// same but only best in the current surrounding frame
-	BombData bestBombLocal(0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
+	BombData bestBombLocal(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
 	bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
@@ -567,12 +572,13 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 					if (measureBefore) {
 						stat = optimiseStat();
 					}
+					float mixPressure = getPressure();
 					loop();
 					if (!measureBefore) {
 						stat = optimiseStat();
 					}
 					bool noDiscard = restrictionsMet(postRestrictions);
-					BombData curBomb(ratio, fuelTemp, fuelPressure, thirTemp, targetTemp, gas1, gas2, gas3);
+					BombData curBomb(ratio, fuelTemp, fuelPressure, thirTemp, mixPressure, targetTemp, gas1, gas2, gas3);
 					curBomb.results(radius, temperature, getPressure(), stat, tick, tankState);
 					if (noDiscard && (maximise == (stat > bestBomb.optstat))) {
 						bestBomb = curBomb;
@@ -581,7 +587,7 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 						if (logLevel == 5) {
 							cout << getRotator() << " Current: " << curBomb.printSimple() << endl;
 						} else {
-							cout << "\n" << curBomb.printExtensive() << << endl;
+							cout << "\n" << curBomb.printExtensive() << endl;
 						}
 					} else if (noDiscard && (maximise == (stat > bestBombLocal.optstat))) {
 						bestBombLocal = curBomb;
@@ -612,6 +618,17 @@ void heatCapInputSetup() {
 	for (GasType g : gases) {
 		cin >> g.heatCap();
 	};
+}
+
+template <typename T>
+auto getMinMaxLimit() {
+	struct result {T minv; T maxv;};
+	T minv, maxv;
+	cout << "Enter lower limit: ";
+	cin >> minv;
+	cout << "Enter upper limit: ";
+	cin >> maxv;
+	return result{minv, maxv};
 }
 
 int main(int argc, char* argv[]) {
@@ -650,6 +667,7 @@ int main(int argc, char* argv[]) {
 						cout << "Invalid optimisation parameter." << endl;
 						continue;
 					}
+					optimiseVal = optVal;
 					string doMaximise;
 					cout << "Maximise? [Y/n]: ";
 					cin >> doMaximise;
@@ -658,6 +676,59 @@ int main(int argc, char* argv[]) {
 					cout << "Measure stat before ignition? [y/N]: ";
 					cin >> doMeasureBefore;
 					optimiseBefore = evalOpt(doMeasureBefore, false);
+				} else if (arg.rfind("--restrict", 0) == 0) {
+					while (true) {
+						string restrictWhat = "";
+						cout << "Available parameters: " << listParams() << endl;
+						cout << "Enter -1 as the upper limit on numerical restrictions to have no limit." << endl;
+						cout << "Enter what to restrict: ";
+						cin >> restrictWhat;
+						bool valid = false;
+						DynVal optVal = getParam(restrictWhat);
+						BaseRestriction* restrict;
+						switch (optVal.type) {
+							case (IntVal): {
+								auto [minv, maxv] = getMinMaxLimit<int>();
+								restrict = new NumRestriction<int>(getDynPtr<int>(optVal), minv, maxv);
+								valid = true;
+								break;
+							}
+							case (FloatVal): {
+								auto [minv, maxv] = getMinMaxLimit<float>();
+								restrict = new NumRestriction<float>(getDynPtr<float>(optVal), minv, maxv);
+								valid = true;
+								break;
+							}
+							case (BoolVal): {
+								string tgt;
+								cout << "Enter target value: [Y/n] ";
+								cin >> tgt;
+								restrict = new BoolRestriction(getDynPtr<bool>(optVal), evalOpt(tgt));
+								valid = true;
+								break;
+							}
+							default: {
+								cout << "Invalid parameter." << endl;
+								break;
+							}
+						}
+						if (valid) {
+							string resAfter;
+							cout << "Restrict after simulation done? [Y/n] ";
+							cin >> resAfter;
+							if (evalOpt(resAfter)) {
+								postRestrictions.push_back(restrict);
+							} else {
+								preRestrictions.push_back(restrict);
+							}
+						}
+						string cont;
+						cout << "Continue? [y/N] ";
+						cin >> cont;
+						if (!evalOpt(cont, false)) {
+							break;
+						}
+					}
 				} else {
 					cout << "Unrecognized argument '" << arg << "'." << endl;
 				}
