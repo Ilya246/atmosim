@@ -3,6 +3,8 @@ echo "built atmosim.exe"
 g++ atmosim.cpp -o deploy/atmosim -O3 --static --std=c++20
 echo "built atmosim"
 cd deploy
+strip atmosim.exe
+strip atmosim
 zip atmosim_windows.zip atmosim.exe
 echo "packed atmosim_windows.zip"
 tar -czvf atmosim_linux.tar.gz atmosim
