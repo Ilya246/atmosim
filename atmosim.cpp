@@ -512,7 +512,7 @@ struct BombData {
 		"	mix-canister (fuel): [ " +
 				to_string(100.f * firstFraction) + "%:" + to_string(100.f * secondFraction) + "%=" + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
 				"temp " + to_string(fuelTemp) + "K | " +
-				"pressure " + to_string(fuelPressure * addedRatio) + "kPa | " +
+				"release pressure " + to_string(fuelPressure) + "kPa | " +
 				"least-mols: [ " + to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas1.name() + " | " +
 				to_string(pressureTempToMols(secondFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas2.name() + " " +
 			"];\n" +
@@ -530,7 +530,7 @@ struct BombData {
 			"];\n" +
 		"	third-canister (fuel): [ " +
 				"temp " + to_string(thirTemp) + "K | " +
-				"pressure " + to_string((pressureCap - fuelPressure) * addedRatio) + "kPa | " +
+				"release pressure " + to_string((pressureCap - fuelPressure)) + "kPa | " +
 				"least-mols: " + to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp) * volumeRatio) + "mol " + gas3.name() + " " +
 			"]\n" +
 		"}";
