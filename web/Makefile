@@ -1,0 +1,19 @@
+all: dist/index.html
+
+serve: all # dev webserver environment
+	cd dist
+	python3 -m http.server
+
+dist/index.html: dist/atmosim.js src/index.html src/integration.js
+	cp src/* dist
+
+dist/atmosim.js: ../atmosim.cpp dist/
+	emcc -o dist/atmosim.js ../atmosim.cpp -std=c++20
+
+dist/:
+	mkdir dist
+
+clean:
+	rm -rf dist
+
+.PHONY: clean all serve

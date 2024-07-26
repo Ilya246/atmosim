@@ -3,3 +3,4 @@ check.bat
 build*.bat
 atmosim.exe
 atmosim
+web/dist
