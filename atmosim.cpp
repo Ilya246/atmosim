@@ -648,17 +648,17 @@ void showHelp() {
 		"		different-temperature gas mixer ratio calculator\n" <<
 		"	-f\n" <<
 		"		try full input: lets you manually input and test a tank's contents\n" <<
-		"	--ticks<value>\n" <<
+		"	--ticks <value>\n" <<
 		"		set tick limit: aborts if a bomb takes longer than this to detonate: default " << tickCap << "\n" <<
-		"	--tstep<value>\n" <<
+		"	--tstep <value>\n" <<
 		"		set temperature iteration multiplier: default " << temperatureStep << "\n" <<
-        "	--tstepm<value>\n" <<
+        "	--tstepm <value>\n" <<
 		"		set minimum temperature iteration step: default " << temperatureStepMin << "\n" <<
-		"	--volume<value>\n" <<
+		"	--volume <value>\n" <<
 		"		set tank volume: default " << volume << "\n" <<
-		"	--overtemp<value>\n" <<
+		"	--overtemp <value>\n" <<
 		"		delta from the fire temperature to iterate from: default " << overTemp << "\n" <<
-		"	--loglevel<value>\n" <<
+		"	--loglevel <value>\n" <<
 		"		what level of the nested loop to log, 0-6: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all, debug\n" <<
 		"	--param\n" <<
 		"		lets you configure what and how to optimise\n" <<
