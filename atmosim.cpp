@@ -671,6 +671,9 @@ int main(int argc, char* argv[]) {
 	// setup
 	setupParams();
 
+	string gas1, gas2, gas3;
+	float mixt1, mixt2, thirt1, thirt2;
+
 	// args parsing
 	if (argc > 1) {
 		for (int i = 0; i < argc; i++) {
@@ -683,6 +686,20 @@ int main(int argc, char* argv[]) {
 				if (arg.rfind("--help", 0) == 0) {
 					showHelp();
 					return 0;
+				} else if (arg.rfind("--gas1", 0) == 0 && more) {
+					gas1 = string(argv[++i]);
+				} else if (arg.rfind("--gas2", 0) == 0 && more) {
+					gas2 = string(argv[++i]);
+				} else if (arg.rfind("--gas3", 0) == 0 && more) {
+					gas3 = string(argv[++i]);
+				} else if (arg.rfind("--mixt1", 0) == 0 && more) {
+					mixt1 = std::stod(argv[++i]);
+				} else if (arg.rfind("--mixt2", 0) == 0 && more) {
+					mixt2 = std::stod(argv[++i]);
+				} else if (arg.rfind("--thirt1", 0) == 0 && more) {
+					thirt1 = std::stod(argv[++i]);
+				} else if (arg.rfind("--thirt2", 0) == 0 && more) {
+					thirt2 = std::stod(argv[++i]);
 				} else if (arg.rfind("--ticks", 0) == 0 && more) {
 					tickCap = std::stoi(argv[++i]);
 				} else if (arg.rfind("--tstep", 0) == 0 && more) {
@@ -832,25 +849,39 @@ int main(int argc, char* argv[]) {
 	}
 	// didn't exit prior, test 1 gas -> 2-gas-mix tanks
 	cout << "Gases: " << listGases() << endl;
-	string gas1, gas2, gas3;
-	float mixt1, mixt2, thirt1, thirt2;
-	cout << "first mix gas: ";
-	cin >> gas1;
-	cout << "second mix gas: ";
-	cin >> gas2;
-	cout << "inserted gas: ";
-	cin >> gas3;
+	if (gas1.length() == 0) {
+		cout << "first mix gas: ";
+		cin >> gas1;
+	}
+	if (gas2.length() == 0) {
+		cout << "second mix gas: ";
+		cin >> gas2;
+	}
+	if (gas3.length() == 0) {
+		cout << "inserted gas: ";
+		cin >> gas3;
+	}
     selectedGases[0] = gas1;
     selectedGases[1] = gas2;
     selectedGases[2] = gas3;
-	cout << "mix temp min: ";
-	cin >> mixt1;
-	cout << "mix temp max: ";
-	cin >> mixt2;
-	cout << "inserted temp min: ";
-	cin >> thirt1;
-	cout << "inserted temp max: ";
-	cin >> thirt2;
+
+	if (!mixt1) {
+		cout << "mix temp min: ";
+		cin >> mixt1;
+	}
+	if (!mixt2) {
+		cout << "mix temp max: ";
+		cin >> mixt2;
+	}
+	if (!thirt1) {
+		cout << "inserted temp min: ";
+		cin >> thirt1;
+	}
+	if (!thirt2) {
+		cout << "inserted temp max: ";
+		cin >> thirt2;
+	}
+
 	BombData bestBomb = testTwomix(sToG(gas1), sToG(gas2), sToG(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	cout << "Best:\n" << bestBomb.printExtensive() << endl;
     cout << "Retest and print ticks? [y/N]: ";
