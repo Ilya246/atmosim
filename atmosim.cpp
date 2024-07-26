@@ -673,6 +673,7 @@ int main(int argc, char* argv[]) {
 
 	string gas1, gas2, gas3;
 	float mixt1, mixt2, thirt1, thirt2;
+    string doRetest;
 
 	// args parsing
 	if (argc > 1) {
@@ -700,6 +701,8 @@ int main(int argc, char* argv[]) {
 					thirt1 = std::stod(argv[++i]);
 				} else if (arg.rfind("--thirt2", 0) == 0 && more) {
 					thirt2 = std::stod(argv[++i]);
+				} else if (arg.rfind("--doretest", 0) == 0 && more) {
+					doRetest = string(argv[++i]);
 				} else if (arg.rfind("--ticks", 0) == 0 && more) {
 					tickCap = std::stoi(argv[++i]);
 				} else if (arg.rfind("--tstep", 0) == 0 && more) {
@@ -884,9 +887,10 @@ int main(int argc, char* argv[]) {
 
 	BombData bestBomb = testTwomix(sToG(gas1), sToG(gas2), sToG(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	cout << "Best:\n" << bestBomb.printExtensive() << endl;
-    cout << "Retest and print ticks? [y/N]: ";
-    string doRetest;
-    cin >> doRetest;
+	if(doRetest.length() == 0) {
+    	cout << "Retest and print ticks? [y/N]: ";
+    	cin >> doRetest;
+	}
     if (evalOpt(doRetest, false)) {
         reset();
         knownInputSetup(sToG(gas1), sToG(gas2), sToG(gas3), bestBomb.fuelTemp, bestBomb.thirTemp, bestBomb.fuelPressure, bestBomb.ratio);
