@@ -647,33 +647,34 @@ void showHelp() {
 		"	-m\n" <<
 		"		different-temperature gas mixer ratio calculator\n" <<
 		"	-f\n" <<
-		"		try full input: lets you manually input and test a tank's contents\n" <<
+		"		try full input: lets you manually input and a tank's contents and see what it does\n" <<
 		"	--gas1 <value>\n" <<
-		"		the first gas in the canister mix (big tank)\n" <<
+		"		the type of the first gas in the mix gas (usually fuel, in tank)\n" <<
 		"	--gas2 <value>\n" <<
-		"		the second gas in the canister mix (big tank)\n" <<
+		"		the type of the second gas in the mix gas (usually fuel, in tank)\n" <<
 		"	--gas3 <value>\n" <<
-		"		the type of gas in the small tank\n" <<
+		"		the type of the third gas (usually primer, goes into tank to detonate)\n" <<
 		"	--mixt1 <value>\n" <<
-		"		the minimum temperature range of the canister mix in kelvin (big tank)\n" <<
+		"		the minimum of the temperature range to check for the mix gas\n" <<
+		"		temperatures for this and the following options are in kelvin\n" <<
 		"	--mixt2 <value>\n" <<
-		"		the maximum temperature range of the canister mix in kelvin (big tank)\n" <<
+		"		the maximum of the temperature range to check for the mix gas\n" <<
 		"	--thirt1 <value>\n" <<
-		"		the minimum temperature range of the small tank in kelvin\n" <<
+		"		the minimum of the temperature range to check for the third gas\n" <<
 		"	--thirt2 <value>\n" <<
-		"		the maximum temperature range of the small tank in kelvin\n" <<
+		"		the maximum of the temperature range to check for the third gas\n" <<
 		"	--doretest <y/N>\n" <<
-		"		retest and print ticks?\n" <<
+		"		after calculating the bomb, whether to test it again and print every tick as it reacts\n" <<
 		"	--ticks <value>\n" <<
-		"		set tick limit: aborts if a bomb takes longer than this to detonate: default " << tickCap << "\n" <<
+		"		set tick limit: aborts if a bomb takes longer than this to detonate (default: " << tickCap << ")\n" <<
 		"	--tstep <value>\n" <<
-		"		set temperature iteration multiplier: default " << temperatureStep << "\n" <<
-        "	--tstepm <value>\n" <<
-		"		set minimum temperature iteration step: default " << temperatureStepMin << "\n" <<
+		"		set temperature iteration multiplier (default " << temperatureStep << ")\n" <<
+		"	--tstepm <value>\n" <<
+		"		set minimum temperature iteration step (default " << temperatureStepMin << ")\n" <<
 		"	--volume <value>\n" <<
-		"		set tank volume: default " << volume << "\n" <<
+		"		set tank volume (default " << volume << ")\n" <<
 		"	--overtemp <value>\n" <<
-		"		delta from the fire temperature to iterate from: default " << overTemp << "\n" <<
+		"		only consider bombs which mix to this much above the ignition temperature; higher values may make bombs more robust to slight mismixing (default " << overTemp << ")\n" <<
 		"	--loglevel <value>\n" <<
 		"		what level of the nested loop to log, 0-6: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all, debug\n" <<
 		"	--param\n" <<
@@ -723,7 +724,7 @@ int main(int argc, char* argv[]) {
 					tickCap = std::stoi(argv[++i]);
 				} else if (arg.rfind("--tstep", 0) == 0 && more) {
 					temperatureStep = std::stod(argv[++i]);
-                } else if (arg.rfind("--tstepm", 0) == 0 && more) {
+				} else if (arg.rfind("--tstepm", 0) == 0 && more) {
 					temperatureStepMin = std::stod(argv[++i]);
 				} else if (arg.rfind("--volume", 0) == 0 && more) {
 					volume = std::stod(argv[++i]);
