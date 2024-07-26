@@ -631,32 +631,109 @@ auto getMinMaxLimit() {
 	return result{minv, maxv};
 }
 
+void showHelp() {
+	cout <<
+		"options:\n" <<
+		"	-h\n" <<
+		"		show help and exit\n" <<
+		"	-n\n" <<
+		"		assume inside pipe: prevent tank-related effects" <<
+		"	-H\n" <<
+		"		redefine heat capacities\n" <<
+		"	-r\n" <<
+		"		set gas ratio iteration bounds+step\n" <<
+		"	-s\n" <<
+		"		provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)\n" <<
+		"	-m\n" <<
+		"		different-temperature gas mixer ratio calculator\n" <<
+		"	-f\n" <<
+		"		try full input: lets you manually input and a tank's contents and see what it does\n" <<
+		"	--gas1 <value>\n" <<
+		"		the type of the first gas in the mix gas (usually fuel, in tank)\n" <<
+		"	--gas2 <value>\n" <<
+		"		the type of the second gas in the mix gas (usually fuel, in tank)\n" <<
+		"	--gas3 <value>\n" <<
+		"		the type of the third gas (usually primer, goes into tank to detonate)\n" <<
+		"	--mixt1 <value>\n" <<
+		"		the minimum of the temperature range to check for the mix gas\n" <<
+		"		temperatures for this and the following options are in kelvin\n" <<
+		"	--mixt2 <value>\n" <<
+		"		the maximum of the temperature range to check for the mix gas\n" <<
+		"	--thirt1 <value>\n" <<
+		"		the minimum of the temperature range to check for the third gas\n" <<
+		"	--thirt2 <value>\n" <<
+		"		the maximum of the temperature range to check for the third gas\n" <<
+		"	--doretest <y/N>\n" <<
+		"		after calculating the bomb, whether to test it again and print every tick as it reacts\n" <<
+		"	--ticks <value>\n" <<
+		"		set tick limit: aborts if a bomb takes longer than this to detonate (default: " << tickCap << ")\n" <<
+		"	--tstep <value>\n" <<
+		"		set temperature iteration multiplier (default " << temperatureStep << ")\n" <<
+		"	--tstepm <value>\n" <<
+		"		set minimum temperature iteration step (default " << temperatureStepMin << ")\n" <<
+		"	--volume <value>\n" <<
+		"		set tank volume (default " << volume << ")\n" <<
+		"	--overtemp <value>\n" <<
+		"		only consider bombs which mix to this much above the ignition temperature; higher values may make bombs more robust to slight mismixing (default " << overTemp << ")\n" <<
+		"	--loglevel <value>\n" <<
+		"		what level of the nested loop to log, 0-6: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all, debug\n" <<
+		"	--param\n" <<
+		"		lets you configure what and how to optimise\n" <<
+		"	--restrict\n" <<
+		"		lets you make atmosim not consider bombs outside of chosen parameters\n" <<
+		"ss14 maxcap atmos sim" << endl;
+}
+
 int main(int argc, char* argv[]) {
 	// setup
 	setupParams();
 
+	string gas1, gas2, gas3;
+	float mixt1, mixt2, thirt1, thirt2;
+    string doRetest;
+
 	// args parsing
 	if (argc > 1) {
 		for (int i = 0; i < argc; i++) {
+			int more = i+1 < argc;
 			string arg(argv[i]);
 			if (arg[0] != '-' || arg.length() < 2) {
 				continue;
 			}
 			if (arg[1] == '-') {
-				if (arg.rfind("--ticks", 0) == 0) {
-					tickCap = std::stoi(arg.substr(7));
-				} else if (arg.rfind("--tstep", 0) == 0) {
-					temperatureStep = std::stod(arg.substr(7));
-                } else if (arg.rfind("--tstepm", 0) == 0) {
-					temperatureStepMin = std::stod(arg.substr(8));
-				} else if (arg.rfind("--volume", 0) == 0) {
-					volume = std::stod(arg.substr(8));
-				} else if (arg.rfind("--pressureCap", 0) == 0) {
-					pressureCap = std::stod(arg.substr(13));
-				} else if (arg.rfind("--overtemp", 0) == 0) {
-					overTemp = std::stod(arg.substr(10));
-				} else if (arg.rfind("--loglevel", 0) == 0) {
-					logLevel = std::stoi(arg.substr(10));
+				if (arg.rfind("--help", 0) == 0) {
+					showHelp();
+					return 0;
+				} else if (arg.rfind("--gas1", 0) == 0 && more) {
+					gas1 = string(argv[++i]);
+				} else if (arg.rfind("--gas2", 0) == 0 && more) {
+					gas2 = string(argv[++i]);
+				} else if (arg.rfind("--gas3", 0) == 0 && more) {
+					gas3 = string(argv[++i]);
+				} else if (arg.rfind("--mixt1", 0) == 0 && more) {
+					mixt1 = std::stod(argv[++i]);
+				} else if (arg.rfind("--mixt2", 0) == 0 && more) {
+					mixt2 = std::stod(argv[++i]);
+				} else if (arg.rfind("--thirt1", 0) == 0 && more) {
+					thirt1 = std::stod(argv[++i]);
+				} else if (arg.rfind("--thirt2", 0) == 0 && more) {
+					thirt2 = std::stod(argv[++i]);
+				} else if (arg.rfind("--doretest", 0) == 0 && more) {
+					doRetest = string(argv[++i]);
+				} else if (arg.rfind("--ticks", 0) == 0 && more) {
+					tickCap = std::stoi(argv[++i]);
+				} else if (arg.rfind("--tstep", 0) == 0 && more) {
+					temperatureStep = std::stod(argv[++i]);
+				} else if (arg.rfind("--tstepm", 0) == 0 && more) {
+					temperatureStepMin = std::stod(argv[++i]);
+				} else if (arg.rfind("--volume", 0) == 0 && more) {
+					volume = std::stod(argv[++i]);
+				} else if (arg.rfind("--pressureCap", 0) == 0 && more) {
+					pressureCap = std::stod(argv[++i]);
+				} else if (arg.rfind("--overtemp", 0) == 0 && more) {
+					overTemp = std::stod(argv[++i]);
+				} else if (arg.rfind("--loglevel", 0) == 0 && more) {
+					logLevel = std::stoi(argv[++i]);
 				} else if (arg.rfind("--param", 0) == 0) {
 					string optimiseWhat = "";
 					cout << "Possible optimisations: " << listParams() << endl;
@@ -731,6 +808,8 @@ int main(int argc, char* argv[]) {
 					}
 				} else {
 					cout << "Unrecognized argument '" << arg << "'." << endl;
+					showHelp();
+					return 0;
 				}
 				continue;
 			}
@@ -777,43 +856,12 @@ int main(int argc, char* argv[]) {
 					return 0;
 				}
 				case 'h': {
-					cout <<
-					"options:\n" <<
-					"	-h\n" <<
-					"		show help and exit\n" <<
-					"	-n\n" <<
-					"		assume inside pipe: prevent tank-related effects" <<
-					"	-H\n" <<
-					"		redefine heat capacities\n" <<
-					"	-r\n" <<
-					"		set gas ratio iteration bounds+step\n" <<
-					"	-s\n" <<
-					"		provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)\n" <<
-					"	-m\n" <<
-					"		different-temperature gas mixer ratio calculator\n" <<
-					"	-f\n" <<
-					"		try full input: lets you manually input and test a tank's contents\n" <<
-					"	--ticks<value>\n" <<
-					"		set tick limit: aborts if a bomb takes longer than this to detonate: default " << tickCap << "\n" <<
-					"	--tstep<value>\n" <<
-					"		set temperature iteration multiplier: default " << temperatureStep << "\n" <<
-                    "	--tstepm<value>\n" <<
-					"		set minimum temperature iteration step: default " << temperatureStepMin << "\n" <<
-					"	--volume<value>\n" <<
-					"		set tank volume: default " << volume << "\n" <<
-					"	--overtemp<value>\n" <<
-					"		delta from the fire temperature to iterate from: default " << overTemp << "\n" <<
-					"	--loglevel<value>\n" <<
-					"		what level of the nested loop to log, 0-6: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all, debug\n" <<
-					"	--param\n" <<
-					"		lets you configure what and how to optimise\n" <<
-					"	--restrict\n" <<
-					"		lets you make atmosim not consider bombs outside of chosen parameters\n" <<
-					"ss14 maxcap atmos sim" << endl;
+					showHelp();
 					return 0;
 				}
 				default: {
 					cout << "Unrecognized argument '" << arg << "'." << endl;
+					showHelp();
 					break;
 				}
 			}
@@ -821,30 +869,45 @@ int main(int argc, char* argv[]) {
 	}
 	// didn't exit prior, test 1 gas -> 2-gas-mix tanks
 	cout << "Gases: " << listGases() << endl;
-	string gas1, gas2, gas3;
-	float mixt1, mixt2, thirt1, thirt2;
-	cout << "first mix gas: ";
-	cin >> gas1;
-	cout << "second mix gas: ";
-	cin >> gas2;
-	cout << "inserted gas: ";
-	cin >> gas3;
+	if (gas1.length() == 0) {
+		cout << "first mix gas: ";
+		cin >> gas1;
+	}
+	if (gas2.length() == 0) {
+		cout << "second mix gas: ";
+		cin >> gas2;
+	}
+	if (gas3.length() == 0) {
+		cout << "inserted gas: ";
+		cin >> gas3;
+	}
     selectedGases[0] = gas1;
     selectedGases[1] = gas2;
     selectedGases[2] = gas3;
-	cout << "mix temp min: ";
-	cin >> mixt1;
-	cout << "mix temp max: ";
-	cin >> mixt2;
-	cout << "inserted temp min: ";
-	cin >> thirt1;
-	cout << "inserted temp max: ";
-	cin >> thirt2;
+
+	if (!mixt1) {
+		cout << "mix temp min: ";
+		cin >> mixt1;
+	}
+	if (!mixt2) {
+		cout << "mix temp max: ";
+		cin >> mixt2;
+	}
+	if (!thirt1) {
+		cout << "inserted temp min: ";
+		cin >> thirt1;
+	}
+	if (!thirt2) {
+		cout << "inserted temp max: ";
+		cin >> thirt2;
+	}
+
 	BombData bestBomb = testTwomix(sToG(gas1), sToG(gas2), sToG(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	cout << "Best:\n" << bestBomb.printExtensive() << endl;
-    cout << "Retest and print ticks? [y/N]: ";
-    string doRetest;
-    cin >> doRetest;
+	if(doRetest.length() == 0) {
+    	cout << "Retest and print ticks? [y/N]: ";
+    	cin >> doRetest;
+	}
     if (evalOpt(doRetest, false)) {
         reset();
         knownInputSetup(sToG(gas1), sToG(gas2), sToG(gas3), bestBomb.fuelTemp, bestBomb.thirTemp, bestBomb.fuelPressure, bestBomb.ratio);
