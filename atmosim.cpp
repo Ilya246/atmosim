@@ -648,6 +648,22 @@ void showHelp() {
 		"		different-temperature gas mixer ratio calculator\n" <<
 		"	-f\n" <<
 		"		try full input: lets you manually input and test a tank's contents\n" <<
+		"	--gas1 <value>\n" <<
+		"		the first gas in the canister mix (big tank)\n" <<
+		"	--gas2 <value>\n" <<
+		"		the second gas in the canister mix (big tank)\n" <<
+		"	--gas3 <value>\n" <<
+		"		the type of gas in the small tank\n" <<
+		"	--mixt1 <value>\n" <<
+		"		the minimum temperature range of the canister mix in kelvin (big tank)\n" <<
+		"	--mixt2 <value>\n" <<
+		"		the maximum temperature range of the canister mix in kelvin (big tank)\n" <<
+		"	--thirt1 <value>\n" <<
+		"		the minimum temperature range of the small tank in kelvin\n" <<
+		"	--thirt2 <value>\n" <<
+		"		the maximum temperature range of the small tank in kelvin\n" <<
+		"	--doretest <y/N>\n" <<
+		"		retest and print ticks?\n" <<
 		"	--ticks <value>\n" <<
 		"		set tick limit: aborts if a bomb takes longer than this to detonate: default " << tickCap << "\n" <<
 		"	--tstep <value>\n" <<
