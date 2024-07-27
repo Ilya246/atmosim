@@ -30,3 +30,7 @@ img.dynamicimg {
 .dimgcontainer {
     min-height: 128px;
 }
+
+.dimgcontainer p {
+    margin: 0;
+}

@@ -9,7 +9,9 @@
         <div class="dimgcontainer">
             <img src="img/canister.png" class="ss14sprite dynamicimg" width="128" height="128"/>
             
+            <p><i>Mix of Gas #1 & #2 inside canister</i></p>
             <label for="canistergas1">Gas #1: </label>
+
             <select name="canistergas1" id="canistergas1">
                 <option value="oxygen">Oxygen</option>
                 <option value="plasma">Plasma</option>
@@ -43,6 +45,8 @@
         <div class="dimgcontainer">
             <img src="img/tank.png" class="ss14sprite dynamicimg" width="128" height="128"/>
             
+            <p><i>Gas inside tank</i></p>
+
             <label for="tankgas">Gas: </label>
             <select name="tankgas" id="tankgas">
                 <option value="oxygen">Oxygen</option>
@@ -63,7 +67,16 @@
         </div>
         <br>
 
-        <input type="button" value="Submit" id="submit"/>
+        <label for="ticks">Ticks: </label>
+        <input name="ticks" id="ticks" type="number" value="150"/>
+        <br>
+
+        <label for="doretest">Retest and print ticks: </label>
+        <input name="doretest" id="doretest" type="checkbox"/>
+        <br>
+
+        <br>
+        <input type="button" value="Compute" id="submit"/>
         <br><br><br>
         <h3 style="margin: 0">program output:</h3>
         <div id="outputbox" class="terminaloutput"></div>
