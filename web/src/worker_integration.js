@@ -27,16 +27,19 @@ importScripts("./atmosim.js");
 onmessage = (e) => {
     let message = e.data;
     if(message[0] == "compute") {
+        let data = message[1];
+        console.log(data);
+
         console.log("worker: starting atmosim...");
         Module.callMain([
-            "--gas1", "plasma",
-            "--gas2", "tritium",
-            "--gas3", "oxygen",
-            "--mixt1", "70",
-            "--mixt2", "1000",
-            "--thirt1", "200",
-            "--thirt2", "300",
-            "--doretest", "n"
+            "--gas1", data.gas1,
+            "--gas2", data.gas2,
+            "--gas3", data.gas3,
+            "--mixt1", data.mixt1,
+            "--mixt2", data.mixt2,
+            "--thirt1", data.thirt1,
+            "--thirt2", data.thirt2,
+            "--doretest", data.doretest
         ]);
         console.log("worker: atmosim finished");
     }
