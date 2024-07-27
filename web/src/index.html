@@ -7,11 +7,11 @@
     <body>
         <h1>MAXCAP COMPUTER</h1>
         <div class="dimgcontainer">
-            <img src="img/canister.png" class="ss14sprite dynamicimg" width="128" height="128"/>
+            <img src="img/canister.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
             
             <p><i>Mix of Gas #1 & #2 inside canister</i></p>
             <label for="canistergas1">Gas #1: </label>
-
+            
             <select name="canistergas1" id="canistergas1">
                 <option value="oxygen">Oxygen</option>
                 <option value="plasma">Plasma</option>
@@ -38,12 +38,10 @@
             <label for="mixt2">Maximum temp (K): </label>
             <input name="mixt2" id="mixt2" type="number" value="1000"/>
             <br>
-
-            
         </div>
         <br>
         <div class="dimgcontainer">
-            <img src="img/tank.png" class="ss14sprite dynamicimg" width="128" height="128"/>
+            <img src="img/tank.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
             
             <p><i>Gas inside tank</i></p>
 
@@ -78,6 +76,33 @@
         <br>
         <input type="button" value="Compute" id="submit"/>
         <br><br><br>
+
+        <div id="resultbox">
+            <div>
+                <div class="dimgcontainer">
+                    <img src="img/canister.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
+
+                    <p>Mix: %xx : %xx, xx : xx</p>
+                    <p>Least mols: xxxmol xx, xxxmol xx</p>
+                    <p>Temp: xxxK</p>
+                    <p>Canister release pressure set to xxxKPa</p>
+                </div>
+                <div class="dimgcontainer">
+                    <img src="img/tank.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
+
+                    <p>Mix: xx</p>
+                    <p>Temp: xxxK</p>
+                    <p>Tank pressure: xxxxKPa</p>
+                </div>
+                <br>
+                <div class="nomarginp">
+                    <p>Time before detonation: xxx ticks (xx seconds)</p>
+                    <p>Explosive radius: xx tiles</p>
+                </div>
+            </div>
+            <img src="img/diagram.png" style="width: 50%"/>
+        </div>
+
         <h3 style="margin: 0">program output:</h3>
         <div id="outputbox" class="terminaloutput"></div>
 
