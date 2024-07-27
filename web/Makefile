@@ -4,7 +4,7 @@ serve: all # dev webserver environment
 	cd dist
 	python3 -m http.server
 
-dist/index.html: dist/atmosim.js src/index.html src/integration.js
+dist/index.html: dist/atmosim.js src/index.html src/main.js src/worker_integration.js
 	cp src/* dist
 
 dist/atmosim.js: ../atmosim.cpp dist/
