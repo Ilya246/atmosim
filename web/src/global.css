@@ -1,0 +1,32 @@
+* {
+    font-family: Arial, Helvetica, sans-serif
+}
+
+.terminaloutput {
+    height: 300px;
+    overflow-y: scroll;
+    border: 1px solid black;
+}
+
+.terminaloutput p {
+    font-family: monospace;
+    margin: 0;
+}
+
+img.ss14sprite {
+    image-rendering: optimizeSpeed;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -o-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    image-rendering: optimize-contrast;
+    -ms-interpolation-mode: nearest-neighbor;
+}
+
+img.dynamicimg {
+    float: left;
+}
+
+.dimgcontainer {
+    min-height: 128px;
+}

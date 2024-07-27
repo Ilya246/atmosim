@@ -2,11 +2,72 @@
 <html>
     <head>
         <title>atmosim</title>
+        <link type="text/css" rel="stylesheet" href="./global.css"/>
     </head>
     <body>
-        <div id="outputbox"></div>
-        <input type="button" value="Submit" id="submit"/>
+        <h1>MAXCAP COMPUTER</h1>
+        <div class="dimgcontainer">
+            <img src="img/canister.png" class="ss14sprite dynamicimg" width="128" height="128"/>
+            
+            <label for="canistergas1">Gas #1: </label>
+            <select name="canistergas1" id="canistergas1">
+                <option value="oxygen">Oxygen</option>
+                <option value="plasma">Plasma</option>
+                <option value="tritium">Tritium</option>
+                <option value="waterVapour">Water Vapour</option>
+                <option value="frezon">Frezon</option>
+            </select>
+            <br>
+
+            <label for="canistergas2">Gas #2: </label>
+            <select name="canistergas2" id="canistergas2">
+                <option value="oxygen">Oxygen</option>
+                <option value="plasma">Plasma</option>
+                <option value="tritium">Tritium</option>
+                <option value="waterVapour">Water Vapour</option>
+                <option value="frezon">Frezon</option>
+            </select>
+            <br>
+
+            <label for="mixt1">Minimum temp (K): </label>
+            <input name="mixt1" id="mixt1" type="number" value="100"/>
+            <br>
+
+            <label for="mixt2">Maximum temp (K): </label>
+            <input name="mixt2" id="mixt2" type="number" value="1000"/>
+            <br>
+
+            
+        </div>
         <br>
+        <div class="dimgcontainer">
+            <img src="img/tank.png" class="ss14sprite dynamicimg" width="128" height="128"/>
+            
+            <label for="tankgas">Gas: </label>
+            <select name="tankgas" id="tankgas">
+                <option value="oxygen">Oxygen</option>
+                <option value="plasma">Plasma</option>
+                <option value="tritium">Tritium</option>
+                <option value="waterVapour">Water Vapour</option>
+                <option value="frezon">Frezon</option>
+            </select>
+            <br>
+
+            <label for="thirt1">Minimum temp (K): </label>
+            <input name="thirt1" id="thirt1" type="number" value="200"/>
+            <br>
+
+            <label for="thirt2">Maximum temp (K): </label>
+            <input name="thirt2" id="thirt2" type="number" value="300"/>
+            <br>
+        </div>
+        <br>
+
+        <input type="button" value="Submit" id="submit"/>
+        <br><br><br>
+        <h3 style="margin: 0">program output:</h3>
+        <div id="outputbox" class="terminaloutput"></div>
+
         <script src="main.js"></script>
     </body>
 </html>

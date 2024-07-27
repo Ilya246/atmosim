@@ -38,5 +38,6 @@ onmessage = (e) => {
             "--thirt2", "300",
             "--doretest", "n"
         ]);
+        console.log("worker: atmosim finished");
     }
 }
