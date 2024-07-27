@@ -8,7 +8,7 @@ dist/index.html: dist/atmosim.js src/index.html src/integration.js
 	cp src/* dist
 
 dist/atmosim.js: ../atmosim.cpp dist/
-	emcc -o dist/atmosim.js ../atmosim.cpp -std=c++20
+	emcc -s INVOKE_RUN=0 -s EXPORTED_FUNCTIONS='["_main"]' -s EXPORTED_RUNTIME_METHODS='["callMain", "FS", "ENV"]' -o dist/atmosim.js ../atmosim.cpp -std=c++20
 
 dist/:
 	mkdir dist

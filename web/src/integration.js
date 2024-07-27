@@ -3,18 +3,7 @@ let submit = document.getElementById("submit");
 box.innerText = "";
 
 var Module = {
-    noInitialRun: false,
-    arguments: [
-        "--ticks", "150",
-        "--gas1", "plasma",
-        "--gas2", "tritium",
-        "--gas3", "oxygen",
-        "--mixt1", "70",
-        "--mixt2", "1000",
-        "--thirt1", "200",
-        "--thirt2", "300",
-        "--doretest", "n",
-    ],
+    noInitialRun: true,
 
     preInit: () => {
         function stdin() {
@@ -22,11 +11,11 @@ var Module = {
         }
         
         function stdout(code) {
-            box.innerText = String.fromCharCode(code);
+            console.log(String.fromCharCode(code));
         }
 
         function stderr(code) {
-            box.innerText = String.fromCharCode(code);
+            console.log(String.fromCharCode(code));
         }
 
         FS.init(stdin, stdout, stderr);
@@ -34,7 +23,8 @@ var Module = {
 }
 
 submit.addEventListener("click", e => {
-    Module.arguments = [
+    console.log("running..");
+    Module.callMain([
         "--gas1", "plasma",
         "--gas2", "tritium",
         "--gas3", "oxygen",
@@ -43,8 +33,5 @@ submit.addEventListener("click", e => {
         "--thirt1", "200",
         "--thirt2", "300",
         "--doretest", "n"
-    ];
-
-    console.log("running...");
-    Module.run();
+    ]);
 });
