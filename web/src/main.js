@@ -3,6 +3,7 @@ let submit = document.getElementById("submit");
 
 const atmosim = new Worker("./worker_integration.js");
 
+let allText = [];
 let currentLine = "";
 atmosim.addEventListener("message", (e) => {
     let message = e.data;
@@ -11,11 +12,15 @@ atmosim.addEventListener("message", (e) => {
         if(c !== "\n") {
             currentLine = `${currentLine}${c}`;
         } else {
+            allText.push(`${currentLine}`); // wrapper to duplicate string instead of ref
             let p = document.createElement("p");
             p.innerText = currentLine;
             outputbox.appendChild(p);
             currentLine = "";
         }
+    } else if(message[0] == "finish") {
+        let result = allText.splice(allText.indexOf("Best:") + 1).map(x => x.split("\t").join(""));
+        console.log(result);
     }
 });
 

@@ -42,5 +42,7 @@ onmessage = (e) => {
             "--doretest", data.doretest
         ]);
         console.log("worker: atmosim finished");
+
+        postMessage(["finish"]);
     }
 }
