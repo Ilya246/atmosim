@@ -77,27 +77,27 @@
         <input type="button" value="Compute" id="submit"/>
         <br><br><br>
 
-        <div id="resultbox">
+        <div id="resultbox" class="hidden">
             <div>
                 <div class="dimgcontainer">
                     <img src="img/canister.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
 
-                    <p>Mix: %xx : %xx, xx : xx</p>
-                    <p>Least mols: xxxmol xx, xxxmol xx</p>
-                    <p>Temp: xxxK</p>
-                    <p>Canister release pressure set to xxxKPa</p>
+                    <p id="o-canistermix">Mix: %xx : %xx, xx : xx</p>
+                    <p id="o-leastmols">Least mols: xxxmol xx, xxxmol xx</p>
+                    <p id="o-canistertemp">Temp: xxxK</p>
+                    <p id="o-canisterpressure">Canister release pressure set to xxxKPa</p>
                 </div>
                 <div class="dimgcontainer">
                     <img src="img/tank.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
 
-                    <p>Mix: xx</p>
-                    <p>Temp: xxxK</p>
-                    <p>Tank pressure: xxxxKPa</p>
+                    <p id="o-tankmix">Mix: xx</p>
+                    <p id="o-tanktemp">Temp: xxxK</p>
+                    <p id="o-tankpressure">Tank pressure: xxxxKPa</p>
                 </div>
                 <br>
                 <div class="nomarginp">
-                    <p>Time before detonation: xxx ticks (xx seconds)</p>
-                    <p>Explosive radius: xx tiles</p>
+                    <p id="o-timer">Time before detonation: xxx ticks (xx seconds)</p>
+                    <p id="o-radius">Explosive radius: xx tiles</p>
                 </div>
             </div>
             <img src="img/diagram.png" style="width: 50%"/>

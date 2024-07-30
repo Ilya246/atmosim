@@ -19,8 +19,34 @@ atmosim.addEventListener("message", (e) => {
             currentLine = "";
         }
     } else if(message[0] == "finish") {
-        let result = allText.splice(allText.indexOf("Best:") + 1).map(x => x.split("\t").join(""));
-        console.log(result);
+        let result = allText.map(x => x.split("\t").join(""));
+
+        let blocks = {};
+        let currentlyAppending = "";
+        for(let i in result) {
+            let line = result[i];
+            if(line.endsWith(": {")) { // TANK etc
+                currentlyAppending = line.split(":")[0];
+                blocks[currentlyAppending] = {};
+            } else if(line == "}") {
+                currentlyAppending = "";
+            } else {
+                if(currentlyAppending) {
+                    let key = line.split(": ")[0]; // initial state etc
+                    let content = line.split(": ")[1];
+                    if(content.startsWith("[")) {
+                        // array
+                        let array = content.slice(1, content.length - (content.endsWith(";") ? 2 : 1)).split("|").map(x => x.trim());
+                        blocks[currentlyAppending][key] = array;
+                    } else {
+                        // single value
+                        blocks[currentlyAppending][key] = content;
+                    }
+                }
+            }
+
+            displayOutput(blocks);
+        }
     }
 });
 
@@ -47,3 +73,7 @@ submit.addEventListener("click", e => {
         doretest: doretest.checked ? "y" : "n"
     }]);
 });
+
+function displayOutput(data) {
+    let requirements = data["REQUIREMENTS"];
+}
