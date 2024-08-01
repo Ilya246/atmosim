@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>atmosim</title>
+        <link type="text/css" rel="stylesheet" href="./global.css"/>
+    </head>
+    <body>
+        <h1>MAXCAP COMPUTER</h1>
+        <div class="dimgcontainer">
+            <img src="img/canister.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
+            
+            <p><i>Mix of Gas #1 & #2 inside canister</i></p>
+            <label for="canistergas1">Gas #1: </label>
+            
+            <select name="canistergas1" id="canistergas1">
+                <option value="oxygen">Oxygen</option>
+                <option value="plasma">Plasma</option>
+                <option value="tritium">Tritium</option>
+                <option value="waterVapour">Water Vapour</option>
+                <option value="frezon">Frezon</option>
+            </select>
+            <br>
+
+            <label for="canistergas2">Gas #2: </label>
+            <select name="canistergas2" id="canistergas2">
+                <option value="oxygen">Oxygen</option>
+                <option value="plasma">Plasma</option>
+                <option value="tritium">Tritium</option>
+                <option value="waterVapour">Water Vapour</option>
+                <option value="frezon">Frezon</option>
+            </select>
+            <br>
+
+            <label for="mixt1">Minimum temp (K): </label>
+            <input name="mixt1" id="mixt1" type="number" value="100"/>
+            <br>
+
+            <label for="mixt2">Maximum temp (K): </label>
+            <input name="mixt2" id="mixt2" type="number" value="1000"/>
+            <br>
+        </div>
+        <br>
+        <div class="dimgcontainer">
+            <img src="img/tank.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
+            
+            <p><i>Gas inside tank</i></p>
+
+            <label for="tankgas">Gas: </label>
+            <select name="tankgas" id="tankgas">
+                <option value="oxygen">Oxygen</option>
+                <option value="plasma">Plasma</option>
+                <option value="tritium">Tritium</option>
+                <option value="waterVapour">Water Vapour</option>
+                <option value="frezon">Frezon</option>
+            </select>
+            <br>
+
+            <label for="thirt1">Minimum temp (K): </label>
+            <input name="thirt1" id="thirt1" type="number" value="200"/>
+            <br>
+
+            <label for="thirt2">Maximum temp (K): </label>
+            <input name="thirt2" id="thirt2" type="number" value="300"/>
+            <br>
+        </div>
+        <br>
+
+        <label for="ticks">Ticks: </label>
+        <input name="ticks" id="ticks" type="number" value="150"/>
+        <br>
+
+        <label for="doretest">Retest and print ticks: </label>
+        <input name="doretest" id="doretest" type="checkbox"/>
+        <br>
+
+        <br>
+        <input type="button" value="Compute" id="submit"/>
+        <br><br><br>
+
+        <div id="resultbox" class="hidden">
+            <div>
+                <div class="dimgcontainer">
+                    <img src="img/canister.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
+
+                    <p id="o-canistermix">Mix: %xx : %xx, xx : xx</p>
+                    <p id="o-leastmols">Least mols: xxxmol xx, xxxmol xx</p>
+                    <p id="o-canistertemp">Temp: xxxK</p>
+                    <p id="o-canisterpressure">Canister release pressure set to xxxKPa</p>
+                </div>
+                <div class="dimgcontainer">
+                    <img src="img/tank.png" class="ss14sprite dynamicimg" width="128px" height="128px"/>
+
+                    <p id="o-tankmix">Mix: xx</p>
+                    <p id="o-tanktemp">Temp: xxxK</p>
+                    <p id="o-tankmols">Least mols: xx mol xx</p>
+                    <p id="o-tankpressure">Tank pressure: xxxxKPa</p>
+                </div>
+                <br>
+                <div class="nomarginp">
+                    <p id="o-timer">Time before detonation: xxx ticks (xx seconds)</p>
+                    <p id="o-radius">Explosive radius: xx tiles</p>
+                </div>
+            </div>
+            <img src="img/diagram.png" style="width: 50%"/>
+        </div>
+
+        <h3 style="margin: 0">program output:</h3>
+        <div id="outputbox" class="terminaloutput"></div>
+
+        <script src="main.js"></script>
+    </body>
+</html>
