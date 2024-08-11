@@ -105,7 +105,7 @@ string listGases() {
 	for (GasType g : gases) {
 		out += g.name() + ", ";
 	}
-	out += gases[gas_count - 1].name();
+	out.resize(out.size() - 2);
 	return out;
 }
 
@@ -510,7 +510,7 @@ struct BombData {
 		"}\n" +
 		"REQUIREMENTS: {\n" +
 		"	mix-canister (fuel): [ " +
-				to_string(100.f * firstFraction) + "%:" + to_string(100.f * secondFraction) + "%=" + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
+				to_string(100.f * firstFraction) + "% : " + to_string(100.f * secondFraction) + "% = " + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
 				"temp " + to_string(fuelTemp) + "K | " +
 				"release pressure " + to_string(fuelPressure) + "kPa | " +
 				"least-mols: [ " + to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas1.name() + " | " +
@@ -524,9 +524,11 @@ struct BombData {
 		"}\n" +
 		"REVERSE-REQUIREMENTS: {\n" +
 		"	mix-canister (primer): [ " +
+				to_string(100.f * firstFraction) + "% : " + to_string(100.f * secondFraction) + "% = " + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
+				"temp " + to_string(fuelTemp) + "K | " +
 				"pressure " + to_string((pressureCap + fuelPressure) * addedRatio) + "kPa | " +
-				"least-mols: [ " + to_string(pressureTempToMols(pressureCap + firstFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas1.name() + " | " +
-				to_string(pressureTempToMols(pressureCap + secondFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas2.name() + " " +
+				"least-mols: [ " + to_string(pressureTempToMols(pressureCap + fuelPressure, fuelTemp) * firstFraction * volumeRatio) + "mol " + gas1.name() + " | " +
+				to_string(pressureTempToMols(pressureCap + fuelPressure, fuelTemp) * secondFraction * volumeRatio) + "mol " + gas2.name() + " " +
 			"];\n" +
 		"	third-canister (fuel): [ " +
 				"temp " + to_string(thirTemp) + "K | " +
@@ -689,7 +691,7 @@ int main(int argc, char* argv[]) {
 	setupParams();
 
 	string gas1, gas2, gas3;
-	float mixt1, mixt2, thirt1, thirt2;
+	float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
     string doRetest;
 
 	// args parsing
