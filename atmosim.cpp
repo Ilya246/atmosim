@@ -61,10 +61,11 @@ struct BoolRestriction : BaseRestriction {
 
 float heatScale = 1.0;
 
-const int gas_count = 6;
+
+const int gas_count = 8;
 float gasAmounts[gas_count]{};
-float gasHeatCaps[gas_count]{20.f * heatScale, 200.f * heatScale, 10.f * heatScale, 40.f * heatScale, 30.f * heatScale, 600.f * heatScale};
-string gasNames[gas_count]{  "oxygen",         "plasma",          "tritium",        "waterVapour",    "carbonDioxide",  "frezon"         };
+float gasHeatCaps[gas_count]{20.f * heatScale, 30.f * heatScale, 200.f * heatScale, 10.f * heatScale, 40.f * heatScale, 30.f * heatScale, 600.f * heatScale, 40.f * heatScale};
+string gasNames[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "waterVapour",    "carbonDioxide",  "frezon",          "nitrousOxide"  };
 
 struct GasType {
 	int gas;
@@ -83,22 +84,26 @@ struct GasType {
 };
 
 GasType oxygen{0};
-GasType plasma{1};
-GasType tritium{2};
-GasType waterVapour{3};
-GasType carbonDioxide{4};
-GasType frezon{5};
+GasType nitrogen{1};
+GasType plasma{2};
+GasType tritium{3};
+GasType waterVapour{4};
+GasType carbonDioxide{5};
+GasType frezon{6};
+GasType nitrousOxide{7};
 GasType invalidGas{-1};
 
-GasType gases[]{oxygen, plasma, tritium, waterVapour, carbonDioxide, frezon};
+GasType gases[]{oxygen, nitrogen, plasma, tritium, waterVapour, carbonDioxide, frezon, nitrousOxide};
 
 unordered_map<string, GasType> gasMap{
 	{"oxygen",        oxygen       },
+	{"nitrogen",      nitrogen     },
 	{"plasma",        plasma       },
 	{"tritium",       tritium      },
 	{"waterVapour",   waterVapour  },
 	{"carbonDioxide", carbonDioxide},
-	{"frezon",        frezon       }};
+	{"frezon",        frezon       },
+	{"nitrousOxide",  nitrousOxide }};
 
 string listGases() {
 	string out;
@@ -129,6 +134,8 @@ float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, 
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
 fireHydrogenEnergyReleased = 284000.0 * heatScale, minimumTritiumOxyburnEnergy = 143000.0, tritiumBurnOxyFactor = 100.0, tritiumBurnTritFactor = 10.0,
 firePlasmaEnergyReleased = 160000.0 * heatScale, superSaturationThreshold = 96.0, superSaturationEnds = superSaturationThreshold / 3.0, oxygenBurnRateBase = 1.4, plasmaUpperTemperature = 1643.15, plasmaOxygenFullburn = 10.0, plasmaBurnRateDelta = 9.0,
+n2oDecompTemp = 850.0, N2ODecompositionRate = 0.5,
+frezonCoolTemp = 23.15, frezonCoolLowerTemperature = 23.15, frezonCoolMidTemperature = 373.15, frezonCoolMaximumEnergyModifier = 10.0, frezonCoolRateModifier = 20.0, frezonNitrogenCoolRatio = 5.0, frezonCoolEnergyReleased = -600000.0 * heatScale,
 tickrate = 0.5,
 overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
 string selectedGases[]{"", "", ""};
@@ -309,8 +316,46 @@ void checkDoTritFire() {
 		}
 	}
 }
+void checkDoN2ODecomposition() {
+	if (temperature < n2oDecompTemp) return;
+	if (nitrousOxide.amount() < 0.01) return;
+	float& n2o = nitrousOxide.amount();
+	float burnedFuel = n2o / N2ODecompositionRate;
+	n2o -= burnedFuel;
+	nitrogen.amount() += burnedFuel;
+	oxygen.amount() += burnedFuel / 2;
+}
+void checkDoFrezonCoolant() {
+	if (temperature < frezonCoolTemp) return;
+	if (std::min(nitrogen.amount(), frezon.amount()) < 0.01) return;
+	float oldHeatCapacity = getHeatCapacity();
+	float energyModifier = 1.0;
+	float scale = (temperature - frezonCoolLowerTemperature) / (frezonCoolMidTemperature - frezonCoolLowerTemperature);
+	if (scale > 1.0) {
+		energyModifier = std::min(scale, frezonCoolMaximumEnergyModifier);
+		scale = 1.0;
+	}
+	float& nit = nitrogen.amount();
+	float& frez = frezon.amount();
+	float burnRate = frez * scale / frezonCoolRateModifier;
+	float energyReleased = 0.0;
+	if (burnRate > minimumHeatCapacity) {
+		float nitAmt = std::min(burnRate * frezonNitrogenCoolRatio, nit);
+		float frezonAmt = std::min(burnRate, frez);
+		nit -= nitAmt;
+		frez -= frezonAmt;
+		nitrousOxide.amount() += nitAmt + frezonAmt;
+		energyReleased = burnRate * frezonCoolEnergyReleased * energyModifier;
+	}
+	float newHeatCapacity = getHeatCapacity();
+	if (newHeatCapacity > minimumHeatCapacity) {
+		temperature = (temperature * oldHeatCapacity + energyReleased) / newHeatCapacity;
+	}
+}
 
 void react() {
+	checkDoFrezonCoolant();
+	checkDoN2ODecomposition();
 	checkDoTritFire();
 	checkDoPlasmaFire();
 }
@@ -357,9 +402,15 @@ void tankCheckStatus() {
 }
 
 void status() {
-	cout << "TICK: " << tick << " || Status: pressure " << getPressure() << "kPa \\ integrity " << integrity << " \\ temperature " << temperature << "K\nContents: " << oxygen.amount() << " o2 \\ " << plasma.amount() << " p \\ " << tritium.amount() << " t \\ " << waterVapour.amount() << " w \\ " << carbonDioxide.amount() << " co2" << endl;
+	cout << "TICK: " << tick << " || Status: pressure " << getPressure() << "kPa \\ integrity " << integrity << " \\ temperature " << temperature << "K\nContents: ";
+	for (GasType g : gases) {
+		cout << g.name() << ": " << g.amount() << " mol; ";
+	}
+	cout << endl;
 	if (tankState == exploded) {
 		cout << "EXPLOSION: range " << getCurRange() << endl;
+	} else if (tankState == ruptured) {
+		cout << "RUPTURED" << endl;
 	}
 }
 
@@ -391,23 +442,33 @@ void loopPrint() {
 
 
 void fullInputSetup() {
-	float tpressure, ttemp, sumheat;
-	cout << "Oxygen kPa + K: " << endl;
-	cin >> tpressure >> ttemp;
-	oxygen.amount() = pressureTempToMols(tpressure, ttemp);
-	sumheat += oxygen.amount() * oxygen.heatCap() * ttemp;
-	cout << "Plasma kPa + K: " << endl;
-	cin >> tpressure >> ttemp;
-	plasma.amount() = pressureTempToMols(tpressure, ttemp);
-	sumheat += plasma.amount() * plasma.heatCap() * ttemp;
-	cout << "Trit kPa + K: " << endl;
-	cin >> tpressure >> ttemp;
-	tritium.amount() = pressureTempToMols(tpressure, ttemp);
-	sumheat += tritium.amount() * tritium.heatCap() * ttemp;
-	cout << "frezon kPa + K: " << endl;
-	cin >> tpressure >> ttemp;
-	frezon.amount() = pressureTempToMols(tpressure, ttemp);
-	sumheat += frezon.amount() * frezon.heatCap() * ttemp;
+	float sumheat;
+	while (true) {
+		string newGas;
+		cout << "Available gases: " << listGases() << endl;
+		cout << "Enter gas to add: ";
+		cin >> newGas;
+		bool valid = false;
+		GasType gas = sToG(newGas);
+		if (gas.gas == invalidGas.gas) {
+			cout << "Invalid gas." << endl;
+			continue;
+		}
+		cout << "Enter moles: ";
+		float moles;
+		cin >> moles;
+		cout << "Enter temperature: ";
+		float temp;
+		cin >> temp;
+		sumheat += temp * gas.heatCap() * moles;
+		gas.amount() += moles;
+		string cont;
+		cout << "Continue? [Y/n] ";
+		cin >> cont;
+		if (!evalOpt(cont, true)) {
+			break;
+		}
+	}
 	temperature = sumheat / getHeatCapacity();
 }
 float mixInputSetup(GasType gas1, GasType gas2, GasType into, float fuelTemp, float intoTemp, float targetTemp, float secondPerFirst) {
@@ -853,7 +914,7 @@ int main(int argc, char* argv[]) {
 				}
 				case 'f': {
 					fullInputSetup();
-					loop();
+					loopPrint();
 					status();
 					return 0;
 				}
