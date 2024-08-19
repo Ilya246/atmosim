@@ -320,7 +320,7 @@ void checkDoN2ODecomposition() {
 	if (temperature < n2oDecompTemp) return;
 	if (nitrousOxide.amount() < 0.01) return;
 	float& n2o = nitrousOxide.amount();
-	float burnedFuel = n2o / N2ODecompositionRate;
+	float burnedFuel = n2o * N2ODecompositionRate;
 	n2o -= burnedFuel;
 	nitrogen.amount() += burnedFuel;
 	oxygen.amount() += burnedFuel / 2;
