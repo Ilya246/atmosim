@@ -36,10 +36,10 @@ note that if temp1 and temp2 are different for both the mix and the third gas, a
 
 --param: lets you optimise bombs for things that aren't its radius, like making it take longer to explode or minimising its tritium consumption
 
---radius\<value>: to be used with --param, makes atmosim never output bombs below the specified radius<br>
+--radius \<value>: to be used with --param, makes atmosim never output bombs below the specified radius<br>
 example: --radius20
 
---ticks\<value>: lets you set the ticks limit. allows you to either make atmosim run faster if you're making bombs that explode very fast, or, alternatively, allows you to make bombs with longer fuses. default: 30<br>
+--ticks \<value>: lets you set the ticks limit. allows you to either make atmosim run faster if you're making bombs that explode very fast, or, alternatively, allows you to make bombs with longer fuses. default: 30<br>
 1s = 2tick
 
 -m: mixing assistant tool, disables normal atmosim functionality. if you have 2 gases at different temperatures but want to get a specific moles1:moles2 (moles of first gas to moles of second gas) ratio, this lets you know what mixer settings to use<br>
