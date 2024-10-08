@@ -29,16 +29,6 @@ T& getDyn(DynVal val) {
 	return *getDynPtr<T>(val);
 }
 
-basic_istream<char>& flush_stream(basic_istream<char>& stream) {
-	stream.ignore(numeric_limits<streamsize>::max(), '\n');
-	return stream;
-}
-
-// returns true if user entered nothing, false otherwise
-bool await_input() {
-	return flush_stream(cin).peek() == '\n';
-}
-
 // generic system for specifying what you don't want atmosim to give you
 struct BaseRestriction {
 	virtual bool OK() = 0;
@@ -201,11 +191,24 @@ DynVal getParam(string name) {
 	return {NoneVal, nullptr};
 }
 
+// flushes a basic_istream<char> until after \n
+basic_istream<char>& flush_stream(basic_istream<char>& stream) {
+	stream.ignore(numeric_limits<streamsize>::max(), '\n');
+	return stream;
+}
+
+// returns true if user entered nothing, false otherwise
+bool await_input() {
+	return flush_stream(cin).peek() == '\n';
+}
+
+// evaluates a string as an [y/n] option
 bool evalOpt(const string& opt, bool default_opt = true) {
 	return opt == "y" || opt == "Y" // is it Y?
 	||    (opt != "n" && opt != "N" && default_opt); // it's not Y, so check if it's not N, and if so, return default
 }
 
+// requests an [y/n] input from user
 bool getOpt(const string& what, bool default_opt = true) {
 	cout << what << (default_opt ? " [Y/n] " : " [y/N] ");
 
