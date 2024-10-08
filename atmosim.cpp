@@ -29,6 +29,16 @@ T& getDyn(DynVal val) {
 	return *getDynPtr<T>(val);
 }
 
+basic_istream<char>& flush_stream(basic_istream<char>& stream) {
+	stream.ignore(numeric_limits<streamsize>::max(), '\n');
+	return stream;
+}
+
+// returns true if user entered nothing, false otherwise
+bool await_input() {
+	return flush_stream(cin).peek() == '\n';
+}
+
 // generic system for specifying what you don't want atmosim to give you
 struct BaseRestriction {
 	virtual bool OK() = 0;
@@ -191,13 +201,18 @@ DynVal getParam(string name) {
 	return {NoneVal, nullptr};
 }
 
-bool evalOpt(string opt, bool default_opt) {
-	return opt == "y" || opt == "Y"
-	||    (opt != "n" && opt != "N" && default_opt);
+bool evalOpt(const string& opt, bool default_opt = true) {
+	return opt == "y" || opt == "Y" // is it Y?
+	||    (opt != "n" && opt != "N" && default_opt); // it's not Y, so check if it's not N, and if so, return default
 }
 
-bool evalOpt(string opt) {
-	return evalOpt(opt, true);
+bool getOpt(const string& what, bool default_opt = true) {
+	cout << what << (default_opt ? " [Y/n] " : " [y/N] ");
+
+	if (await_input()) return default_opt;
+	string opt;
+	cin >> opt;
+	return evalOpt(opt, default_opt);
 }
 
 void reset() {
@@ -465,7 +480,7 @@ void fullInputSetup() {
 		string cont;
 		cout << "Continue? [Y/n] ";
 		cin >> cont;
-		if (!evalOpt(cont, true)) {
+		if (!getOpt("Continue?")) {
 			break;
 		}
 	}
@@ -808,14 +823,8 @@ int main(int argc, char* argv[]) {
 						continue;
 					}
 					optimiseVal = optVal;
-					string doMaximise;
-					cout << "Maximise? [Y/n]: ";
-					cin >> doMaximise;
-					optimiseMaximise = evalOpt(doMaximise);
-					string doMeasureBefore;
-					cout << "Measure stat before ignition? [y/N]: ";
-					cin >> doMeasureBefore;
-					optimiseBefore = evalOpt(doMeasureBefore, false);
+					optimiseMaximise = getOpt("Maximise?");
+					optimiseBefore = getOpt("Measure stat before ignition?", false);
 				} else if (arg.rfind("--restrict", 0) == 0) {
 					while (true) {
 						string restrictWhat = "";
@@ -840,10 +849,7 @@ int main(int argc, char* argv[]) {
 								break;
 							}
 							case (BoolVal): {
-								string tgt;
-								cout << "Enter target value: [Y/n] ";
-								cin >> tgt;
-								restrict = new BoolRestriction(getDynPtr<bool>(optVal), evalOpt(tgt));
+								restrict = new BoolRestriction(getDynPtr<bool>(optVal), getOpt("Enter target value:"));
 								valid = true;
 								break;
 							}
@@ -853,19 +859,13 @@ int main(int argc, char* argv[]) {
 							}
 						}
 						if (valid) {
-							string resAfter;
-							cout << "Restrict after simulation done? [Y/n] ";
-							cin >> resAfter;
-							if (evalOpt(resAfter)) {
+							if (getOpt("Restrict after simulation done?")) {
 								postRestrictions.push_back(restrict);
 							} else {
 								preRestrictions.push_back(restrict);
 							}
 						}
-						string cont;
-						cout << "Continue? [y/N] ";
-						cin >> cont;
-						if (!evalOpt(cont, false)) {
+						if (!getOpt("Continue?", false)) {
 							break;
 						}
 					}
@@ -967,11 +967,7 @@ int main(int argc, char* argv[]) {
 
 	BombData bestBomb = testTwomix(sToG(gas1), sToG(gas2), sToG(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	cout << "Best:\n" << bestBomb.printExtensive() << endl;
-	if(doRetest.length() == 0) {
-    	cout << "Retest and print ticks? [y/N]: ";
-    	cin >> doRetest;
-	}
-    if (evalOpt(doRetest, false)) {
+    if ((doRetest.length() != 0 && evalOpt(doRetest, false)) || getOpt("Retest and print ticks?", false)) {
         reset();
         knownInputSetup(sToG(gas1), sToG(gas2), sToG(gas3), bestBomb.fuelTemp, bestBomb.thirTemp, bestBomb.fuelPressure, bestBomb.ratio);
         loopPrint();
