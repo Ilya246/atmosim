@@ -14,9 +14,8 @@ struct DynVal {
 	ValueType type;
 	void* valuePtr;
 
-	bool valid() {
-		return type != NoneVal
-		&&     valuePtr != nullptr;
+	bool invalid() {
+		return type == NoneVal || valuePtr == nullptr;
 	}
 };
 
@@ -40,7 +39,11 @@ struct NumRestriction : BaseRestriction {
 	T minValue;
 	T maxValue;
 
-	NumRestriction(T* ptr, T min, T max): valuePtr(ptr), minValue(min), maxValue(max) {}
+	NumRestriction(T* ptr, T min, T max): valuePtr(ptr), minValue(min), maxValue(max) {
+		if (maxValue < 0) {
+			maxValue = numeric_limits<T>::max();
+		}
+	}
 
 	bool OK() override {
 		return *valuePtr >= minValue
@@ -67,8 +70,11 @@ float gasAmounts[gas_count]{};
 float gasHeatCaps[gas_count]{20.f * heatScale, 30.f * heatScale, 200.f * heatScale, 10.f * heatScale, 40.f * heatScale, 30.f * heatScale, 600.f * heatScale, 40.f * heatScale};
 string gasNames[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "waterVapour",    "carbonDioxide",  "frezon",          "nitrousOxide"  };
 
+const int invalid_gas_num = -1;
+
+// integer container struct denoting a gas type
 struct GasType {
-	int gas;
+	int gas = invalid_gas_num;
 
 	float& amount() {
 		return gasAmounts[gas];
@@ -78,8 +84,20 @@ struct GasType {
 		return gasHeatCaps[gas];
 	}
 
+	bool invalid() {
+		return gas == invalid_gas_num;
+	}
+
 	string name() {
 		return gasNames[gas];
+	}
+
+	bool operator== (const GasType& other) {
+		return gas == other.gas;
+	}
+
+	bool operator!= (const GasType& other) {
+		return gas != other.gas;
 	}
 };
 
@@ -91,7 +109,7 @@ GasType waterVapour{4};
 GasType carbonDioxide{5};
 GasType frezon{6};
 GasType nitrousOxide{7};
-GasType invalidGas{-1};
+GasType invalidGas{invalid_gas_num};
 
 GasType gases[]{oxygen, nitrogen, plasma, tritium, waterVapour, carbonDioxide, frezon, nitrousOxide};
 
@@ -138,7 +156,6 @@ n2oDecompTemp = 850.0, N2ODecompositionRate = 0.5,
 frezonCoolTemp = 23.15, frezonCoolLowerTemperature = 23.15, frezonCoolMidTemperature = 373.15, frezonCoolMaximumEnergyModifier = 10.0, frezonCoolRateModifier = 20.0, frezonNitrogenCoolRatio = 5.0, frezonCoolEnergyReleased = -600000.0 * heatScale,
 tickrate = 0.5,
 overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
-string selectedGases[]{"", "", ""};
 string rotator = "|/-\\";
 int rotatorChars = 4;
 int rotatorIndex = rotatorChars - 1;
@@ -162,6 +179,7 @@ char getRotator() {
 }
 
 unordered_map<string, DynVal> simParams{
+	{"",            {NoneVal,  nullptr     }},
 	{"radius",      {FloatVal, &radius     }},
 	{"temperature", {FloatVal, &temperature}},
 	{"leakedHeat",  {FloatVal, &leakedHeat }},
@@ -184,17 +202,46 @@ string listParams() {
 	return out;
 }
 
-DynVal getParam(string name) {
+DynVal getParam(const string& name) {
 	if (simParams.contains(name)) {
 		return simParams[name];
 	}
-	return {NoneVal, nullptr};
+	return simParams[""];
+}
+
+DynVal& operator>> (istream& stream, DynVal& param) {
+	string val;
+	stream >> val;
+	param = getParam(val);
+	if (param.invalid()) {
+		cin.setstate(ios_base::failbit);
+	}
+	return param;
 }
 
 // flushes a basic_istream<char> until after \n
 basic_istream<char>& flush_stream(basic_istream<char>& stream) {
 	stream.ignore(numeric_limits<streamsize>::max(), '\n');
 	return stream;
+}
+
+// query user input from keyboard, ask again if invalid
+template <typename T>
+T getInput(const string& what, const string& invalid_err = "Invalid value. Try again.\n") {
+	bool valid = false;
+	T val;
+	while (!valid) {
+		valid = true;
+		cout << what;
+		cin >> val;
+		if (cin.fail() || cin.peek() != '\n') {
+			cerr << invalid_err;
+			cin.clear();
+			flush_stream(cin);
+			valid = false;
+		}
+	}
+	return val;
 }
 
 // returns true if user entered nothing, false otherwise
@@ -212,8 +259,9 @@ bool evalOpt(const string& opt, bool default_opt = true) {
 bool getOpt(const string& what, bool default_opt = true) {
 	cout << what << (default_opt ? " [Y/n] " : " [y/N] ");
 
-	if (await_input()) return default_opt;
-	string opt;
+	if (await_input()) return default_opt; // did the user just press enter?
+
+	string opt; // we have non-empty input so check what it is
 	cin >> opt;
 	return evalOpt(opt, default_opt);
 }
@@ -231,16 +279,35 @@ void reset() {
 	leakedHeat = 0.0;
 }
 
-bool isGas(string gas) {
+bool isGas(const string& gas) {
 	return gasMap.contains(gas);
 }
 
 // string-to-gas
-GasType sToG(string gas) {
+GasType sToG(const string& gas) {
 	if (!isGas(gas)) {
 		return invalidGas;
 	}
 	return gasMap[gas];
+}
+
+// string-to-gas but throw an exception if invalid
+GasType parseGas(const string& gas) {
+	GasType out = sToG(gas);
+	if (out.invalid()) {
+		throw invalid_argument("Parsed invalid gas type.");
+	}
+	return out;
+}
+
+istream& operator>> (istream& stream, GasType& g) {
+	string val;
+	stream >> val;
+	g = sToG(val);
+	if (g == invalidGas) {
+		cin.setstate(ios_base::failbit);
+	}
+	return stream;
 }
 
 float getHeatCapacity() {
@@ -460,29 +527,14 @@ void loopPrint() {
 
 
 void fullInputSetup() {
-	float sumheat;
+	float sumheat = 0.0;
 	while (true) {
-		string newGas;
 		cout << "Available gases: " << listGases() << endl;
-		cout << "Enter gas to add: ";
-		cin >> newGas;
-		bool valid = false;
-		GasType gas = sToG(newGas);
-		if (gas.gas == invalidGas.gas) {
-			cout << "Invalid gas." << endl;
-			continue;
-		}
-		cout << "Enter moles: ";
-		float moles;
-		cin >> moles;
-		cout << "Enter temperature: ";
-		float temp;
-		cin >> temp;
+		GasType gas = getInput<GasType>("Enter gas to add: ");
+		float moles = getInput<float>("Enter moles: ");
+		float temp = getInput<float>("Enter temperature: ");
 		sumheat += temp * gas.heatCap() * moles;
 		gas.amount() += moles;
-		string cont;
-		cout << "Continue? [Y/n] ";
-		cin >> cont;
 		if (!getOpt("Continue?")) {
 			break;
 		}
@@ -522,11 +574,11 @@ void unimixToInputSetup(GasType gas1, GasType gas2, float temp, float secondPerF
 }
 
 struct BombData {
-	GasType gas1, gas2, gas3;
 	float ratio, fuelTemp, fuelPressure, thirTemp, mixPressure, mixTemp;
+	GasType gas1, gas2, gas3;
 	TankState state = intact;
-	float radius, finTemp, finPressure, finHeatLeak, optstat;
-	int ticks;
+	float radius = 0.0, finTemp = -1.0, finPressure = -1.0, finHeatLeak = -1.0, optstat = -1.0;
+	int ticks = -1;
 
 	BombData(float ratio, float fuelTemp, float fuelPressure, float thirTemp, float mixPressure, float mixTemp, GasType gas1, GasType gas2, GasType gas3):
 		ratio(ratio), fuelTemp(fuelTemp), fuelPressure(fuelPressure), thirTemp(thirTemp), mixPressure(mixPressure), mixTemp(mixTemp), gas1(gas1), gas2(gas2), gas3(gas3) {};
@@ -559,7 +611,7 @@ struct BombData {
 				"radius " + to_string(radius) + "til "
 				: state == ruptured ? "ruptured " : "no explosion " ) +
 			"] " +
-			"optstat: " + to_string(optstat) + " ";
+			"optstat: " + to_string(optstat) + " " +
 		"}";
 	}
 
@@ -570,50 +622,59 @@ struct BombData {
 		float addedRatio = (requiredTransferVolume + volume) / requiredTransferVolume;
 		return string(
 		"TANK: {\n" ) +
-		"	initial state: [ " +
-				"temp " + to_string(mixTemp) + "K | " +
-				"pressure " + to_string(mixPressure) + "kPa | " +
-				to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp)) + "mol " + gas1.name() + " | " +
-				to_string(pressureTempToMols(secondFraction * fuelPressure, fuelTemp)) + "mol " + gas2.name() + " | " +
-				to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp)) + "mol " + gas3.name() + " " +
-			"];\n" +
-		"	end state: [ " +
-				"ticks " + to_string(ticks) + "t | " +
-				"finPressure " + to_string(finPressure) + "kPa | " +
-				"finTemp " + to_string(finTemp) + "K | " + (
+			"\tinitial state: [\n" +
+				"\t\ttemperature\t" + to_string(mixTemp) + " K\n" +
+				"\t\tpressure\t" + to_string(mixPressure) + " kPa\n" +
+				"\t\t" + gas1.name() + to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp)) + " mol\t" + "\n" +
+				"\t\t" + gas2.name() + to_string(pressureTempToMols(secondFraction * fuelPressure, fuelTemp)) + " mol\t" + "\n" +
+				"\t\t" + gas3.name() + to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp)) + " mol\t" + "\n" +
+			"\t];\n" +
+			"\tend state: [\n" +
+				"\t\ttime\t\t" + to_string(ticks * tickrate) + " s\n" +
+				"\t\tpressure \t" + to_string(finPressure) + " kPa\n" +
+				"\t\ttemperature\t" + to_string(finTemp) + " K\n" +
+				"\t\t" + (
 				state == exploded ?
-				"radius " + to_string(radius) + "til "
-				: state == ruptured ? "ruptured " : "no explosion " ) +
-			"]\n" +
-		"	optstat: " + to_string(optstat) + "\n" +
-		"}\n" +
+				"explosion\t" + to_string(radius) + " tiles "
+				: state == ruptured ? "ruptured" : "no explosion" ) + "\n" +
+			"\t]\n" +
+			"\toptstat\t" + to_string(optstat) + "\n" +
+		"};\n" +
 		"REQUIREMENTS: {\n" +
-		"	mix-canister (fuel): [ " +
-				to_string(100.f * firstFraction) + "% : " + to_string(100.f * secondFraction) + "% = " + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
-				"temp " + to_string(fuelTemp) + "K | " +
-				"release pressure " + to_string(fuelPressure) + "kPa | " +
-				"least-mols: [ " + to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas1.name() + " | " +
-				to_string(pressureTempToMols(secondFraction * fuelPressure, fuelTemp) * volumeRatio) + "mol " + gas2.name() + " " +
-			"];\n" +
-		"	third-canister (primer): [ " +
-				"temp " + to_string(thirTemp) + "K | " +
-				"pressure " + to_string((pressureCap * 2.0 - fuelPressure) * addedRatio) + "kPa | " +
-				"least-mols: " + to_string(pressureTempToMols(pressureCap * 2.0 - fuelPressure, thirTemp) * volumeRatio) + "mol " + gas3.name() + " " +
-			"]\n" +
+			"\tmix-canister (fuel): [\n" +
+				"\t\tgas ratio\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
+				"\t\tgas ratio\t" + to_string(100.f * firstFraction) + "%\t" + to_string(100.f * secondFraction) + "%\n" +
+				"\t\tgas ratio\t" + to_string(1.0/ratio) + "\n" +
+				"\t\ttemperature\t" + to_string(fuelTemp) + " K\n" +
+				"\t\ttank pressure\t" + to_string(fuelPressure) + " kPa\n" +
+				"\t\tleast-mols: [\n" +
+					"\t\t\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
+					"\t\t\t" + to_string(pressureTempToMols(firstFraction * fuelPressure, fuelTemp) * volumeRatio) + "\t" + to_string(pressureTempToMols(secondFraction * fuelPressure, fuelTemp) * volumeRatio) + "\n" +
+				"\t\t]\n"
+			"\t];\n" +
+			"\tthird-canister (primer): [\n" +
+				"\t\ttemperature\t" + to_string(thirTemp) + " K\n" +
+				"\t\tpressure\t" + to_string((pressureCap * 2.0 - fuelPressure) * addedRatio) + " kPa\n" +
+				"\t\tleast-mols:\t" + to_string(pressureTempToMols(pressureCap * 2.0 - fuelPressure, thirTemp) * volumeRatio) + " mol\t" + gas3.name() + "\n" +
+			"\t]\n" +
 		"}\n" +
 		"REVERSE-REQUIREMENTS: {\n" +
-		"	mix-canister (primer): [ " +
-				to_string(100.f * firstFraction) + "% : " + to_string(100.f * secondFraction) + "% = " + to_string(1.0/ratio) + " " + gas1.name() + ":" + gas2.name() + " | " +
-				"temp " + to_string(fuelTemp) + "K | " +
-				"pressure " + to_string((pressureCap + fuelPressure) * addedRatio) + "kPa | " +
-				"least-mols: [ " + to_string(pressureTempToMols(pressureCap + fuelPressure, fuelTemp) * firstFraction * volumeRatio) + "mol " + gas1.name() + " | " +
-				to_string(pressureTempToMols(pressureCap + fuelPressure, fuelTemp) * secondFraction * volumeRatio) + "mol " + gas2.name() + " " +
-			"];\n" +
-		"	third-canister (fuel): [ " +
-				"temp " + to_string(thirTemp) + "K | " +
-				"release pressure " + to_string((pressureCap - fuelPressure)) + "kPa | " +
-				"least-mols: " + to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp) * volumeRatio) + "mol " + gas3.name() + " " +
-			"]\n" +
+			"\tmix-canister (primer): [\n" +
+				"\t\tgas ratio\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
+				"\t\tgas ratio\t" + to_string(100.f * firstFraction) + "%\t" + to_string(100.f * secondFraction) + "%\n" +
+				"\t\tgas ratio\t" + to_string(1.0/ratio) + "\n" +
+				"\t\ttemperature\t" + to_string(fuelTemp) + " K\n" +
+				"\t\tpressure\t" + to_string((pressureCap + fuelPressure) * addedRatio) + " kPa\n" +
+				"\t\tleast-mols: [\n" +
+					"\t\t\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
+					"\t\t\t" + to_string(pressureTempToMols(pressureCap + fuelPressure, fuelTemp) * firstFraction * volumeRatio) + "\t" + to_string(pressureTempToMols(pressureCap + fuelPressure, fuelTemp) * secondFraction * volumeRatio) + "\n" +
+				"\t\t];\n" +
+			"\t];\n" +
+			"\tthird-canister (fuel): [\n" +
+				"\t\ttemperature\t" + to_string(thirTemp) + " K\n" +
+				"\t\ttank pressure\t" + to_string((pressureCap - fuelPressure)) + " kPa\n" +
+				"\t\tleast-mols:\t" + to_string(pressureTempToMols(pressureCap - fuelPressure, thirTemp) * volumeRatio) + " mol\t" + gas3.name() + "\n" +
+			"\t]\n" +
 		"}";
 	}
 };
@@ -701,17 +762,6 @@ void heatCapInputSetup() {
 	};
 }
 
-template <typename T>
-auto getMinMaxLimit() {
-	struct result {T minv; T maxv;};
-	T minv, maxv;
-	cout << "Enter lower limit: ";
-	cin >> minv;
-	cout << "Enter upper limit: ";
-	cin >> maxv;
-	return result{minv, maxv};
-}
-
 void showHelp() {
 	cout <<
 		"options:\n" <<
@@ -769,11 +819,12 @@ int main(int argc, char* argv[]) {
 	// setup
 	setupParams();
 
-	string gas1, gas2, gas3;
+	GasType gas1, gas2, gas3;
 	float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
     string doRetest;
 
 	// args parsing
+	// TODO: nuke it all and rewrite in a sane way
 	if (argc > 1) {
 		for (int i = 0; i < argc; i++) {
 			int more = i+1 < argc;
@@ -786,11 +837,11 @@ int main(int argc, char* argv[]) {
 					showHelp();
 					return 0;
 				} else if (arg.rfind("--gas1", 0) == 0 && more) {
-					gas1 = string(argv[++i]);
+					gas1 = parseGas(string(argv[++i]));
 				} else if (arg.rfind("--gas2", 0) == 0 && more) {
-					gas2 = string(argv[++i]);
+					gas2 = parseGas(string(argv[++i]));
 				} else if (arg.rfind("--gas3", 0) == 0 && more) {
-					gas3 = string(argv[++i]);
+					gas3 = parseGas(string(argv[++i]));
 				} else if (arg.rfind("--mixt1", 0) == 0 && more) {
 					mixt1 = std::stod(argv[++i]);
 				} else if (arg.rfind("--mixt2", 0) == 0 && more) {
@@ -816,16 +867,8 @@ int main(int argc, char* argv[]) {
 				} else if (arg.rfind("--loglevel", 0) == 0 && more) {
 					logLevel = std::stoi(argv[++i]);
 				} else if (arg.rfind("--param", 0) == 0) {
-					string optimiseWhat = "";
 					cout << "Possible optimisations: " << listParams() << endl;
-					cout << "Enter what to optimise: ";
-					cin >> optimiseWhat;
-					DynVal optVal = getParam(optimiseWhat);
-					if (!optVal.valid()) {
-						cout << "Invalid optimisation parameter." << endl;
-						continue;
-					}
-					optimiseVal = optVal;
+					optimiseVal = getInput<DynVal>("Enter what to optimise: ");
 					optimiseMaximise = getOpt("Maximise?");
 					optimiseBefore = getOpt("Measure stat before ignition?", false);
 				} else if (arg.rfind("--restrict", 0) == 0) {
@@ -833,20 +876,20 @@ int main(int argc, char* argv[]) {
 						string restrictWhat = "";
 						cout << "Available parameters: " << listParams() << endl;
 						cout << "Enter -1 as the upper limit on numerical restrictions to have no limit." << endl;
-						cout << "Enter what to restrict: ";
-						cin >> restrictWhat;
+						DynVal optVal = getInput<DynVal>("Enter what to restrict: ");
 						bool valid = false;
-						DynVal optVal = getParam(restrictWhat);
 						BaseRestriction* restrict;
 						switch (optVal.type) {
 							case (IntVal): {
-								auto [minv, maxv] = getMinMaxLimit<int>();
+								int minv = getInput<int>("Enter lower limit: ");
+								int maxv = getInput<int>("Enter upper limit: ");
 								restrict = new NumRestriction<int>(getDynPtr<int>(optVal), minv, maxv);
 								valid = true;
 								break;
 							}
 							case (FloatVal): {
-								auto [minv, maxv] = getMinMaxLimit<float>();
+								float minv = getInput<float>("Enter lower limit: ");
+								float maxv = getInput<float>("Enter upper limit: ");
 								restrict = new NumRestriction<float>(getDynPtr<float>(optVal), minv, maxv);
 								valid = true;
 								break;
@@ -862,7 +905,7 @@ int main(int argc, char* argv[]) {
 							}
 						}
 						if (valid) {
-							if (getOpt("Restrict after simulation done?")) {
+							if (getOpt("Restrict (Y=after | N=before) simulation done?")) {
 								postRestrictions.push_back(restrict);
 							} else {
 								preRestrictions.push_back(restrict);
@@ -889,12 +932,9 @@ int main(int argc, char* argv[]) {
 					break;
 				}
 				case 'r': {
-					cout << "max gas1:gas2: ";
-					cin >> ratioFrom;
-					cout << "max gas2:gas1: ";
-					cin >> ratioTo;
-					cout << "ratio step: ";
-					cin >> ratioStep;
+					ratioFrom = getInput<float>("max gas1:gas2: ");
+					ratioTo = getInput<float>("max gas2:gas1: ");
+					ratioStep = getInput<float>("ratio step: ");
 					break;
 				}
 				case 's': {
@@ -903,16 +943,14 @@ int main(int argc, char* argv[]) {
 				}
 				case 'm': {
 					float t1, t2, ratio, capratio;
-					cout << "temp1: ";
-					cin >> t1;
-					cout << "temp2: ";
-					cin >> t2;
-					cout << "molar ratio (first%): ";
-					cin >> ratio;
-					cout << "second:first heat capacity ratio (omit if end temperature does not matter): ";
-					cin >> capratio;
+					t1 = getInput<float>("temp1: ");
+					t2 = getInput<float>("temp2: ");
+					ratio = getInput<float>("molar ratio (first%): ");
+					capratio = getInput<float>("second:first heat capacity ratio (omit if end temperature does not matter): ");
+					
 					ratio = 100.0 / ratio - 1.0;
 					cout << "pressure ratio: " << 100.0 / (1.0 + ratio * t2 / t1) << "% first | temp " << (t1 + t2 * capratio * ratio) / (1.0 + capratio * ratio) << "K";
+					
 					return 0;
 				}
 				case 'f': {
@@ -933,46 +971,37 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
+	// TODO: unhardcode parameter selection
 	// didn't exit prior, test 1 gas -> 2-gas-mix tanks
 	cout << "Gases: " << listGases() << endl;
-	if (gas1.length() == 0) {
-		cout << "first mix gas: ";
-		cin >> gas1;
+	if (gas1 == invalidGas) {
+		gas1 = getInput<GasType>("First gas of mix: ");
 	}
-	if (gas2.length() == 0) {
-		cout << "second mix gas: ";
-		cin >> gas2;
+	if (gas2 == invalidGas) {
+		gas2 = getInput<GasType>("Second gas of mix: ");
 	}
-	if (gas3.length() == 0) {
-		cout << "inserted gas: ";
-		cin >> gas3;
+	if (gas3 == invalidGas) {
+		gas3 = getInput<GasType>("Inserted gas: ");
 	}
-    selectedGases[0] = gas1;
-    selectedGases[1] = gas2;
-    selectedGases[2] = gas3;
 
 	if (!mixt1) {
-		cout << "mix temp min: ";
-		cin >> mixt1;
+		mixt1 = getInput<float>("mix temp min: ");
 	}
 	if (!mixt2) {
-		cout << "mix temp max: ";
-		cin >> mixt2;
+		mixt2 = getInput<float>("mix temp max: ");
 	}
 	if (!thirt1) {
-		cout << "inserted temp min: ";
-		cin >> thirt1;
+		thirt1 = getInput<float>("inserted temp min: ");
 	}
 	if (!thirt2) {
-		cout << "inserted temp max: ";
-		cin >> thirt2;
+		thirt2 = getInput<float>("inserted temp max: ");
 	}
 
-	BombData bestBomb = testTwomix(sToG(gas1), sToG(gas2), sToG(gas3), mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
+	BombData bestBomb = testTwomix(gas1, gas2, gas3, mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	cout << "Best:\n" << bestBomb.printExtensive() << endl;
     if ((doRetest.length() != 0 && evalOpt(doRetest, false)) || getOpt("Retest and print ticks?", false)) {
         reset();
-        knownInputSetup(sToG(gas1), sToG(gas2), sToG(gas3), bestBomb.fuelTemp, bestBomb.thirTemp, bestBomb.fuelPressure, bestBomb.ratio);
+        knownInputSetup(gas1, gas2, gas3, bestBomb.fuelTemp, bestBomb.thirTemp, bestBomb.fuelPressure, bestBomb.ratio);
         loopPrint();
     }
 	return 0;
