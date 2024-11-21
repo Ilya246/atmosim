@@ -76,19 +76,19 @@ const int invalid_gas_num = -1;
 struct GasType {
 	int gas = invalid_gas_num;
 
-	float& amount() {
+	float& amount() const {
 		return gasAmounts[gas];
 	}
 
-	float& heatCap() {
+	float& heatCap() const {
 		return gasHeatCaps[gas];
 	}
 
-	bool invalid() {
+	bool invalid() const {
 		return gas == invalid_gas_num;
 	}
 
-	string name() {
+	string name() const {
 		return gasNames[gas];
 	}
 
@@ -159,12 +159,13 @@ overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1
 string rotator = "|/-\\";
 int rotatorChars = 4;
 int rotatorIndex = rotatorChars - 1;
+long long progressBarSpacing = 4817;
 
 DynVal optimiseVal = {FloatVal, &radius};
 vector<BaseRestriction*> preRestrictions;
 vector<BaseRestriction*> postRestrictions;
 
-bool restrictionsMet(vector<BaseRestriction*> restrictions) {
+bool restrictionsMet(const vector<BaseRestriction*>& restrictions) {
 	for (BaseRestriction* r : restrictions) {
 		if (!r->OK()) {
 			return false;
@@ -176,6 +177,11 @@ bool restrictionsMet(vector<BaseRestriction*> restrictions) {
 char getRotator() {
 	rotatorIndex = (rotatorIndex + 1) % rotatorChars;
 	return rotator[rotatorIndex];
+}
+
+string getProgressBar(long progress, long size) {
+	string progressBar = '[' + string(progress, '#') + string(size - progress, ' ') + ']';
+	return progressBar;
 }
 
 unordered_map<string, DynVal> simParams{
@@ -592,7 +598,7 @@ struct BombData {
 		state = n_state;
 	}
 
-	string printSimple() {
+	string printSimple() const {
 		float firstFraction = 1.f / (1.f + ratio);
 		float secondFraction = ratio * firstFraction;
 		return string(
@@ -615,7 +621,7 @@ struct BombData {
 		"}";
 	}
 
-	string printExtensive() {
+	string printExtensive() const {
 		float firstFraction = 1.f / (1.f + ratio);
 		float secondFraction = ratio * firstFraction;
 		float volumeRatio = (requiredTransferVolume + volume) / volume;
@@ -679,6 +685,15 @@ struct BombData {
 	}
 };
 
+void printBomb(const BombData& bomb, const string& what, bool extensive = false) {
+	cout << '\r' << what << (extensive ? bomb.printExtensive() : bomb.printSimple()) << endl;
+}
+const long progressBarSize = 20;
+void printProgress(long long progress, long long total) {
+	printf("\rPROGRESS %s (%lli/%lli) %c", getProgressBar((progress * progressBarSize) / total, progressBarSize).c_str(), progress, total, getRotator());
+	cout.flush();
+}
+
 float optimiseStat() {
 	return optimiseVal.type == FloatVal ? getDyn<float>(optimiseVal) : getDyn<int>(optimiseVal);
 }
@@ -691,11 +706,27 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 	BombData bestBombLocal(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
 	bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
+	cout << '\n';
+	long long itersTotal = 0;
+	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
+		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
+			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
+			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp = std::max(targetTemp * temperatureStep, targetTemp + temperatureStepMin)) {
+				++itersTotal;
+			}
+		}
+	}
+	itersTotal *= ceil(log(ratioTo * ratioFrom) / log(ratioStep));
+	long long iters = 0;
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
 			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp = std::max(targetTemp * temperatureStep, targetTemp + temperatureStepMin)) {
 				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
+					++iters;
+					if (iters % progressBarSpacing == 0) {
+						printProgress(iters, itersTotal);
+					}
 					float fuelPressure, stat;
 					reset();
 					if (fuelTemp <= fireTemp && thirTemp <= fireTemp) {
@@ -727,29 +758,29 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 					}
 					if (logLevel >= 5) {
 						if (logLevel == 5) {
-							cout << getRotator() << " Current: " << curBomb.printSimple() << endl;
+							
 						} else {
-							cout << "\n" << curBomb.printExtensive() << endl;
+							printBomb(curBomb, "\n", true);
 						}
 					} else if (noDiscard && (maximise == (stat > bestBombLocal.optstat))) {
 						bestBombLocal = curBomb;
 					}
 				}
 				if (logLevel == 4) {
-					cout << getRotator() << " Current: " << bestBombLocal.printSimple() << endl;
+					printBomb(bestBombLocal, "Current: ");
 					bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 				}
 			}
 			if (logLevel == 3) {
-				cout << getRotator() << " Current: " << bestBombLocal.printSimple() << endl;
+				printBomb(bestBombLocal, "Current: ");
 				bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 			}
 		}
 		if (logLevel == 2) {
-			cout << getRotator() << " Current: " << bestBombLocal.printSimple() << endl;
+			printBomb(bestBombLocal, "Current: ");
 			bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 		} else if (logLevel == 1) {
-			cout << getRotator() << " Best: " << bestBomb.printSimple() << endl;
+			printBomb(bestBombLocal, "Best: ");
 		}
 	}
     return bestBomb;
@@ -866,6 +897,8 @@ int main(int argc, char* argv[]) {
 					overTemp = std::stod(argv[++i]);
 				} else if (arg.rfind("--loglevel", 0) == 0 && more) {
 					logLevel = std::stoi(argv[++i]);
+				} else if (arg.rfind("--pspacing", 0) == 0 && more) {
+					progressBarSpacing = std::stoi(argv[++i]);
 				} else if (arg.rfind("--param", 0) == 0) {
 					cout << "Possible optimisations: " << listParams() << endl;
 					optimiseVal = getInput<DynVal>("Enter what to optimise: ");
@@ -974,13 +1007,13 @@ int main(int argc, char* argv[]) {
 	// TODO: unhardcode parameter selection
 	// didn't exit prior, test 1 gas -> 2-gas-mix tanks
 	cout << "Gases: " << listGases() << endl;
-	if (gas1 == invalidGas) {
+	if (gas1.invalid()) {
 		gas1 = getInput<GasType>("First gas of mix: ");
 	}
-	if (gas2 == invalidGas) {
+	if (gas2.invalid()) {
 		gas2 = getInput<GasType>("Second gas of mix: ");
 	}
-	if (gas3 == invalidGas) {
+	if (gas3.invalid()) {
 		gas3 = getInput<GasType>("Inserted gas: ");
 	}
 
