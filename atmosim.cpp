@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -160,6 +161,15 @@ string rotator = "|/-\\";
 int rotatorChars = 4;
 int rotatorIndex = rotatorChars - 1;
 long long progressBarSpacing = 4817;
+// ETA values are in ms
+long long ETAUpdateSpacing = progressBarSpacing * 25;
+const int ETAPolls = 20;
+long long ETAPollWindow = ETAUpdateSpacing * ETAPolls;
+long long ETAPollTimes[ETAPolls] {0}; // timestamps previously polled
+long long ETAPoll = 0;
+long long lastETA = 0;
+
+chrono::high_resolution_clock mainClock;
 
 DynVal optimiseVal = {FloatVal, &radius};
 vector<BaseRestriction*> preRestrictions;
@@ -689,8 +699,19 @@ void printBomb(const BombData& bomb, const string& what, bool extensive = false)
 	cout << '\r' << what << (extensive ? bomb.printExtensive() : bomb.printSimple()) << endl;
 }
 const long progressBarSize = 20;
-void printProgress(long long progress, long long total) {
-	printf("\rPROGRESS %s (%lli/%lli) %c", getProgressBar((progress * progressBarSize) / total, progressBarSize).c_str(), progress, total, getRotator());
+void printProgress(long long progress, long long total, auto startTime) {
+	printf("\rPROGRESS %s (%lli/%lli) %c ", getProgressBar((progress * progressBarSize) / total, progressBarSize).c_str(), progress, total, getRotator());
+	if (progress % ETAUpdateSpacing == 0) {
+		long long curTime = chrono::duration_cast<chrono::milliseconds>(mainClock.now() - startTime).count();
+		ETAPollTimes[ETAPoll] = curTime;
+		ETAPoll = (ETAPoll + 1) % ETAPolls;
+		long long pollTime = ETAPollTimes[ETAPoll];
+		long long timePassed = curTime - pollTime;
+		float progressPassed = std::min(ETAPollWindow, progress);
+		float progressRemaining = total - progress;
+		lastETA = progressRemaining / ((float)progressPassed / timePassed);
+	}
+	printf("ETA %lli.%llis", (lastETA / 1000), (lastETA % 1000 / 100));
 	cout.flush();
 }
 
@@ -718,6 +739,7 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 	}
 	itersTotal *= ceil(log(ratioTo * ratioFrom) / log(ratioStep));
 	long long iters = 0;
+	chrono::time_point startTime = mainClock.now();
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
@@ -725,7 +747,7 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
 					++iters;
 					if (iters % progressBarSpacing == 0) {
-						printProgress(iters, itersTotal);
+						printProgress(iters, itersTotal, startTime);
 					}
 					float fuelPressure, stat;
 					reset();
