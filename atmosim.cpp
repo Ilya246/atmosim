@@ -166,8 +166,7 @@ long long ETAUpdateSpacing = progressBarSpacing * 25;
 const int ETAPolls = 20;
 long long ETAPollWindow = ETAUpdateSpacing * ETAPolls;
 long long ETAPollTimes[ETAPolls] {0}; // timestamps previously polled
-long long ETAPoll = 0;
-long long lastETA = 0;
+long long ETAPoll = 0, lastETA = 0;
 
 chrono::high_resolution_clock mainClock;
 
@@ -1054,7 +1053,13 @@ int main(int argc, char* argv[]) {
 
 	BombData bestBomb = testTwomix(gas1, gas2, gas3, mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
 	cout << "Best:\n" << bestBomb.printExtensive() << endl;
-    if ((doRetest.length() != 0 && evalOpt(doRetest, false)) || getOpt("Retest and print ticks?", false)) {
+	bool retest;
+	if (doRetest.length() == 0) {
+		retest = getOpt("Retest and print ticks?", false);
+	} else {
+		retest = evalOpt(doRetest, false);
+	}
+    if (retest) {
         reset();
         knownInputSetup(gas1, gas2, gas3, bestBomb.fuelTemp, bestBomb.thirTemp, bestBomb.fuelPressure, bestBomb.ratio);
         loopPrint();
