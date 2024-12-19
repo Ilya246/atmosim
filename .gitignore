@@ -5,7 +5,7 @@ atmosim.exe
 atmosim
 compile_commands.json
 *cache*
-callgrind.out.*
+*callgrind.out.*
 profile_out.txt
 *.asm
 fastmosim

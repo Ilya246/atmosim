@@ -10,4 +10,8 @@ echo "Using callgrind, output redirected to profile_out.txt"
 valgrind --dump-instr=yes --collect-jumps=yes --tool=callgrind $profile_command
 
 echo "Done"
+for file in callgrind.out.*; do
+	echo "mv $file old.$file"
+	mv $file "old.$file"
+done
 kcachegrind callgrind.out.* &
