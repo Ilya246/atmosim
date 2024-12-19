@@ -3,7 +3,6 @@
 #include <iostream>
 #include <limits>
 #include <string>
-#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -69,7 +68,7 @@ float heatScale = 1.0;
 const int gas_count = 8;
 float gasAmounts[gas_count]{};
 float gasHeatCaps[gas_count]{20.f * heatScale, 30.f * heatScale, 200.f * heatScale, 10.f * heatScale, 40.f * heatScale, 30.f * heatScale, 600.f * heatScale, 40.f * heatScale};
-string gasNames[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "waterVapour",    "carbonDioxide",  "frezon",          "nitrousOxide"  };
+const string gasNames[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "waterVapour",    "carbonDioxide",  "frezon",          "nitrousOxide"  };
 
 const int invalid_gas_num = -1;
 
@@ -79,6 +78,11 @@ struct GasType {
 
 	float& amount() const {
 		return gasAmounts[gas];
+	}
+
+	void updateAmount(const float delta, float& heatCapacityCache) {
+		amount() += delta;
+		heatCapacityCache += delta * heatCap();
 	}
 
 	float& heatCap() const {
@@ -156,7 +160,9 @@ firePlasmaEnergyReleased = 160000.0 * heatScale, superSaturationThreshold = 96.0
 n2oDecompTemp = 850.0, N2ODecompositionRate = 0.5,
 frezonCoolTemp = 23.15, frezonCoolLowerTemperature = 23.15, frezonCoolMidTemperature = 373.15, frezonCoolMaximumEnergyModifier = 10.0, frezonCoolRateModifier = 20.0, frezonNitrogenCoolRatio = 5.0, frezonCoolEnergyReleased = -600000.0 * heatScale,
 tickrate = 0.5,
-overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0;
+overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0,
+heatCapacityCache = 0.0;
+vector<GasType> activeGases;
 string rotator = "|/-\\";
 int rotatorChars = 4;
 int rotatorIndex = rotatorChars - 1;
@@ -327,14 +333,17 @@ istream& operator>> (istream& stream, GasType& g) {
 
 float getHeatCapacity() {
 	float sum = 0.0;
-	for (GasType g : gases) {
+	for (const GasType& g : gases) {
 		sum += g.amount() * g.heatCap();
 	}
 	return sum;
 }
+void updateHeatCapacity(const GasType& type, float molesDelta, float& capacity) {
+	capacity += type.heatCap() * molesDelta;
+}
 float getGasMols() {
 	float sum = 0.0;
-	for (GasType g : gases) {
+	for (const GasType& g : gases) {
 		sum += g.amount();
 	}
 	return sum;
@@ -358,11 +367,11 @@ float getCurRange() {
 	return sqrt((getPressure() - tankFragmentPressure) / tankFragmentScale);
 }
 
-void checkDoPlasmaFire() {
-	if (temperature < fireTemp) return;
-	if (std::min(oxygen.amount(), plasma.amount()) < 0.01) return;
+float checkDoPlasmaFire(const float& oldHeatCapacity = getHeatCapacity()) {
+	if (temperature < fireTemp) return oldHeatCapacity;
+	if (oxygen.amount() < 0.01f || plasma.amount() < 0.01f) return oldHeatCapacity;
 	float energyReleased = 0.0;
-	float oldHeatCapacity = getHeatCapacity();
+	float heatCapacity = oldHeatCapacity;
 	float temperatureScale = 0.0;
 	if (temperature > plasmaUpperTemperature) {
 		temperatureScale = 1.0;
@@ -375,116 +384,128 @@ void checkDoPlasmaFire() {
 		if (plasmaBurnRate > minimumHeatCapacity) {
 			plasmaBurnRate = std::min(plasmaBurnRate, std::min(plasma.amount(), oxygen.amount() / oxygenBurnRate));
 			float supersaturation = std::min(1.0f, std::max((oxygen.amount() / plasma.amount() - superSaturationEnds) / (superSaturationThreshold - superSaturationEnds), 0.0f));
-			plasma.amount() -= plasmaBurnRate;
-			oxygen.amount() -= plasmaBurnRate * oxygenBurnRate;
-			tritium.amount() += plasmaBurnRate * supersaturation;
-			carbonDioxide.amount() += plasmaBurnRate * (1.0f - supersaturation);
+
+			plasma.updateAmount(-plasmaBurnRate, heatCapacity);
+
+			oxygen.updateAmount(-plasmaBurnRate * oxygenBurnRate, heatCapacity);
+
+			float tritDelta = plasmaBurnRate * supersaturation;
+			tritium.updateAmount(tritDelta, heatCapacity);
+
+			float carbonDelta = plasmaBurnRate - tritDelta;
+			carbonDioxide.updateAmount(carbonDelta, heatCapacity);
 
 			energyReleased += firePlasmaEnergyReleased * plasmaBurnRate;
 		}
 	}
-	if (energyReleased > 0.0) {
-		float newHeatCapacity = getHeatCapacity();
-		if (newHeatCapacity > minimumHeatCapacity) {
-			temperature = (temperature * oldHeatCapacity + energyReleased) / newHeatCapacity;
-		}
+	if (heatCapacity > minimumHeatCapacity) {
+		temperature = (temperature * oldHeatCapacity + energyReleased) / heatCapacity;
 	}
+	return heatCapacity;
 }
-void checkDoTritFire() {
-	if (temperature < fireTemp) return;
-	if (std::min(tritium.amount(), oxygen.amount()) < 0.01) return;
-	float energyReleased = 0.0;
-	float oldHeatCapacity = getHeatCapacity();
-	float burnedFuel = 0.0;
+float checkDoTritFire(const float& oldHeatCapacity = getHeatCapacity()) {
+	if (temperature < fireTemp) return oldHeatCapacity;
+	if (tritium.amount() < 0.01f || oxygen.amount() < 0.01f) return oldHeatCapacity;
+	float energyReleased = 0.f;
+	float heatCapacity = oldHeatCapacity;
+	float burnedFuel = 0.f;
 	if (oxygen.amount() < tritium.amount() || minimumTritiumOxyburnEnergy > temperature * oldHeatCapacity) {
 		burnedFuel = std::min(tritium.amount(), oxygen.amount() / tritiumBurnOxyFactor);
-		tritium.amount() -= burnedFuel;
+		float tritDelta = -burnedFuel;
+		tritium.amount() += tritDelta;
+		updateHeatCapacity(tritium, tritDelta, heatCapacity);
 	} else {
 		burnedFuel = tritium.amount();
-		tritium.amount() *= 1.0 - 1.0 / tritiumBurnTritFactor;
-		oxygen.amount() -= tritium.amount();
-		energyReleased += fireHydrogenEnergyReleased * burnedFuel * (tritiumBurnTritFactor - 1.0);
+		float tritDelta = -1.f / tritiumBurnTritFactor;
+
+		tritium.updateAmount(tritDelta, heatCapacity);
+		oxygen.updateAmount(-tritium.amount(), heatCapacity);
+
+		energyReleased += fireHydrogenEnergyReleased * burnedFuel * (tritiumBurnTritFactor - 1.f);
 	}
-	if (burnedFuel > 0.0) {
+	if (burnedFuel > 0.f) {
 		energyReleased += fireHydrogenEnergyReleased * burnedFuel;
+
 		waterVapour.amount() += burnedFuel;
+		updateHeatCapacity(waterVapour, burnedFuel, heatCapacity);
 	}
-	if (energyReleased > 0.0) {
-		float newHeatCapacity = getHeatCapacity();
-		if (newHeatCapacity > minimumHeatCapacity) {
-			temperature = (temperature * oldHeatCapacity + energyReleased) / newHeatCapacity;
-		}
+	if (heatCapacity > minimumHeatCapacity) {
+		temperature = (temperature * oldHeatCapacity + energyReleased) / heatCapacity;
 	}
+	return heatCapacity;
 }
-void checkDoN2ODecomposition() {
-	if (temperature < n2oDecompTemp) return;
-	if (nitrousOxide.amount() < 0.01) return;
+float checkDoN2ODecomposition(const float& oldHeatCapacity = getHeatCapacity()) {
+	if (temperature < n2oDecompTemp) return oldHeatCapacity;
+	if (nitrousOxide.amount() < 0.01f) return oldHeatCapacity;
+	float heatCapacity = oldHeatCapacity;
 	float& n2o = nitrousOxide.amount();
 	float burnedFuel = n2o * N2ODecompositionRate;
-	n2o -= burnedFuel;
-	nitrogen.amount() += burnedFuel;
+	nitrousOxide.updateAmount(-burnedFuel, heatCapacity);
+	nitrogen.updateAmount(burnedFuel, heatCapacity);
+	oxygen.updateAmount(burnedFuel * 0.5f, heatCapacity);
 	oxygen.amount() += burnedFuel / 2;
+	return oldHeatCapacity;
 }
-void checkDoFrezonCoolant() {
-	if (temperature < frezonCoolTemp) return;
-	if (std::min(nitrogen.amount(), frezon.amount()) < 0.01) return;
-	float oldHeatCapacity = getHeatCapacity();
-	float energyModifier = 1.0;
+float checkDoFrezonCoolant(const float oldHeatCapacity = getHeatCapacity()) {
+	if (temperature < frezonCoolTemp) return oldHeatCapacity;
+	if (nitrogen.amount() < 0.01f || frezon.amount() < 0.01f) return oldHeatCapacity;
+	float heatCapacity = oldHeatCapacity;
+	float energyModifier = 1.f;
 	float scale = (temperature - frezonCoolLowerTemperature) / (frezonCoolMidTemperature - frezonCoolLowerTemperature);
-	if (scale > 1.0) {
+	if (scale > 1.f) {
 		energyModifier = std::min(scale, frezonCoolMaximumEnergyModifier);
-		scale = 1.0;
+		scale = 1.f;
 	}
-	float& nit = nitrogen.amount();
-	float& frez = frezon.amount();
-	float burnRate = frez * scale / frezonCoolRateModifier;
-	float energyReleased = 0.0;
+	float burnRate = frezon.amount() * scale / frezonCoolRateModifier;
+	float energyReleased = 0.f;
 	if (burnRate > minimumHeatCapacity) {
-		float nitAmt = std::min(burnRate * frezonNitrogenCoolRatio, nit);
-		float frezonAmt = std::min(burnRate, frez);
-		nit -= nitAmt;
-		frez -= frezonAmt;
-		nitrousOxide.amount() += nitAmt + frezonAmt;
+		float nitDelta = -std::min(burnRate * frezonNitrogenCoolRatio, nitrogen.amount());
+		float frezonDelta = -std::min(burnRate, frezon.amount());
+
+		nitrogen.updateAmount(nitDelta, heatCapacity);
+		frezon.updateAmount(frezonDelta, heatCapacity);
+		nitrousOxide.updateAmount(-nitDelta - frezonDelta, heatCapacity);
+
 		energyReleased = burnRate * frezonCoolEnergyReleased * energyModifier;
 	}
-	float newHeatCapacity = getHeatCapacity();
-	if (newHeatCapacity > minimumHeatCapacity) {
-		temperature = (temperature * oldHeatCapacity + energyReleased) / newHeatCapacity;
+	if (heatCapacity > minimumHeatCapacity) {
+		temperature = (temperature * oldHeatCapacity + energyReleased) / heatCapacity;
 	}
+	return heatCapacity;
 }
 
 void react() {
-	checkDoFrezonCoolant();
-	checkDoN2ODecomposition();
-	checkDoTritFire();
-	checkDoPlasmaFire();
+	heatCapacityCache = checkDoFrezonCoolant(heatCapacityCache);
+	heatCapacityCache = checkDoN2ODecomposition(heatCapacityCache);
+	heatCapacityCache = checkDoTritFire(heatCapacityCache);
+	heatCapacityCache = checkDoPlasmaFire(heatCapacityCache);
 }
 void tankCheckStatus() {
 	float pressure = getPressure();
-	if (pressure > tankFragmentPressure) {
-		for (int i = 0; i < 3; ++i) {
-			react();
-		}
-		tankState = exploded;
-		radius = getCurRange();
-		for (GasType g : gases) {
-			leakedHeat += g.amount() * g.heatCap() * temperature;
-		}
-		return;
-	}
-	if (pressure > tankRupturePressure) {
-		if (integrity <= 0) {
-			tankState = ruptured;
-			radius = 0.0;
-			for (GasType g : gases) {
-				leakedHeat += g.amount() * g.heatCap() * temperature;
+	if (pressure > tankLeakPressure) {
+		if (pressure > tankRupturePressure) {
+			if (pressure > tankFragmentPressure) {
+				for (int i = 0; i < 3; ++i) {
+					react();
+				}
+				tankState = exploded;
+				radius = getCurRange();
+				for (GasType g : gases) {
+					leakedHeat += g.amount() * g.heatCap() * temperature;
+				}
+				return;
 			}
+			if (integrity <= 0) {
+				tankState = ruptured;
+				radius = 0.0;
+				for (GasType g : gases) {
+					leakedHeat += g.amount() * g.heatCap() * temperature;
+				}
+				return;
+			}
+			integrity--;
 			return;
 		}
-		integrity--;
-		return;
-	}
-	if (pressure > tankLeakPressure) {
 		if (integrity <= 0) {
 			for (GasType g : gases) {
 				leakedHeat += g.amount() * g.heatCap() * temperature * 0.25;
@@ -521,6 +542,7 @@ void loop(int n) {
 	}
 }
 void loop() {
+	heatCapacityCache = getHeatCapacity();
 	if (!checkStatus) {
 		loop(tickCap);
 		return;
