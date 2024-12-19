@@ -436,6 +436,7 @@ float doN2ODecomposition(const float& oldHeatCapacity = getHeatCapacity()) {
 	nitrousOxide.updateAmount(-burnedFuel, heatCapacity);
 	nitrogen.updateAmount(burnedFuel, heatCapacity);
 	oxygen.updateAmount(burnedFuel * 0.5f, heatCapacity);
+	temperature *= oldHeatCapacity / heatCapacity;
 	return oldHeatCapacity;
 }
 float doFrezonCoolant(const float& oldHeatCapacity = getHeatCapacity()) {
