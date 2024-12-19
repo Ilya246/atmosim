@@ -412,11 +412,10 @@ float checkDoTritFire(const float& oldHeatCapacity = getHeatCapacity()) {
 	if (oxygen.amount() < tritium.amount() || minimumTritiumOxyburnEnergy > temperature * oldHeatCapacity) {
 		burnedFuel = std::min(tritium.amount(), oxygen.amount() / tritiumBurnOxyFactor);
 		float tritDelta = -burnedFuel;
-		tritium.amount() += tritDelta;
-		updateHeatCapacity(tritium, tritDelta, heatCapacity);
+		tritium.updateAmount(tritDelta, heatCapacity);
 	} else {
 		burnedFuel = tritium.amount();
-		float tritDelta = -1.f / tritiumBurnTritFactor;
+		float tritDelta = -tritium.amount() / tritiumBurnTritFactor;
 
 		tritium.updateAmount(tritDelta, heatCapacity);
 		oxygen.updateAmount(-tritium.amount(), heatCapacity);
@@ -426,8 +425,7 @@ float checkDoTritFire(const float& oldHeatCapacity = getHeatCapacity()) {
 	if (burnedFuel > 0.f) {
 		energyReleased += fireHydrogenEnergyReleased * burnedFuel;
 
-		waterVapour.amount() += burnedFuel;
-		updateHeatCapacity(waterVapour, burnedFuel, heatCapacity);
+		waterVapour.updateAmount(burnedFuel, heatCapacity);
 	}
 	if (heatCapacity > minimumHeatCapacity) {
 		temperature = (temperature * oldHeatCapacity + energyReleased) / heatCapacity;
@@ -443,7 +441,6 @@ float checkDoN2ODecomposition(const float& oldHeatCapacity = getHeatCapacity()) 
 	nitrousOxide.updateAmount(-burnedFuel, heatCapacity);
 	nitrogen.updateAmount(burnedFuel, heatCapacity);
 	oxygen.updateAmount(burnedFuel * 0.5f, heatCapacity);
-	oxygen.amount() += burnedFuel / 2;
 	return oldHeatCapacity;
 }
 float checkDoFrezonCoolant(const float oldHeatCapacity = getHeatCapacity()) {
