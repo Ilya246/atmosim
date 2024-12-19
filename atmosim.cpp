@@ -1,3 +1,7 @@
+#ifdef PLOT
+#include <sciplot/sciplot.hpp>
+#endif
+
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -735,6 +739,24 @@ void printProgress(long long iters, auto startTime) {
 	cout.flush();
 }
 
+
+#ifdef PLOT
+void plotCurrent(float stats[], vector<float> xVals[], vector<float> yVals[], float curValue, const int i) {
+	float stat = stats[i];
+	xVals[i].push_back(curValue);
+	yVals[i].push_back(stat);
+}
+void checkResetPlot(vector<float> xVals[], vector<float> yVals[], vector<float> tempXVals[], vector<float> tempYVals[], float globalBestStats[], float lastBestStats[], const int i) {
+	if (globalBestStats[i] != lastBestStats[i]) {
+		xVals[i] = tempXVals[i];
+		yVals[i] = tempYVals[i];
+		lastBestStats[i] = globalBestStats[i];
+	}
+	tempXVals[i].clear();
+	tempYVals[i].clear();
+}
+#endif
+
 float optimiseStat() {
 	return optimiseVal.type == FloatVal ? getDyn<float>(optimiseVal) : getDyn<int>(optimiseVal);
 }
@@ -756,6 +778,16 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 	// same but only best in the current surrounding frame
 	BombData bestBombLocal(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
 	bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
+
+	#ifdef PLOT
+	sciplot::Plot2D plot1, plot2, plot3, plot4;
+	vector<float> xVals[4];
+	vector<float> yVals[4];
+	vector<float> xValsTemp[4];
+	vector<float> yValsTemp[4];
+	float globalBestStats[4] {1.f, 1.f, 1.f, 1.f};
+	float lastBestStats[4] {1.f, 1.f, 1.f, 1.f};
+	#endif
 
 	long long iters = 0;
 	chrono::time_point startTime = mainClock.now();
@@ -811,21 +843,40 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 							s = stat;
 						}
 					}
+					#ifdef PLOT
+					for (float& s : globalBestStats) {
+						if (noDiscard && (maximise == (stat > s))) {
+							s = stat;
+						}
+					}
+					plotCurrent(bestStats, xValsTemp, yValsTemp, ratio, 3);
+					#endif
 					updateAmplif(lastStats, amplifs, bestStats, 3, maximise);
 				}
+				#ifdef PLOT
+				checkResetPlot(xVals, yVals, xValsTemp, yValsTemp, globalBestStats, lastBestStats, 3);
+				plotCurrent(bestStats, xValsTemp, yValsTemp, targetTemp, 2);
+				#endif
 				updateAmplif(lastStats, amplifs, bestStats, 2, maximise);
 				if (logLevel == 4) {
 					printBomb(bestBombLocal, "Current: ");
 					bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 				}
 			}
-			// printf("deriv %f amplif %f stat %f lastStat %f\n", bestBombLocal.optstat / lastStats[1], amplifs[1], bestBombLocal.optstat, lastStats[1]);
+			#ifdef PLOT
+			checkResetPlot(xVals, yVals, xValsTemp, yValsTemp, globalBestStats, lastBestStats, 2);
+			plotCurrent(bestStats, xValsTemp, yValsTemp, fuelTemp, 1);
+			#endif
 			updateAmplif(lastStats, amplifs, bestStats, 1, maximise);
 			if (logLevel == 3) {
 				printBomb(bestBombLocal, "Current: ");
 				bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 			}
 		}
+		#ifdef PLOT
+		checkResetPlot(xVals, yVals, xValsTemp, yValsTemp, globalBestStats, lastBestStats, 1);
+		plotCurrent(bestStats, xVals, yVals, thirTemp, 0);
+		#endif
 		updateAmplif(lastStats, amplifs, bestStats, 0, maximise);
 		if (logLevel == 2) {
 			printBomb(bestBombLocal, "Current: ");
@@ -834,6 +885,17 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 			printBomb(bestBombLocal, "Best: ");
 		}
 	}
+	#ifdef PLOT
+	plot4.drawCurve(xVals[3], yVals[3]).label("ratio->optstat");
+	plot4.xtics().logscale(2);
+	plot3.drawCurve(xVals[2], yVals[2]).label("targetTemp->optstat");
+	plot2.drawCurve(xVals[1], yVals[1]).label("fuelTemp->optstat");
+	plot1.drawCurve(xVals[0], yVals[0]).label("thirTemp->optstat");
+	sciplot::Figure fig = {{plot1, plot2}, {plot3, plot4}};
+	sciplot::Canvas canv = {{fig}};
+	canv.size(900, 900);
+	canv.show();
+	#endif
     return bestBomb;
 }
 
@@ -952,6 +1014,13 @@ int main(int argc, char* argv[]) {
 					overTemp = std::stod(argv[++i]);
 				} else if (arg.rfind("--pressureCap", 0) == 0 && more) {
 					pressureCap = std::stod(argv[++i]);
+				} else if (arg.rfind("--amplifScale", 0) == 0 && more) {
+					amplifScale = std::stod(argv[++i]);
+					amplifDownscale = 1.f + 2.f * (amplifScale - 1.f);
+				} else if (arg.rfind("--maxAmplif", 0) == 0 && more) {
+					maxAmplif = std::stod(argv[++i]);
+				} else if (arg.rfind("--maxDeriv", 0) == 0 && more) {
+					maxDeriv = std::stod(argv[++i]);
 				} else if (arg.rfind("--loglevel", 0) == 0 && more) {
 					logLevel = std::stoi(argv[++i]);
 				} else if (arg.rfind("--pspacing", 0) == 0 && more) {
