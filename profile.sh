@@ -6,12 +6,13 @@ echo "Building with debug symbols"
 echo "Timing normal run"
 time $profile_command
 
-echo "Using callgrind, output redirected to profile_out.txt"
-valgrind --dump-instr=yes --collect-jumps=yes --tool=callgrind $profile_command
-
-echo "Done"
 for file in callgrind.out.*; do
 	echo "mv $file old.$file"
 	mv $file "old.$file"
 done
+
+echo "Using callgrind, output redirected to profile_out.txt"
+valgrind --dump-instr=yes --collect-jumps=yes --tool=callgrind $profile_command
+
+echo "Done"
 kcachegrind callgrind.out.* &

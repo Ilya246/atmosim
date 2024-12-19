@@ -9,3 +9,4 @@ compile_commands.json
 profile_out.txt
 *.asm
 fastmosim
+*.kate-swp

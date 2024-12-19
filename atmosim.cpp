@@ -161,7 +161,7 @@ firePlasmaEnergyReleased = 160000.0 * heatScale, superSaturationThreshold = 96.0
 n2oDecompTemp = 850.0, N2ODecompositionRate = 0.5,
 frezonCoolTemp = 23.15, frezonCoolLowerTemperature = 23.15, frezonCoolMidTemperature = 373.15, frezonCoolMaximumEnergyModifier = 10.0, frezonCoolRateModifier = 20.0, frezonNitrogenCoolRatio = 5.0, frezonCoolEnergyReleased = -600000.0 * heatScale,
 tickrate = 0.5,
-overTemp = 0.1, temperatureStep = 1.005, temperatureStepMin = 0.5, ratioStep = 1.01, ratioFrom = 10.0, ratioTo = 10.0,
+overTemp = 0.1, temperatureStep = 1.002, temperatureStepMin = 0.1, ratioStep = 1.005, ratioFrom = 10.0, ratioTo = 10.0, amplifScale = 1.2, amplifDownscale = 1.4, maxAmplif = 20.0, maxDeriv = 1.005,
 heatCapacityCache = 0.0;
 vector<GasType> activeGases;
 string rotator = "|/-\\";
@@ -169,12 +169,12 @@ int rotatorChars = 4;
 int rotatorIndex = rotatorChars - 1;
 long long progressBarSpacing = 4817;
 // ETA values are in ms
-long long ETAUpdateSpacing = progressBarSpacing * 25;
-const int ETAPolls = 20;
-long long ETAPollWindow = ETAUpdateSpacing * ETAPolls;
-long long ETAPollTimes[ETAPolls] {0}; // timestamps previously polled
-long long ETAPoll = 0, lastETA = 0;
-
+const long long ProgressUpdateSpacing = progressBarSpacing * 25;
+const int ProgressPolls = 20;
+const long long ProgressPollWindow = ProgressUpdateSpacing * ProgressPolls;
+long long ProgressPollTimes[ProgressPolls];
+long long ProgressPoll = 0;
+long long lastSpeed = 0;
 chrono::high_resolution_clock mainClock;
 
 DynVal optimiseVal = {FloatVal, &radius};
@@ -193,11 +193,6 @@ bool restrictionsMet(const vector<BaseRestriction*>& restrictions) {
 char getRotator() {
 	rotatorIndex = (rotatorIndex + 1) % rotatorChars;
 	return rotator[rotatorIndex];
-}
-
-string getProgressBar(long progress, long size) {
-	string progressBar = '[' + string(progress, '#') + string(size - progress, ' ') + ']';
-	return progressBar;
 }
 
 unordered_map<string, DynVal> simParams{
@@ -721,25 +716,37 @@ struct BombData {
 void printBomb(const BombData& bomb, const string& what, bool extensive = false) {
 	cout << what << (simpleOutput ? bomb.printVerySimple() : (extensive ? bomb.printExtensive() : bomb.printSimple())) << endl;
 }
-const long progressBarSize = 20;
-void printProgress(long long progress, long long total, auto startTime) {
-	printf("\rPROGRESS %s (%lli/%lli) %c ", getProgressBar((progress * progressBarSize) / total, progressBarSize).c_str(), progress, total, getRotator());
-	if (progress % ETAUpdateSpacing == 0) {
+string getProgressBar(long progress, long size) {
+	string progressBar = '[' + string(progress, '#') + string(size - progress, ' ') + ']';
+	return progressBar;
+}
+void printProgress(long long iters, auto startTime) {
+	printf("%lli Iterations %c ", iters, getRotator());
+	if (iters % ProgressUpdateSpacing == 0) {
 		long long curTime = chrono::duration_cast<chrono::milliseconds>(mainClock.now() - startTime).count();
-		ETAPollTimes[ETAPoll] = curTime;
-		ETAPoll = (ETAPoll + 1) % ETAPolls;
-		long long pollTime = ETAPollTimes[ETAPoll];
+		ProgressPollTimes[ProgressPoll] = curTime;
+		ProgressPoll = (ProgressPoll + 1) % ProgressPolls;
+		long long pollTime = ProgressPollTimes[ProgressPoll];
 		long long timePassed = curTime - pollTime;
-		float progressPassed = std::min(ETAPollWindow, progress);
-		float progressRemaining = total - progress;
-		lastETA = progressRemaining / ((float)progressPassed / timePassed);
+		float progressPassed = std::min(ProgressPollWindow, iters);
+		lastSpeed = (float)progressPassed / timePassed * 1000.f;
 	}
-	printf("ETA %lli.%llis\r", (lastETA / 1000), (lastETA % 1000 / 100));
+	printf("[Speed: %lli iters/s]\r", lastSpeed);
 	cout.flush();
 }
 
 float optimiseStat() {
 	return optimiseVal.type == FloatVal ? getDyn<float>(optimiseVal) : getDyn<int>(optimiseVal);
+}
+void updateAmplif(float lastStats[], float amplifs[], float stats[], const int i, bool maximise) {
+	float stat = stats[i];
+	float deriv = stat / lastStats[i];
+	float absDeriv = maximise ? deriv : 1.f / deriv;
+	float& amplif = amplifs[i];
+	amplif = std::max(1.f, amplif * (absDeriv > maxDeriv && absDeriv == absDeriv ? 1.f / (absDeriv / maxDeriv) / amplifDownscale : amplifScale));
+	amplif = std::min(amplif, maxAmplif);
+	lastStats[i] = stat;
+	stats[i] = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 }
 BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measureBefore) {
 	// parameters of the tank with the best result we have so far
@@ -750,26 +757,19 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 	BombData bestBombLocal(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
 	bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
-	long long itersTotal = 0;
-	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
-		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
-			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
-			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp = std::max(targetTemp * temperatureStep, targetTemp + temperatureStepMin)) {
-				++itersTotal;
-			}
-		}
-	}
-	itersTotal *= ceil(log(ratioTo * ratioFrom) / log(ratioStep));
 	long long iters = 0;
 	chrono::time_point startTime = mainClock.now();
-	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
-		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
+	float lastStats[4] {1.f, 1.f, 1.f, 1.f};
+	float amplifs[4] {1.f, 1.f, 1.f, 1.f};
+	float bestStats[4] {1.f, 1.f, 1.f, 1.f};
+	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * (1.f + (temperatureStep - 1.f) * amplifs[0]), thirTemp + temperatureStepMin * amplifs[0])) {
+		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * (1.f + (temperatureStep - 1.f) * amplifs[1]), fuelTemp + temperatureStepMin * amplifs[1])) {
 			float targetTemp2 = stepTargetTemp ? std::max(thirTemp, fuelTemp) : fireTemp + overTemp + temperatureStep;
-			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp = std::max(targetTemp * temperatureStep, targetTemp + temperatureStepMin)) {
-				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio *= ratioStep) {
+			for (float targetTemp = fireTemp + overTemp; targetTemp < targetTemp2; targetTemp = std::max(targetTemp * (1.f + (temperatureStep - 1.f) * amplifs[2]), targetTemp + temperatureStepMin * amplifs[2])) {
+				for (float ratio = 1.0 / ratioFrom; ratio <= ratioTo; ratio += ratio * (ratioStep - 1.f) * amplifs[3]) {
 					++iters;
 					if (iters % progressBarSpacing == 0) {
-						printProgress(iters, itersTotal, startTime);
+						printProgress(iters, startTime);
 					}
 					float fuelPressure, stat;
 					reset();
@@ -801,25 +801,32 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 						bestBomb = curBomb;
 					}
 					if (logLevel >= 5) {
-						if (logLevel == 5) {
-							
-						} else {
-							printBomb(curBomb, "\n", true);
-						}
-					} else if (noDiscard && (maximise == (stat > bestBombLocal.optstat))) {
+						printBomb(curBomb, "\n", true);
+					}
+					if (noDiscard && (maximise == (stat > bestBombLocal.optstat))) {
 						bestBombLocal = curBomb;
 					}
+					for (float& s : bestStats) {
+						if (noDiscard && (maximise == (stat > s))) {
+							s = stat;
+						}
+					}
+					updateAmplif(lastStats, amplifs, bestStats, 3, maximise);
 				}
+				updateAmplif(lastStats, amplifs, bestStats, 2, maximise);
 				if (logLevel == 4) {
 					printBomb(bestBombLocal, "Current: ");
 					bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 				}
 			}
+			// printf("deriv %f amplif %f stat %f lastStat %f\n", bestBombLocal.optstat / lastStats[1], amplifs[1], bestBombLocal.optstat, lastStats[1]);
+			updateAmplif(lastStats, amplifs, bestStats, 1, maximise);
 			if (logLevel == 3) {
 				printBomb(bestBombLocal, "Current: ");
 				bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 			}
 		}
+		updateAmplif(lastStats, amplifs, bestStats, 0, maximise);
 		if (logLevel == 2) {
 			printBomb(bestBombLocal, "Current: ");
 			bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
@@ -943,6 +950,8 @@ int main(int argc, char* argv[]) {
 					pressureCap = std::stod(argv[++i]);
 				} else if (arg.rfind("--overtemp", 0) == 0 && more) {
 					overTemp = std::stod(argv[++i]);
+				} else if (arg.rfind("--pressureCap", 0) == 0 && more) {
+					pressureCap = std::stod(argv[++i]);
 				} else if (arg.rfind("--loglevel", 0) == 0 && more) {
 					logLevel = std::stoi(argv[++i]);
 				} else if (arg.rfind("--pspacing", 0) == 0 && more) {
