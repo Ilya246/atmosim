@@ -7,3 +7,5 @@ compile_commands.json
 *cache*
 callgrind.out.*
 profile_out.txt
+*.asm
+fastmosim

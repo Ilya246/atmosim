@@ -152,6 +152,7 @@ tickCap = 30, pipeTickCap = 1000,
 logLevel = 1;
 bool stepTargetTemp = false,
 checkStatus = true,
+simpleOutput = false, silent = false,
 optimiseInt = false, optimiseMaximise = true, optimiseBefore = false;
 float fireTemp = 373.15, minimumHeatCapacity = 0.0003, oneAtmosphere = 101.325, R = 8.314462618,
 tankLeakPressure = 30.0 * oneAtmosphere, tankRupturePressure = 40.0 * oneAtmosphere, tankFragmentPressure = 50.0 * oneAtmosphere, tankFragmentScale = 2.0 * oneAtmosphere,
@@ -628,6 +629,11 @@ struct BombData {
 		state = n_state;
 	}
 
+	string printVerySimple() const {
+		float firstFraction = 1.f / (1.f + ratio);
+		return string(to_string(fuelTemp) + " " + to_string(fuelPressure) + " " + to_string(firstFraction) + " " + to_string(thirTemp));
+	}
+
 	string printSimple() const {
 		float firstFraction = 1.f / (1.f + ratio);
 		float secondFraction = ratio * firstFraction;
@@ -716,7 +722,7 @@ struct BombData {
 };
 
 void printBomb(const BombData& bomb, const string& what, bool extensive = false) {
-	cout << '\r' << what << (extensive ? bomb.printExtensive() : bomb.printSimple()) << endl;
+	cout << what << (simpleOutput ? bomb.printVerySimple() : (extensive ? bomb.printExtensive() : bomb.printSimple())) << endl;
 }
 const long progressBarSize = 20;
 void printProgress(long long progress, long long total, auto startTime) {
@@ -731,7 +737,7 @@ void printProgress(long long progress, long long total, auto startTime) {
 		float progressRemaining = total - progress;
 		lastETA = progressRemaining / ((float)progressPassed / timePassed);
 	}
-	printf("ETA %lli.%llis", (lastETA / 1000), (lastETA % 1000 / 100));
+	printf("ETA %lli.%llis\r", (lastETA / 1000), (lastETA % 1000 / 100));
 	cout.flush();
 }
 
@@ -747,7 +753,6 @@ BombData testTwomix(GasType gas1, GasType gas2, GasType gas3, float mixt1, float
 	BombData bestBombLocal(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
 	bestBombLocal.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
-	cout << '\n';
 	long long itersTotal = 0;
 	for (float thirTemp = thirt1; thirTemp <= thirt2; thirTemp = std::max(thirTemp * temperatureStep, thirTemp + temperatureStepMin)) {
 		for (float fuelTemp = mixt1; fuelTemp <= mixt2; fuelTemp = std::max(fuelTemp * temperatureStep, fuelTemp + temperatureStepMin)) {
@@ -885,6 +890,10 @@ void showHelp() {
 		"		lets you configure what and how to optimise\n" <<
 		"	--restrict\n" <<
 		"		lets you make atmosim not consider bombs outside of chosen parameters\n" <<
+		"	--simpleout\n" <<
+		"		makes very simple output, for use by other programs or advanced users\n" <<
+		"	--silent\n" <<
+		"		output ONLY the final result, overrides loglevel\n" <<
 		"ss14 maxcap atmos sim" << endl;
 }
 
@@ -990,10 +999,14 @@ int main(int argc, char* argv[]) {
 							break;
 						}
 					}
+				} else if (arg.rfind("--simpleout", 0) == 0) {
+					simpleOutput = true;
+				} else if (arg.rfind("--silent", 0) == 0) {
+					silent = true;
 				} else {
-					cout << "Unrecognized argument '" << arg << "'." << endl;
+					cerr << "Unrecognized argument '" << arg << "'." << endl;
 					showHelp();
-					return 0;
+					return 1;
 				}
 				continue;
 			}
@@ -1039,16 +1052,23 @@ int main(int argc, char* argv[]) {
 					return 0;
 				}
 				default: {
-					cout << "Unrecognized argument '" << arg << "'." << endl;
+					cerr << "Unrecognized argument '" << arg << "'." << endl;
 					showHelp();
 					break;
 				}
 			}
 		}
 	}
+	if (silent) {
+		// stop talking, be quiet for several days
+		cout.setstate(ios::failbit);
+	}
 	// TODO: unhardcode parameter selection
 	// didn't exit prior, test 1 gas -> 2-gas-mix tanks
-	cout << "Gases: " << listGases() << endl;
+	bool anyInvalid = gas1.invalid() || gas2.invalid() || gas3.invalid();
+	if (anyInvalid && !silent) {
+		cout << "Gases: " << listGases() << endl;
+	}
 	if (gas1.invalid()) {
 		gas1 = getInput<GasType>("First gas of mix: ");
 	}
@@ -1073,7 +1093,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	BombData bestBomb = testTwomix(gas1, gas2, gas3, mixt1, mixt2, thirt1, thirt2, optimiseMaximise, optimiseBefore);
-	cout << "Best:\n" << bestBomb.printExtensive() << endl;
+	cout.clear();
+	cout << (simpleOutput ? "" : "Best:\n") << (simpleOutput ? bestBomb.printVerySimple() : bestBomb.printExtensive()) << endl;
+	if (silent) {
+		cout.setstate(ios::failbit);
+	}
 	bool retest;
 	if (doRetest.length() == 0) {
 		retest = getOpt("Retest and print ticks?", false);
