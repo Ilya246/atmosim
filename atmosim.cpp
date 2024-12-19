@@ -80,7 +80,7 @@ struct GasType {
 		return gasAmounts[gas];
 	}
 
-	void updateAmount(const float delta, float& heatCapacityCache) {
+	void updateAmount(const float& delta, float& heatCapacityCache) {
 		amount() += delta;
 		heatCapacityCache += delta * heatCap();
 	}
@@ -338,7 +338,7 @@ float getHeatCapacity() {
 	}
 	return sum;
 }
-void updateHeatCapacity(const GasType& type, float molesDelta, float& capacity) {
+void updateHeatCapacity(const GasType& type, const float& molesDelta, float& capacity) {
 	capacity += type.heatCap() * molesDelta;
 }
 float getGasMols() {
@@ -367,9 +367,7 @@ float getCurRange() {
 	return sqrt((getPressure() - tankFragmentPressure) / tankFragmentScale);
 }
 
-float checkDoPlasmaFire(const float& oldHeatCapacity = getHeatCapacity()) {
-	if (temperature < fireTemp) return oldHeatCapacity;
-	if (oxygen.amount() < 0.01f || plasma.amount() < 0.01f) return oldHeatCapacity;
+float doPlasmaFire(const float& oldHeatCapacity = getHeatCapacity()) {
 	float energyReleased = 0.0;
 	float heatCapacity = oldHeatCapacity;
 	float temperatureScale = 0.0;
@@ -403,9 +401,7 @@ float checkDoPlasmaFire(const float& oldHeatCapacity = getHeatCapacity()) {
 	}
 	return heatCapacity;
 }
-float checkDoTritFire(const float& oldHeatCapacity = getHeatCapacity()) {
-	if (temperature < fireTemp) return oldHeatCapacity;
-	if (tritium.amount() < 0.01f || oxygen.amount() < 0.01f) return oldHeatCapacity;
+float doTritFire(const float& oldHeatCapacity = getHeatCapacity()) {
 	float energyReleased = 0.f;
 	float heatCapacity = oldHeatCapacity;
 	float burnedFuel = 0.f;
@@ -432,9 +428,7 @@ float checkDoTritFire(const float& oldHeatCapacity = getHeatCapacity()) {
 	}
 	return heatCapacity;
 }
-float checkDoN2ODecomposition(const float& oldHeatCapacity = getHeatCapacity()) {
-	if (temperature < n2oDecompTemp) return oldHeatCapacity;
-	if (nitrousOxide.amount() < 0.01f) return oldHeatCapacity;
+float doN2ODecomposition(const float& oldHeatCapacity = getHeatCapacity()) {
 	float heatCapacity = oldHeatCapacity;
 	float& n2o = nitrousOxide.amount();
 	float burnedFuel = n2o * N2ODecompositionRate;
@@ -443,9 +437,7 @@ float checkDoN2ODecomposition(const float& oldHeatCapacity = getHeatCapacity()) 
 	oxygen.updateAmount(burnedFuel * 0.5f, heatCapacity);
 	return oldHeatCapacity;
 }
-float checkDoFrezonCoolant(const float oldHeatCapacity = getHeatCapacity()) {
-	if (temperature < frezonCoolTemp) return oldHeatCapacity;
-	if (nitrogen.amount() < 0.01f || frezon.amount() < 0.01f) return oldHeatCapacity;
+float doFrezonCoolant(const float& oldHeatCapacity = getHeatCapacity()) {
 	float heatCapacity = oldHeatCapacity;
 	float energyModifier = 1.f;
 	float scale = (temperature - frezonCoolLowerTemperature) / (frezonCoolMidTemperature - frezonCoolLowerTemperature);
@@ -472,10 +464,20 @@ float checkDoFrezonCoolant(const float oldHeatCapacity = getHeatCapacity()) {
 }
 
 void react() {
-	heatCapacityCache = checkDoFrezonCoolant(heatCapacityCache);
-	heatCapacityCache = checkDoN2ODecomposition(heatCapacityCache);
-	heatCapacityCache = checkDoTritFire(heatCapacityCache);
-	heatCapacityCache = checkDoPlasmaFire(heatCapacityCache);
+	if (temperature >= frezonCoolTemp && nitrogen.amount() >= 0.01f && frezon.amount() >= 0.01f) {
+		heatCapacityCache = doFrezonCoolant(heatCapacityCache);
+	}
+	if (temperature >= n2oDecompTemp && nitrousOxide.amount() >= 0.01f) {
+		heatCapacityCache = doN2ODecomposition(heatCapacityCache);
+	}
+	if (temperature >= fireTemp && oxygen.amount() >= 0.01f) {
+		if (tritium.amount() >= 0.01f) {
+			heatCapacityCache = doTritFire(heatCapacityCache);
+		}
+		if (plasma.amount() >= 0.01f) {
+			heatCapacityCache = doPlasmaFire(heatCapacityCache);
+		}
+	}
 }
 void tankCheckStatus() {
 	float pressure = getPressure();
