@@ -532,17 +532,18 @@ void status() {
 }
 
 void loop(int n) {
+	heatCapacityCache = getHeatCapacity();
 	while (tick < n) {
 		react();
 		++tick;
 	}
 }
 void loop() {
-	heatCapacityCache = getHeatCapacity();
 	if (!checkStatus) {
 		loop(tickCap);
 		return;
 	}
+	heatCapacityCache = getHeatCapacity();
 	while (tick < tickCap && tankState == intact) {
 		react();
 		tankCheckStatus();
@@ -550,11 +551,12 @@ void loop() {
 	}
 }
 void loopPrint() {
-    while (tick < tickCap && tankState == intact) {
+	heatCapacityCache = getHeatCapacity();
+	while (tick < tickCap && tankState == intact) {
 		react();
-        tankCheckStatus();
+		tankCheckStatus();
 		++tick;
-        status();
+		status();
 	}
 }
 
