@@ -461,6 +461,7 @@ void doFrezonCoolant() {
 }
 
 void react() {
+	heatCapacityCache = getHeatCapacity();
 	if (temperature >= frezonCoolTemp && nitrogen.amount() >= 0.01f && frezon.amount() >= 0.01f) {
 		doFrezonCoolant();
 	}
@@ -532,7 +533,6 @@ void status() {
 }
 
 void loop(int n) {
-	heatCapacityCache = getHeatCapacity();
 	while (tick < n) {
 		react();
 		++tick;
@@ -543,7 +543,6 @@ void loop() {
 		loop(tickCap);
 		return;
 	}
-	heatCapacityCache = getHeatCapacity();
 	while (tick < tickCap && tankState == intact) {
 		react();
 		tankCheckStatus();
@@ -551,7 +550,6 @@ void loop() {
 	}
 }
 void loopPrint() {
-	heatCapacityCache = getHeatCapacity();
 	while (tick < tickCap && tankState == intact) {
 		react();
 		tankCheckStatus();
