@@ -1,3 +1,5 @@
+#include <sstream>
+#include <stdexcept>
 #ifdef PLOT
 #include <sciplot/sciplot.hpp>
 #endif
@@ -23,11 +25,11 @@ struct DynVal {
 	}
 };
 
-template <typename T>
+template<typename T>
 T* getDynPtr(DynVal val) {
 	return (T*)val.valuePtr;
 }
-template <typename T>
+template<typename T>
 T& getDyn(DynVal val) {
 	return *getDynPtr<T>(val);
 }
@@ -37,7 +39,7 @@ struct BaseRestriction {
 	virtual bool OK() = 0;
 };
 
-template <typename T>
+template<typename T>
 struct NumRestriction : BaseRestriction {
 	T* valuePtr;
 	T minValue;
@@ -165,7 +167,7 @@ firePlasmaEnergyReleased = 160000.0 * heatScale, superSaturationThreshold = 96.0
 n2oDecompTemp = 850.0, N2ODecompositionRate = 0.5,
 frezonCoolTemp = 23.15, frezonCoolLowerTemperature = 23.15, frezonCoolMidTemperature = 373.15, frezonCoolMaximumEnergyModifier = 10.0, frezonCoolRateModifier = 20.0, frezonNitrogenCoolRatio = 5.0, frezonCoolEnergyReleased = -600000.0 * heatScale,
 tickrate = 0.5,
-overTemp = 0.1, temperatureStep = 1.002, temperatureStepMin = 0.1, ratioStep = 1.005, ratioFrom = 10.0, ratioTo = 10.0, amplifScale = 1.2, amplifDownscale = 1.4, maxAmplif = 20.0, maxDeriv = 1.005,
+overTemp = 0.1, temperatureStep = 1.002, temperatureStepMin = 0.1, ratioStep = 1.005, ratioFrom = 10.0, ratioTo = 10.0, amplifScale = 1.2, amplifDownscale = 1.4, maxAmplif = 40.0, maxDeriv = 1.005,
 heatCapacityCache = 0.0;
 vector<GasType> activeGases;
 string rotator = "|/-\\";
@@ -247,7 +249,7 @@ basic_istream<char>& flush_stream(basic_istream<char>& stream) {
 }
 
 // query user input from keyboard, ask again if invalid
-template <typename T>
+template<typename T>
 T getInput(const string& what, const string& invalid_err = "Invalid value. Try again.\n") {
 	bool valid = false;
 	T val;
@@ -906,60 +908,102 @@ void heatCapInputSetup() {
 	};
 }
 
+struct base_arg {
+	const string name, description;
+	base_arg(const string& arg_name, const string& arg_description): name(arg_name), description(arg_description) {}
+	virtual ~base_arg() {};
+
+	virtual void read(const string&) {}
+};
+
+struct flag_arg : base_arg {
+	bool& flag;
+	bool default_v;
+	flag_arg(const string& arg_name, const string& desc, bool& val, bool arg_default = true): base_arg(arg_name, desc), flag(val), default_v(arg_default) {}
+	void read(const string& val) override {
+		if (val == "") {
+			flag = default_v;
+			return;
+		}
+		if (val == "0" || val == "1") {
+			flag = val == "1";
+			return;
+		}
+		throw runtime_error("Couldn't set flag argument " + name + " to '" + val + "'");
+	}
+};
+
+template<typename T>
+struct val_arg : base_arg {
+	T& value;
+	val_arg(const string& arg_name, const string& desc, T& val): base_arg(arg_name, desc), value(val) {}
+	void read(const string& val) override {
+		istringstream sstream(val);
+		sstream >> value;
+		if (!sstream || !sstream.eof()) throw runtime_error("Couldn't set value argument " + name + " to '" + val + "'");
+	}
+};
+
 void showHelp() {
 	cout <<
-		"options:\n" <<
-		"	-h\n" <<
-		"		show help and exit\n" <<
-		"	-n\n" <<
-		"		assume inside pipe: prevent tank-related effects" <<
-		"	-H\n" <<
-		"		redefine heat capacities\n" <<
-		"	-r\n" <<
-		"		set gas ratio iteration bounds+step\n" <<
-		"	-s\n" <<
-		"		provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)\n" <<
-		"	-m\n" <<
-		"		different-temperature gas mixer ratio calculator\n" <<
-		"	-f\n" <<
-		"		try full input: lets you manually input and a tank's contents and see what it does\n" <<
-		"	--gas1 <value>\n" <<
-		"		the type of the first gas in the mix gas (usually fuel, in tank)\n" <<
-		"	--gas2 <value>\n" <<
-		"		the type of the second gas in the mix gas (usually fuel, in tank)\n" <<
-		"	--gas3 <value>\n" <<
-		"		the type of the third gas (usually primer, goes into tank to detonate)\n" <<
-		"	--mixt1 <value>\n" <<
-		"		the minimum of the temperature range to check for the mix gas\n" <<
-		"		temperatures for this and the following options are in kelvin\n" <<
-		"	--mixt2 <value>\n" <<
-		"		the maximum of the temperature range to check for the mix gas\n" <<
-		"	--thirt1 <value>\n" <<
-		"		the minimum of the temperature range to check for the third gas\n" <<
-		"	--thirt2 <value>\n" <<
+		"options:\n"
+		"	-h\n"
+		"		show help and exit\n"
+		"	-n\n"
+		"		assume inside pipe: prevent tank-related effects"
+		"	-H\n"
+		"		redefine heat capacities\n"
+		"	-r\n"
+		"		set gas ratio iteration bounds+step\n"
+		"	-s\n"
+		"		provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)\n"
+		"	-m\n"
+		"		different-temperature gas mixer ratio calculator\n"
+		"	-f\n"
+		"		try full input: lets you manually input and a tank's contents and see what it does\n"
+		"	--gas1 <value>\n"
+		"		the type of the first gas in the mix gas (usually fuel, in tank)\n"
+		"	--gas2 <value>\n"
+		"		the type of the second gas in the mix gas (usually fuel, in tank)\n"
+		"	--gas3 <value>\n"
+		"		the type of the third gas (usually primer, goes into tank to detonate)\n"
+		"	--mixt1 <value>\n"
+		"		the minimum of the temperature range to check for the mix gas\n"
+		"		temperatures for this and the following options are in kelvin\n"
+		"	--mixt2 <value>\n"
+		"		the maximum of the temperature range to check for the mix gas\n"
+		"	--thirt1 <value>\n"
+		"		the minimum of the temperature range to check for the third gas\n"
+		"	--thirt2 <value>\n"
 		"		the maximum of the temperature range to check for the third gas\n" <<
-		"	--doretest <y/N>\n" <<
-		"		after calculating the bomb, whether to test it again and print every tick as it reacts\n" <<
-		"	--ticks <value>\n" <<
-		"		set tick limit: aborts if a bomb takes longer than this to detonate (default: " << tickCap << ")\n" <<
-		"	--tstep <value>\n" <<
-		"		set temperature iteration multiplier (default " << temperatureStep << ")\n" <<
-		"	--tstepm <value>\n" <<
-		"		set minimum temperature iteration step (default " << temperatureStepMin << ")\n" <<
-		"	--volume <value>\n" <<
-		"		set tank volume (default " << volume << ")\n" <<
-		"	--overtemp <value>\n" <<
-		"		only consider bombs which mix to this much above the ignition temperature; higher values may make bombs more robust to slight mismixing (default " << overTemp << ")\n" <<
-		"	--loglevel <value>\n" <<
-		"		what level of the nested loop to log, 0-6: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all, debug\n" <<
-		"	--param\n" <<
-		"		lets you configure what and how to optimise\n" <<
-		"	--restrict\n" <<
-		"		lets you make atmosim not consider bombs outside of chosen parameters\n" <<
-		"	--simpleout\n" <<
-		"		makes very simple output, for use by other programs or advanced users\n" <<
-		"	--silent\n" <<
-		"		output ONLY the final result, overrides loglevel\n" <<
+		"	--doretest <y/N>\n"
+		"		after calculating the bomb, whether to test it again and print every tick as it reacts\n"
+		"	--ticks <value>\n"
+		"		set tick limit: aborts if a bomb takes longer than this to detonate (default: " << tickCap << ")\n"
+		"	--tstep <value>\n"
+		"		set temperature iteration multiplier (default " << temperatureStep << ")\n"
+		"	--tstepm <value>\n"
+		"		set minimum temperature iteration step (default " << temperatureStepMin << ")\n"
+		"	--volume <value>\n"
+		"		set tank volume (default " << volume << ")\n"
+		"	--overtemp <value>\n"
+		"		only consider bombs which mix to this much above the ignition temperature; higher values may make bombs more robust to slight mismixing (default " << overTemp << ")\n"
+		"	--loglevel <value>\n"
+		"		what level of the nested loop to log, 0-6: none, [default] globalBest, thirTemp, fuelTemp, targetTemp, all, debug\n"
+		"	--amplifscale <value>\n"
+		"		how aggressively to speed up over regions with worsening optval (default " << amplifScale << ")\n"
+		"	--maxamplif <value>\n"
+		"		maximum speedup over regions with worsening optval (default " << maxAmplif << ")\n"
+		"	--maxderiv <value>\n"
+		"		target optval increase; can be lowered for less aggressive iteration and better results (default " << maxDeriv << ")\n"
+		"	--param\n"
+		"		lets you configure what and how to optimise\n"
+		"	--restrict\n"
+		"		lets you make atmosim not consider bombs outside of chosen parameters\n"
+		"	--simpleout\n"
+		"		makes very simple output, for use by other programs or advanced users\n"
+		"	--silent\n"
+		"		output ONLY the final result, overrides loglevel\n"
 		"ss14 maxcap atmos sim" << endl;
 }
 
@@ -970,6 +1014,17 @@ int main(int argc, char* argv[]) {
 	GasType gas1, gas2, gas3;
 	float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
     string doRetest;
+
+	vector<base_arg> args {
+		val_arg("gas1", "the type of the second gas in the mix gas (usually fuel, in tank)", gas1),
+		val_arg("overtemp", "only consider bombs which mix to this much above the ignition temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(overTemp) + ")", overTemp),
+		flag_arg("silent", "output ONLY the final result, overrides loglevel", silent),
+	};
+
+	unordered_map<string, base_arg*> arg_map;
+	for (base_arg& a : args) {
+		arg_map[a.name] = &a;
+	}
 
 	// args parsing
 	// TODO: nuke it all and rewrite in a sane way
@@ -1008,18 +1063,16 @@ int main(int argc, char* argv[]) {
 					temperatureStepMin = std::stod(argv[++i]);
 				} else if (arg.rfind("--volume", 0) == 0 && more) {
 					volume = std::stod(argv[++i]);
-				} else if (arg.rfind("--pressureCap", 0) == 0 && more) {
+				} else if (arg.rfind("--pressurecap", 0) == 0 && more) {
 					pressureCap = std::stod(argv[++i]);
 				} else if (arg.rfind("--overtemp", 0) == 0 && more) {
 					overTemp = std::stod(argv[++i]);
-				} else if (arg.rfind("--pressureCap", 0) == 0 && more) {
-					pressureCap = std::stod(argv[++i]);
-				} else if (arg.rfind("--amplifScale", 0) == 0 && more) {
+				} else if (arg.rfind("--amplifscale", 0) == 0 && more) {
 					amplifScale = std::stod(argv[++i]);
 					amplifDownscale = 1.f + 2.f * (amplifScale - 1.f);
-				} else if (arg.rfind("--maxAmplif", 0) == 0 && more) {
+				} else if (arg.rfind("--maxamplif", 0) == 0 && more) {
 					maxAmplif = std::stod(argv[++i]);
-				} else if (arg.rfind("--maxDeriv", 0) == 0 && more) {
+				} else if (arg.rfind("--maxderiv", 0) == 0 && more) {
 					maxDeriv = std::stod(argv[++i]);
 				} else if (arg.rfind("--loglevel", 0) == 0 && more) {
 					logLevel = std::stoi(argv[++i]);
