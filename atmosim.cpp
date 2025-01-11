@@ -232,14 +232,14 @@ dyn_val get_param(const string& name) {
     return sim_params[""];
 }
 
-dyn_val& operator>> (istream& stream, dyn_val& param) {
+istream& operator>>(istream& stream, dyn_val& param) {
     string val;
     stream >> val;
     param = get_param(val);
     if (param.invalid()) {
         cin.setstate(ios_base::failbit);
     }
-    return param;
+    return stream;
 }
 
 // flushes a basic_istream<char> until after \n
@@ -307,7 +307,7 @@ bool is_gas(const string& gas) {
 }
 
 // string-to-gas
-gas_type s_toG(const string& gas) {
+gas_type to_gas(const string& gas) {
     if (!is_gas(gas)) {
         return invalid_gas;
     }
@@ -316,17 +316,17 @@ gas_type s_toG(const string& gas) {
 
 // string-to-gas but throw an exception if invalid
 gas_type parse_gas(const string& gas) {
-    gas_type out = s_toG(gas);
+    gas_type out = to_gas(gas);
     if (out.invalid()) {
         throw invalid_argument("Parsed invalid gas type.");
     }
     return out;
 }
 
-istream& operator>> (istream& stream, gas_type& g) {
+istream& operator>>(istream& stream, gas_type& g) {
     string val;
     stream >> val;
-    g = s_toG(val);
+    g = to_gas(val);
     if (g == invalid_gas) {
         cin.setstate(ios_base::failbit);
     }
