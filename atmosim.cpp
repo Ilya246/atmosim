@@ -2,7 +2,7 @@
 #include <sciplot/sciplot.hpp>
 #endif
 
-#include "args.hpp"
+#include "argparse/args.hpp"
 
 #include <chrono>
 #include <cmath>
