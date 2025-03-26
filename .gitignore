@@ -1,6 +1,4 @@
 deploy/*
-check.bat
-build*.bat
 atmosim.exe
 atmosim
 compile_commands.json

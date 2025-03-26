@@ -71,10 +71,10 @@ struct bool_restriction : base_restriction {
 float heat_scale = 1.0;
 
 
-const int gas_count = 8;
+const int gas_count = 9;
 float gas_amounts[gas_count]{};
-float gas_heat_caps[gas_count]{20.f * heat_scale, 30.f * heat_scale, 200.f * heat_scale, 10.f * heat_scale, 40.f * heat_scale, 30.f * heat_scale, 600.f * heat_scale, 40.f * heat_scale};
-const string gas_names[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "water_vapour",    "carbon_dioxide",  "frezon",          "nitrous_oxide"  };
+float gas_heat_caps[gas_count]{20.f * heat_scale, 30.f * heat_scale, 200.f * heat_scale, 10.f * heat_scale, 40.f * heat_scale, 30.f * heat_scale, 600.f * heat_scale, 40.f * heat_scale, 10.f * heat_scale};
+const string gas_names[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "water_vapour",    "carbon_dioxide",  "frezon",          "nitrous_oxide",  "nitrium"};
 
 const int invalid_gas_num = -1;
 
@@ -120,19 +120,22 @@ gas_type water_vapour{4};
 gas_type carbon_dioxide{5};
 gas_type frezon{6};
 gas_type nitrous_oxide{7};
+gas_type nitrium{8};
 gas_type invalid_gas{invalid_gas_num};
 
-gas_type gases[]{oxygen, nitrogen, plasma, tritium, water_vapour, carbon_dioxide, frezon, nitrous_oxide};
+gas_type gases[]{oxygen, nitrogen, plasma, tritium, water_vapour, carbon_dioxide, frezon, nitrous_oxide, nitrium};
 
 unordered_map<string, gas_type> gas_map{
-    {"oxygen",        oxygen       },
-    {"nitrogen",      nitrogen     },
-    {"plasma",        plasma       },
-    {"tritium",       tritium      },
-    {"water_vapour",   water_vapour  },
-    {"carbon_dioxide", carbon_dioxide},
-    {"frezon",        frezon       },
-    {"nitrous_oxide",  nitrous_oxide }};
+    {"oxygen",         oxygen         },
+    {"nitrogen",       nitrogen       },
+    {"plasma",         plasma         },
+    {"tritium",        tritium        },
+    {"water_vapour",   water_vapour   },
+    {"carbon_dioxide", carbon_dioxide },
+    {"frezon",         frezon         },
+    {"nitrous_oxide",  nitrous_oxide  },
+    {"nitrium",        nitrium        }
+};
 
 string list_gases() {
     string out;
@@ -160,14 +163,16 @@ bool step_target_temp = false,
 check_status = true,
 simple_output = false, silent = false,
 optimise_int = false, optimise_maximise = true, optimise_before = false;
-float fire_temp = 373.15, minimum_heat_capacity = 0.0003, one_atmosphere = 101.325, R = 8.314462618,
+float TCMB = 2.7, T0C = 273.15, T20C = 293.15,
+fire_temp = 373.15, minimum_heat_capacity = 0.0003, one_atmosphere = 101.325, R = 8.314462618,
 tank_leak_pressure = 30.0 * one_atmosphere, tank_rupture_pressure = 40.0 * one_atmosphere, tank_fragment_pressure = 50.0 * one_atmosphere, tank_fragment_scale = 2.0 * one_atmosphere,
 fire_hydrogen_energy_released = 284000.0 * heat_scale, minimum_tritium_oxyburn_energy = 143000.0, tritium_burn_oxy_factor = 100.0, tritium_burn_trit_factor = 10.0,
 fire_plasma_energy_released = 160000.0 * heat_scale, super_saturation_threshold = 96.0, super_saturation_ends = super_saturation_threshold / 3.0, oxygen_burn_rate_base = 1.4, plasma_upper_temperature = 1643.15, plasma_oxygen_fullburn = 10.0, plasma_burn_rate_delta = 9.0,
 n2o_decomp_temp = 850.0, N2Odecomposition_rate = 0.5,
 frezon_cool_temp = 23.15, frezon_cool_lower_temperature = 23.15, frezon_cool_mid_temperature = 373.15, frezon_cool_maximum_energy_modifier = 10.0, frezon_cool_rate_modifier = 20.0, frezon_nitrogen_cool_ratio = 5.0, frezon_cool_energy_released = -600000.0 * heat_scale,
+nitrium_decomp_temp = T0C + 70.0, nitrium_decomposition_energy = 30000.0,
 tickrate = 0.5,
-over_temp = 0.1, temperature_step = 1.002, temperature_step_min = 0.1, ratio_step = 1.005, ratio_from = 10.0, ratio_to = 10.0, amplif_scale = 1.2, amplif_downscale = 1.4, max_amplif = 20.0, max_deriv = 1.005,
+lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.1, ratio_step = 1.005, ratio_from = 10.0, ratio_to = 10.0, amplif_scale = 1.2, amplif_downscale = 1.4, max_amplif = 20.0, max_deriv = 1.01,
 heat_capacity_cache = 0.0;
 vector<gas_type> active_gases;
 string rotator = "|/-\\";
@@ -461,16 +466,34 @@ void do_frezon_coolant() {
         temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
     }
 }
+void do_nitrium_decomposition() {
+        float efficiency = std::min(temperature / 2984.0f, nitrium.amount());
+
+        if (nitrium.amount() - efficiency < 0)
+            return;
+
+        nitrium.update_amount(-efficiency, heat_capacity_cache);
+        water_vapour.update_amount(efficiency, heat_capacity_cache);
+        nitrogen.update_amount(efficiency, heat_capacity_cache);
+
+        float energy_released = efficiency * nitrium_decomposition_energy;
+        if (heat_capacity_cache > minimum_heat_capacity) {
+            temperature = (temperature * heat_capacity_cache + energy_released) / heat_capacity_cache;
+        }
+}
 
 void react() {
     heat_capacity_cache = get_heat_capacity();
+    if (temperature < nitrium_decomp_temp && oxygen.amount() >= 0.01f && nitrium.amount() >= 0.01f) {
+        do_nitrium_decomposition();
+    }
     if (temperature >= frezon_cool_temp && nitrogen.amount() >= 0.01f && frezon.amount() >= 0.01f) {
         do_frezon_coolant();
     }
     if (temperature >= n2o_decomp_temp && nitrous_oxide.amount() >= 0.01f) {
         doN2ODecomposition();
     }
-    if (temperature >= fire_temp && oxygen.amount() >= 0.01f) {
+    if (oxygen.amount() >= 0.01f && temperature >= fire_temp) {
         if (tritium.amount() >= 0.01f) {
             do_trit_fire();
         }
@@ -522,7 +545,7 @@ void tank_check_status() {
 }
 
 void status() {
-    cout << "TICK: " << tick << " || Status: pressure " << get_pressure() << "k_pa \\ integrity " << integrity << " \\ temperature " << temperature << "K\n_contents: ";
+    cout << "TICK: " << tick << " || Status: pressure " << get_pressure() << "kPa \\ integrity " << integrity << " \\ temperature " << temperature << "K\n_contents: ";
     for (gas_type g : gases) {
         cout << g.name() << ": " << g.amount() << " mol; ";
     }
@@ -640,7 +663,7 @@ struct bomb_data {
             "mix: [ " +
                 to_string(100.f * first_fraction) + "%:" + to_string(100.f * second_fraction) + "% | " +
                 "temp " + to_string(fuel_temp) + "K | " +
-                "pressure " + to_string(fuel_pressure) + "k_pa " +
+                "pressure " + to_string(fuel_pressure) + "kPa " +
             "]; " +
             "third: [ " +
                 "temp " + to_string(thir_temp) + "K " +
@@ -664,14 +687,14 @@ struct bomb_data {
         "TANK: {\n" ) +
             "\tinitial state: [\n" +
                 "\t\ttemperature\t" + to_string(mix_temp) + " K\n" +
-                "\t\tpressure\t" + to_string(mix_pressure) + " k_pa\n" +
+                "\t\tpressure\t" + to_string(mix_pressure) + " kPa\n" +
                 "\t\t" + gas1.name() + to_string(pressure_temp_to_mols(first_fraction * fuel_pressure, fuel_temp)) + " mol\t" + "\n" +
                 "\t\t" + gas2.name() + to_string(pressure_temp_to_mols(second_fraction * fuel_pressure, fuel_temp)) + " mol\t" + "\n" +
                 "\t\t" + gas3.name() + to_string(pressure_temp_to_mols(pressure_cap - fuel_pressure, thir_temp)) + " mol\t" + "\n" +
             "\t];\n" +
             "\tend state: [\n" +
                 "\t\ttime\t\t" + to_string(ticks * tickrate) + " s\n" +
-                "\t\tpressure \t" + to_string(fin_pressure) + " k_pa\n" +
+                "\t\tpressure \t" + to_string(fin_pressure) + " kPa\n" +
                 "\t\ttemperature\t" + to_string(fin_temp) + " K\n" +
                 "\t\t" + (
                 state == exploded ?
@@ -686,7 +709,7 @@ struct bomb_data {
                 "\t\tgas ratio\t" + to_string(100.f * first_fraction) + "%\t" + to_string(100.f * second_fraction) + "%\n" +
                 "\t\tgas ratio\t" + to_string(1.0/ratio) + "\n" +
                 "\t\ttemperature\t" + to_string(fuel_temp) + " K\n" +
-                "\t\ttank pressure\t" + to_string(fuel_pressure) + " k_pa\n" +
+                "\t\ttank pressure\t" + to_string(fuel_pressure) + " kPa\n" +
                 "\t\tleast-mols: [\n" +
                     "\t\t\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
                     "\t\t\t" + to_string(pressure_temp_to_mols(first_fraction * fuel_pressure, fuel_temp) * volume_ratio) + "\t" + to_string(pressure_temp_to_mols(second_fraction * fuel_pressure, fuel_temp) * volume_ratio) + "\n" +
@@ -694,7 +717,7 @@ struct bomb_data {
             "\t];\n" +
             "\tthird-canister (primer): [\n" +
                 "\t\ttemperature\t" + to_string(thir_temp) + " K\n" +
-                "\t\tpressure\t" + to_string((pressure_cap * 2.0 - fuel_pressure) * added_ratio) + " k_pa\n" +
+                "\t\tpressure\t" + to_string((pressure_cap * 2.0 - fuel_pressure) * added_ratio) + " kPa\n" +
                 "\t\tleast-mols:\t" + to_string(pressure_temp_to_mols(pressure_cap * 2.0 - fuel_pressure, thir_temp) * volume_ratio) + " mol\t" + gas3.name() + "\n" +
             "\t]\n" +
         "}\n" +
@@ -704,7 +727,7 @@ struct bomb_data {
                 "\t\tgas ratio\t" + to_string(100.f * first_fraction) + "%\t" + to_string(100.f * second_fraction) + "%\n" +
                 "\t\tgas ratio\t" + to_string(1.0/ratio) + "\n" +
                 "\t\ttemperature\t" + to_string(fuel_temp) + " K\n" +
-                "\t\tpressure\t" + to_string((pressure_cap + fuel_pressure) * added_ratio) + " k_pa\n" +
+                "\t\tpressure\t" + to_string((pressure_cap + fuel_pressure) * added_ratio) + " kPa\n" +
                 "\t\tleast-mols: [\n" +
                     "\t\t\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
                     "\t\t\t" + to_string(pressure_temp_to_mols(pressure_cap + fuel_pressure, fuel_temp) * first_fraction * volume_ratio) + "\t" + to_string(pressure_temp_to_mols(pressure_cap + fuel_pressure, fuel_temp) * second_fraction * volume_ratio) + "\n" +
@@ -712,7 +735,7 @@ struct bomb_data {
             "\t];\n" +
             "\tthird-canister (fuel): [\n" +
                 "\t\ttemperature\t" + to_string(thir_temp) + " K\n" +
-                "\t\ttank pressure\t" + to_string((pressure_cap - fuel_pressure)) + " k_pa\n" +
+                "\t\ttank pressure\t" + to_string((pressure_cap - fuel_pressure)) + " kPa\n" +
                 "\t\tleast-mols:\t" + to_string(pressure_temp_to_mols(pressure_cap - fuel_pressure, thir_temp) * volume_ratio) + " mol\t" + gas3.name() + "\n" +
             "\t]\n" +
         "}";
@@ -798,8 +821,8 @@ bomb_data test_twomix(gas_type gas1, gas_type gas2, gas_type gas3, float mixt1, 
     float best_stats[4] {1.f, 1.f, 1.f, 1.f};
     for (float thir_temp = thirt1; thir_temp <= thirt2; thir_temp = std::max(thir_temp * (1.f + (temperature_step - 1.f) * amplifs[0]), thir_temp + temperature_step_min * amplifs[0])) {
         for (float fuel_temp = mixt1; fuel_temp <= mixt2; fuel_temp = std::max(fuel_temp * (1.f + (temperature_step - 1.f) * amplifs[1]), fuel_temp + temperature_step_min * amplifs[1])) {
-            float target_temp2 = step_target_temp ? std::max(thir_temp, fuel_temp) : fire_temp + over_temp + temperature_step;
-            for (float target_temp = fire_temp + over_temp; target_temp < target_temp2; target_temp = std::max(target_temp * (1.f + (temperature_step - 1.f) * amplifs[2]), target_temp + temperature_step_min * amplifs[2])) {
+            float target_temp2 = step_target_temp ? std::max(thir_temp, fuel_temp) : lower_target_temp + temperature_step;
+            for (float target_temp = lower_target_temp; target_temp < target_temp2; target_temp = std::max(target_temp * (1.f + (temperature_step - 1.f) * amplifs[2]), target_temp + temperature_step_min * amplifs[2])) {
                 for (float ratio = 1.0 / ratio_from; ratio <= ratio_to; ratio += ratio * (ratio_step - 1.f) * amplifs[3]) {
                     ++iters;
                     if (iters % progress_bar_spacing == 0) {
@@ -807,9 +830,6 @@ bomb_data test_twomix(gas_type gas1, gas_type gas2, gas_type gas3, float mixt1, 
                     }
                     float fuel_pressure, stat;
                     reset();
-                    if (fuel_temp <= fire_temp && thir_temp <= fire_temp) {
-                        continue;
-                    }
                     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
                         continue;
                     }
@@ -936,7 +956,7 @@ int main(int argc, char* argv[]) {
         make_argument("tstep", "", "set temperature iteration multiplier (default " + to_string(temperature_step) + ")", temperature_step),
         make_argument("tstepm", "", "set minimum temperature iteration step (default " + to_string(temperature_step_min) + ")", temperature_step_min),
         make_argument("volume", "v", "set tank volume (default " + to_string(volume) + ")", volume),
-        make_argument("overtemp", "o", "only consider bombs which mix to this much above the ignition temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(over_temp) + ")", over_temp),
+        make_argument("lowertargettemp", "o", "only consider bombs which mix to above this temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(lower_target_temp) + ")", lower_target_temp),
         make_argument("loglevel", "l", "what level of the nested loop to log, 0-6: none, [default] global_best, thir_temp, fuel_temp, target_temp, all, debug", log_level),
         make_argument("param", "p", "lets you configure what and how to optimise", ask_param),
         make_argument("restrict", "r", "lets you make atmosim not consider bombs outside of chosen parameters", ask_restrict),
