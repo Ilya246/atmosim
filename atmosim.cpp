@@ -1,8 +1,3 @@
-#ifdef PLOT
-#error Plotting is currently unsupported.
-#include <sciplot/sciplot.hpp>
-#endif
-
 #include "argparse/args.hpp"
 
 #include <chrono>
@@ -585,7 +580,6 @@ void loop_print() {
     }
 }
 
-
 void full_input_setup() {
     float sumheat = 0.0;
     while (true) {
@@ -698,13 +692,18 @@ struct bomb_data {
     }
 
     string print_very_simple() const {
-        string out = to_string(fuel_temp) + " " + to_string(fuel_pressure) + " ";
+        // optstat guaranteed to come first in the format `os=<number> `
+        string out = "os=" + to_string(optstat) + " ti=" + to_string(ticks);
+        out += " ft=" + to_string(fuel_temp) + " fp=" + to_string(fuel_pressure);
+        out += " mp=" + to_string(mix_pressure) + " mt=" + to_string(mix_temp);
+        out += " tt=" + to_string(thir_temp);
+        out += " mi=";
         float total_mix_ratio = 0;
         for(float r : mix_ratios) total_mix_ratio += r;
         for(size_t i = 0; i < mix_gases.size(); ++i) {
             out += mix_gases[i].name() + ":" + to_string(mix_ratios[i] / total_mix_ratio) + (i == mix_gases.size() - 1 ? "" : ",");
         }
-        out += " " + to_string(thir_temp) + " ";
+        out += " pm=";
         float total_primer_ratio = 0;
         for(float r : primer_ratios) total_primer_ratio += r;
         for(size_t i = 0; i < primer_gases.size(); ++i) {
@@ -850,24 +849,6 @@ void print_progress(long long iters, auto start_time) {
     cout.flush();
 }
 
-
-#ifdef PLOT
-void plot_current(float stats[], vector<float> x_vals[], vector<float> y_vals[], float cur_value, const int i) {
-    float stat = stats[i];
-    x_vals[i].push_back(cur_value);
-    y_vals[i].push_back(stat);
-}
-void check_reset_plot(vector<float> x_vals[], vector<float> y_vals[], vector<float> tempXVals[], vector<float> tempYVals[], float global_best_stats[], float last_best_stats[], const int i) {
-    if (global_best_stats[i] != last_best_stats[i]) {
-        x_vals[i] = tempXVals[i];
-        y_vals[i] = tempYVals[i];
-        last_best_stats[i] = global_best_stats[i];
-    }
-    tempXVals[i].clear();
-    tempYVals[i].clear();
-}
-#endif
-
 float optimise_stat() {
     return optimise_val.type == float_val ? get_dyn<float>(optimise_val) : get_dyn<int>(optimise_val);
 }
@@ -893,16 +874,6 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
     int num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
     int num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
     int num_params = 3 + num_mix_ratios + num_primer_ratios;
-
-    #ifdef PLOT
-    sciplot::Plot2D plot1, plot2, plot3, plot4;
-    vector<float> x_vals[4];
-    vector<float> y_vals[4];
-    vector<float> x_vals_temp[4];
-    vector<float> y_vals_temp[4];
-    float global_best_stats[4] {1.f, 1.f, 1.f, 1.f};
-    float last_best_stats[4] {1.f, 1.f, 1.f, 1.f};
-    #endif
 
     long long iters = 0;
     chrono::time_point start_time = main_clock.now();
@@ -962,14 +933,6 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
                         s = stat;
                     }
                 }
-                #ifdef PLOT
-                for (int i = 0; i < 4 && i < num_params; ++i) {
-                    if (no_discard && (maximise ? (stat > global_best_stats[i]) : (stat < global_best_stats[i]))) {
-                        global_best_stats[i] = stat;
-                    }
-                }
-                if (num_primer_ratios > 0) plot_current(best_stats.data(), x_vals_temp, y_vals_temp, primer_ratios[primer_ratio_idx-1], 3);
-                #endif
                 return;
             }
             int param_idx = 3 + num_mix_ratios + primer_ratio_idx - 1;
@@ -984,10 +947,6 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
                 mix_ratios[mix_ratio_idx] = ratio;
                 iter_ratios(mix_ratio_idx + 1, 1);
             }
-            #ifdef PLOT
-            if(param_idx == 3) check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 3);
-            if(param_idx < 3) plot_current(best_stats.data(), x_vals_temp, y_vals_temp, mix_ratios[mix_ratio_idx], param_idx);
-            #endif
             update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), param_idx, maximise);
         }
     };
@@ -1000,30 +959,18 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
             for (float target_temp = lower_target_temp; target_temp < target_temp2; target_temp = std::max(target_temp * (1.f + (temperature_step - 1.f) * amplifs[2]), target_temp + temperature_step_min * amplifs[2])) {
                 best_stats[2] = target_temp;
                 iter_ratios(1, 1);
-                #ifdef PLOT
-                check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 3);
-                plot_current(best_stats.data(), x_vals_temp, y_vals_temp, target_temp, 2);
-                #endif
                 update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 2, maximise);
                 if (log_level == 4) {
                     print_bomb(best_bomb_local, "Current: ");
                     best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
                 }
             }
-            #ifdef PLOT
-            check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 2);
-            plot_current(best_stats.data(), x_vals_temp, y_vals_temp, fuel_temp, 1);
-            #endif
             update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 1, maximise);
             if (log_level == 3) {
                 print_bomb(best_bomb_local, "Current: ");
                 best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
             }
         }
-        #ifdef PLOT
-        check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 1);
-        plot_current(best_stats.data(), x_vals, y_vals, thir_temp, 0);
-        #endif
         update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 0, maximise);
         if (log_level == 2) {
             print_bomb(best_bomb_local, "Current: ");
@@ -1032,17 +979,6 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
             print_bomb(best_bomb_local, "Best: ");
         }
     }
-    #ifdef PLOT
-    plot4.drawCurve(x_vals[3], y_vals[3]).label("ratio->optstat");
-    plot4.xtics().logscale(2);
-    plot3.drawCurve(x_vals[2], y_vals[2]).label("target_temp->optstat");
-    plot2.drawCurve(x_vals[1], y_vals[1]).label("fuel_temp->optstat");
-    plot1.drawCurve(x_vals[0], y_vals[0]).label("thir_temp->optstat");
-    sciplot::Figure fig = {{plot1, plot2}, {plot3, plot4}};
-    sciplot::Canvas canv = {{fig}};
-    canv.size(900, 900);
-    canv.show();
-    #endif
     return best_bomb;
 }
 
@@ -1105,7 +1041,7 @@ int main(int argc, char* argv[]) {
         "\n"
         "Tips and tricks\n"
         "  Using the -s flag may produce considerably better results if you're willing to wait.\n"
-        "  Additionally, consider tuning down amplif, part of the utility's optimiser, with the --maxderiv flag.\n"
+        "  Additionally, consider tuning down amplif, part of the utility's optimiser, with the --maxamplif flag.\n"
         "  Consider restricting temperature ranges if it's taking a long time to run.\n"
         "  If you want a long-fuse bomb, try using the -p flag to optimise to maximise ticks and the -r flag to restrict radius to be above a desired value.\n"
         "  Remember to use the -t flag to raise maximum alotted ticks if you're finding long-fuse bombs.\n"
