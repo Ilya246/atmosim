@@ -6,8 +6,10 @@
 
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -599,23 +601,67 @@ void full_input_setup() {
     }
     temperature = sumheat / get_heat_capacity();
 }
-float mix_input_setup(gas_type gas1, gas_type gas2, gas_type into, float fuel_temp, float into_temp, float target_temp, float second_per_first) {
-    float specheat = (gas1.heat_cap() + gas2.heat_cap() * second_per_first) / (1.0 + second_per_first);
-    float fuel_pressure = (target_temp / into_temp - 1.0) * pressure_cap / (specheat / into.heat_cap() - 1.0 + target_temp * (1.0 / into_temp - specheat / into.heat_cap() / fuel_temp));
-    float fuel = pressure_temp_to_mols(fuel_pressure, fuel_temp);
-    gas1.amount() = fuel / (1.0 + second_per_first);
-    gas2.amount() = fuel - gas1.amount();
-    into.amount() = pressure_temp_to_mols(pressure_cap - fuel_pressure, into_temp);
-    temperature = mix_gas_temps_to_temp(fuel, specheat, fuel_temp, into, into_temp);
+float get_gasmix_spec_heat(const vector<gas_type>& gases, const vector<float>& ratios) {
+    float total_heat_cap = 0;
+    float total_ratio = 0;
+    for(size_t i = 0; i < gases.size(); ++i) {
+        total_heat_cap += gases[i].heat_cap() * ratios[i];
+        total_ratio += ratios[i];
+    }
+    if (total_ratio == 0) return 0;
+    return total_heat_cap / total_ratio;
+}
+
+float mix_input_setup(const vector<gas_type>& mix_gases, const vector<float>& mix_ratios, const vector<gas_type>& primer_gases, const vector<float>& primer_ratios, float fuel_temp, float primer_temp, float target_temp) {
+    float fuel_specheat = get_gasmix_spec_heat(mix_gases, mix_ratios);
+    float primer_specheat = get_gasmix_spec_heat(primer_gases, primer_ratios);
+    if (primer_specheat == 0) return -1.0;
+    float fuel_pressure = (target_temp / primer_temp - 1.0) * pressure_cap / (fuel_specheat / primer_specheat - 1.0 + target_temp * (1.0 / primer_temp - fuel_specheat / primer_specheat / fuel_temp));
+
+    float fuel_mols = pressure_temp_to_mols(fuel_pressure, fuel_temp);
+    float total_mix_ratio = 0;
+    for(float r : mix_ratios) total_mix_ratio += r;
+    if(total_mix_ratio > 0) {
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            mix_gases[i].amount() = fuel_mols * mix_ratios[i] / total_mix_ratio;
+        }
+    }
+
+    float primer_mols = pressure_temp_to_mols(pressure_cap - fuel_pressure, primer_temp);
+    float total_primer_ratio = 0;
+    for(float r : primer_ratios) total_primer_ratio += r;
+    if(total_primer_ratio > 0) {
+        for(size_t i = 0; i < primer_gases.size(); ++i) {
+            primer_gases[i].amount() = primer_mols * primer_ratios[i] / total_primer_ratio;
+        }
+    }
+
+    temperature = (fuel_mols * fuel_specheat * fuel_temp + primer_mols * primer_specheat * primer_temp) / (fuel_mols * fuel_specheat + primer_mols * primer_specheat);
     return fuel_pressure;
 }
-void known_input_setup(gas_type gas1, gas_type gas2, gas_type into, float fuel_temp, float into_temp, float fuel_pressure, float second_per_first) {
-    float specheat = (gas1.heat_cap() + gas2.heat_cap() * second_per_first) / (1.0 + second_per_first);
-    float fuel = pressure_temp_to_mols(fuel_pressure, fuel_temp);
-    gas1.amount() = fuel / (1.0 + second_per_first);
-    gas2.amount() = fuel - gas1.amount();
-    into.amount() = pressure_temp_to_mols(pressure_cap - fuel_pressure, into_temp);
-    temperature = mix_gas_temps_to_temp(fuel, specheat, fuel_temp, into, into_temp);
+void known_input_setup(const vector<gas_type>& mix_gases, const vector<float>& mix_ratios, const vector<gas_type>& primer_gases, const vector<float>& primer_ratios, float fuel_temp, float primer_temp, float fuel_pressure) {
+    float fuel_specheat = get_gasmix_spec_heat(mix_gases, mix_ratios);
+    float primer_specheat = get_gasmix_spec_heat(primer_gases, primer_ratios);
+
+    float fuel_mols = pressure_temp_to_mols(fuel_pressure, fuel_temp);
+    float total_mix_ratio = 0;
+    for(float r : mix_ratios) total_mix_ratio += r;
+    if(total_mix_ratio > 0) {
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            mix_gases[i].amount() = fuel_mols * mix_ratios[i] / total_mix_ratio;
+        }
+    }
+
+    float primer_mols = pressure_temp_to_mols(pressure_cap - fuel_pressure, primer_temp);
+    float total_primer_ratio = 0;
+    for(float r : primer_ratios) total_primer_ratio += r;
+    if(total_primer_ratio > 0) {
+        for(size_t i = 0; i < primer_gases.size(); ++i) {
+            primer_gases[i].amount() = primer_mols * primer_ratios[i] / total_primer_ratio;
+        }
+    }
+
+    temperature = (fuel_mols * fuel_specheat * fuel_temp + primer_mols * primer_specheat * primer_temp) / (fuel_mols * fuel_specheat + primer_mols * primer_specheat);
 }
 float unimix_input_setup(gas_type gas1, gas_type gas2, float temp1, float temp2, float target_temp) {
     float fuel_pressure = (target_temp / temp2 - 1.0) * pressure_cap / (gas1.heat_cap() / gas2.heat_cap() - 1.0 + target_temp * (1.0 / temp2 - gas1.heat_cap() / gas2.heat_cap() / temp1));
@@ -632,14 +678,15 @@ void unimix_to_input_setup(gas_type gas1, gas_type gas2, float temp, float secon
 }
 
 struct bomb_data {
-    float ratio, fuel_temp, fuel_pressure, thir_temp, mix_pressure, mix_temp;
-    gas_type gas1, gas2, gas3;
+    vector<float> mix_ratios, primer_ratios;
+    float fuel_temp, fuel_pressure, thir_temp, mix_pressure, mix_temp;
+    vector<gas_type> mix_gases, primer_gases;
     tank_state state = intact;
     float radius = 0.0, fin_temp = -1.0, fin_pressure = -1.0, fin_heat_leak = -1.0, optstat = -1.0;
     int ticks = -1;
 
-    bomb_data(float ratio, float fuel_temp, float fuel_pressure, float thir_temp, float mix_pressure, float mix_temp, gas_type gas1, gas_type gas2, gas_type gas3):
-        ratio(ratio), fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_pressure(mix_pressure), mix_temp(mix_temp), gas1(gas1), gas2(gas2), gas3(gas3) {};
+    bomb_data(vector<float> mix_ratios, vector<float> primer_ratios, float fuel_temp, float fuel_pressure, float thir_temp, float mix_pressure, float mix_temp, const vector<gas_type>& mix_gases, const vector<gas_type>& primer_gases):
+        mix_ratios(mix_ratios), primer_ratios(primer_ratios), fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_pressure(mix_pressure), mix_temp(mix_temp), mix_gases(mix_gases), primer_gases(primer_gases) {};
 
     void results(float n_radius, float n_fin_temp, float n_fin_pressure, float n_optstat, int n_ticks, tank_state n_state) {
         radius = n_radius;
@@ -651,21 +698,43 @@ struct bomb_data {
     }
 
     string print_very_simple() const {
-        float first_fraction = 1.f / (1.f + ratio);
-        return string(to_string(fuel_temp) + " " + to_string(fuel_pressure) + " " + to_string(first_fraction) + " " + to_string(thir_temp));
+        string out = to_string(fuel_temp) + " " + to_string(fuel_pressure) + " ";
+        float total_mix_ratio = 0;
+        for(float r : mix_ratios) total_mix_ratio += r;
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            out += mix_gases[i].name() + ":" + to_string(mix_ratios[i] / total_mix_ratio) + (i == mix_gases.size() - 1 ? "" : ",");
+        }
+        out += " " + to_string(thir_temp) + " ";
+        float total_primer_ratio = 0;
+        for(float r : primer_ratios) total_primer_ratio += r;
+        for(size_t i = 0; i < primer_gases.size(); ++i) {
+            out += primer_gases[i].name() + ":" + to_string(primer_ratios[i] / total_primer_ratio) + (i == primer_gases.size() - 1 ? "" : ",");
+        }
+        return out;
     }
 
     string print_simple() const {
-        float first_fraction = 1.f / (1.f + ratio);
-        float second_fraction = ratio * first_fraction;
+        string mix_gas_str;
+        float total_mix_ratio = 0;
+        for(float r : mix_ratios) total_mix_ratio += r;
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            mix_gas_str += mix_gases[i].name() + " " + to_string(100.f * mix_ratios[i] / total_mix_ratio) + "%" + (i == mix_gases.size() - 1 ? "" : " | ");
+        }
+
+        string primer_gas_str;
+        float total_primer_ratio = 0;
+        for(float r : primer_ratios) total_primer_ratio += r;
+        for(size_t i = 0; i < primer_gases.size(); ++i) {
+            primer_gas_str += primer_gases[i].name() + " " + to_string(100.f * primer_ratios[i] / total_primer_ratio) + "%" + (i == primer_gases.size() - 1 ? "" : " | ");
+        }
+
         return string(
         "TANK: { " ) +
-            "mix: [ " +
-                to_string(100.f * first_fraction) + "%:" + to_string(100.f * second_fraction) + "% | " +
+            "mix: [ " + mix_gas_str + " | " +
                 "temp " + to_string(fuel_temp) + "K | " +
                 "pressure " + to_string(fuel_pressure) + "kPa " +
             "]; " +
-            "third: [ " +
+            "primer: [ " + primer_gas_str + " | " +
                 "temp " + to_string(thir_temp) + "K " +
             "]; " +
             "end state: [ " +
@@ -679,18 +748,59 @@ struct bomb_data {
     }
 
     string print_extensive() const {
-        float first_fraction = 1.f / (1.f + ratio);
-        float second_fraction = ratio * first_fraction;
+        float total_mix_ratio = 0;
+        for(float r : mix_ratios) total_mix_ratio += r;
+        float total_primer_ratio = 0;
+        for(float r : primer_ratios) total_primer_ratio += r;
+
+        string initial_state_gases;
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            initial_state_gases += "\t\t" + mix_gases[i].name() + "\t" + to_string(pressure_temp_to_mols(mix_ratios[i] / total_mix_ratio * fuel_pressure, fuel_temp)) + " mol\n";
+        }
+        for(size_t i = 0; i < primer_gases.size(); ++i) {
+            initial_state_gases += "\t\t" + primer_gases[i].name() + "\t" + to_string(pressure_temp_to_mols(primer_ratios[i] / total_primer_ratio * (pressure_cap - fuel_pressure), thir_temp)) + " mol\n";
+        }
+
+        string reqs_mix_canister_ratios;
+        string reqs_mix_canister_least_mols_names;
+        string reqs_mix_canister_least_mols_vals;
         float volume_ratio = (required_transfer_volume + volume) / volume;
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            reqs_mix_canister_ratios += mix_gases[i].name() + (i == mix_gases.size() - 1 ? "" : "\t");
+        }
+        reqs_mix_canister_ratios += "\n\t\tgas ratio\t";
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            reqs_mix_canister_ratios += to_string(100.f * mix_ratios[i] / total_mix_ratio) + "%" + (i == mix_gases.size() - 1 ? "" : "\t");
+        }
+        for(size_t i = 0; i < mix_gases.size(); ++i) {
+            reqs_mix_canister_least_mols_names += mix_gases[i].name() + (i == mix_gases.size() - 1 ? "" : "\t\t");
+            reqs_mix_canister_least_mols_vals += to_string(pressure_temp_to_mols(mix_ratios[i] / total_mix_ratio * fuel_pressure, fuel_temp) * volume_ratio) + (i == mix_gases.size() - 1 ? "" : "\t");
+        }
+
+        string reqs_primer_canister;
         float added_ratio = (required_transfer_volume + volume) / required_transfer_volume;
+        if (!primer_gases.empty()) {
+            reqs_primer_canister += "\tthird-canister (primer): [\n";
+            if(primer_gases.size() > 1) {
+                reqs_primer_canister += "\t\tgas ratio\t";
+                for(size_t i = 0; i < primer_gases.size(); ++i) reqs_primer_canister += primer_gases[i].name() + (i == primer_gases.size() - 1 ? "" : "\t");
+                reqs_primer_canister += "\n\t\tgas ratio\t";
+                for(size_t i = 0; i < primer_gases.size(); ++i) reqs_primer_canister += to_string(100.f * primer_ratios[i] / total_primer_ratio) + "%" + (i == primer_gases.size() - 1 ? "" : "\t");
+                reqs_primer_canister += "\n";
+            }
+            reqs_primer_canister += "\t\ttemperature\t" + to_string(thir_temp) + " K\n" +
+                "\t\tpressure\t" + to_string((pressure_cap * 2.0 - fuel_pressure) * added_ratio) + " kPa\n" +
+                "\t\tleast-mols:\t" + to_string(pressure_temp_to_mols(pressure_cap * 2.0 - fuel_pressure, thir_temp) * volume_ratio) + " mol\t";
+            for(size_t i = 0; i < primer_gases.size(); ++i) reqs_primer_canister += primer_gases[i].name() + (i == primer_gases.size() - 1 ? "" : ",");
+            reqs_primer_canister += "\n\t]\n";
+        }
+
         return string(
         "TANK: {\n" ) +
             "\tinitial state: [\n" +
                 "\t\ttemperature\t" + to_string(mix_temp) + " K\n" +
                 "\t\tpressure\t" + to_string(mix_pressure) + " kPa\n" +
-                "\t\t" + gas1.name() + to_string(pressure_temp_to_mols(first_fraction * fuel_pressure, fuel_temp)) + " mol\t" + "\n" +
-                "\t\t" + gas2.name() + to_string(pressure_temp_to_mols(second_fraction * fuel_pressure, fuel_temp)) + " mol\t" + "\n" +
-                "\t\t" + gas3.name() + to_string(pressure_temp_to_mols(pressure_cap - fuel_pressure, thir_temp)) + " mol\t" + "\n" +
+                initial_state_gases +
             "\t];\n" +
             "\tend state: [\n" +
                 "\t\ttime\t\t" + to_string(ticks * tickrate) + " s\n" +
@@ -705,39 +815,15 @@ struct bomb_data {
         "};\n" +
         "REQUIREMENTS: {\n" +
             "\tmix-canister (fuel): [\n" +
-                "\t\tgas ratio\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
-                "\t\tgas ratio\t" + to_string(100.f * first_fraction) + "%\t" + to_string(100.f * second_fraction) + "%\n" +
-                "\t\tgas ratio\t" + to_string(1.0/ratio) + "\n" +
+                "\t\tgas ratio\t" + reqs_mix_canister_ratios + "\n" +
                 "\t\ttemperature\t" + to_string(fuel_temp) + " K\n" +
                 "\t\ttank pressure\t" + to_string(fuel_pressure) + " kPa\n" +
                 "\t\tleast-mols: [\n" +
-                    "\t\t\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
-                    "\t\t\t" + to_string(pressure_temp_to_mols(first_fraction * fuel_pressure, fuel_temp) * volume_ratio) + "\t" + to_string(pressure_temp_to_mols(second_fraction * fuel_pressure, fuel_temp) * volume_ratio) + "\n" +
+                    "\t\t\t" + reqs_mix_canister_least_mols_names + "\n" +
+                    "\t\t\t" + reqs_mix_canister_least_mols_vals + "\n" +
                 "\t\t]\n"
             "\t];\n" +
-            "\tthird-canister (primer): [\n" +
-                "\t\ttemperature\t" + to_string(thir_temp) + " K\n" +
-                "\t\tpressure\t" + to_string((pressure_cap * 2.0 - fuel_pressure) * added_ratio) + " kPa\n" +
-                "\t\tleast-mols:\t" + to_string(pressure_temp_to_mols(pressure_cap * 2.0 - fuel_pressure, thir_temp) * volume_ratio) + " mol\t" + gas3.name() + "\n" +
-            "\t]\n" +
-        "}\n" +
-        "REVERSE-REQUIREMENTS: {\n" +
-            "\tmix-canister (primer): [\n" +
-                "\t\tgas ratio\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
-                "\t\tgas ratio\t" + to_string(100.f * first_fraction) + "%\t" + to_string(100.f * second_fraction) + "%\n" +
-                "\t\tgas ratio\t" + to_string(1.0/ratio) + "\n" +
-                "\t\ttemperature\t" + to_string(fuel_temp) + " K\n" +
-                "\t\tpressure\t" + to_string((pressure_cap + fuel_pressure) * added_ratio) + " kPa\n" +
-                "\t\tleast-mols: [\n" +
-                    "\t\t\t" + gas1.name() + "\t\t" + gas2.name() + "\n" +
-                    "\t\t\t" + to_string(pressure_temp_to_mols(pressure_cap + fuel_pressure, fuel_temp) * first_fraction * volume_ratio) + "\t" + to_string(pressure_temp_to_mols(pressure_cap + fuel_pressure, fuel_temp) * second_fraction * volume_ratio) + "\n" +
-                "\t\t];\n" +
-            "\t];\n" +
-            "\tthird-canister (fuel): [\n" +
-                "\t\ttemperature\t" + to_string(thir_temp) + " K\n" +
-                "\t\ttank pressure\t" + to_string((pressure_cap - fuel_pressure)) + " kPa\n" +
-                "\t\tleast-mols:\t" + to_string(pressure_temp_to_mols(pressure_cap - fuel_pressure, thir_temp) * volume_ratio) + " mol\t" + gas3.name() + "\n" +
-            "\t]\n" +
+            reqs_primer_canister +
         "}";
     }
 };
@@ -795,14 +881,18 @@ void update_amplif(float last_stats[], float amplifs[], float stats[], const int
     last_stats[i] = stat;
     stats[i] = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 }
-bomb_data test_twomix(gas_type gas1, gas_type gas2, gas_type gas3, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measure_before) {
+bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& primer_gases, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measure_before) {
     // parameters of the tank with the best result we have so far
-    bomb_data best_bomb(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
+    bomb_data best_bomb({0}, {0}, 0.0, 0.0, 0.0, 0.0, 0.0, mix_gases, primer_gases);
     best_bomb.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
     // same but only best in the current surrounding frame
-    bomb_data best_bomb_local(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, gas1, gas2, gas3);
+    bomb_data best_bomb_local({0}, {0}, 0.0, 0.0, 0.0, 0.0, 0.0, mix_gases, primer_gases);
     best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
+
+    int num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
+    int num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
+    int num_params = 3 + num_mix_ratios + num_primer_ratios;
 
     #ifdef PLOT
     sciplot::Plot2D plot1, plot2, plot3, plot4;
@@ -816,70 +906,105 @@ bomb_data test_twomix(gas_type gas1, gas_type gas2, gas_type gas3, float mixt1, 
 
     long long iters = 0;
     chrono::time_point start_time = main_clock.now();
-    float last_stats[4] {1.f, 1.f, 1.f, 1.f};
-    float amplifs[4] {1.f, 1.f, 1.f, 1.f};
-    float best_stats[4] {1.f, 1.f, 1.f, 1.f};
-    for (float thir_temp = thirt1; thir_temp <= thirt2; thir_temp = std::max(thir_temp * (1.f + (temperature_step - 1.f) * amplifs[0]), thir_temp + temperature_step_min * amplifs[0])) {
-        for (float fuel_temp = mixt1; fuel_temp <= mixt2; fuel_temp = std::max(fuel_temp * (1.f + (temperature_step - 1.f) * amplifs[1]), fuel_temp + temperature_step_min * amplifs[1])) {
-            float target_temp2 = step_target_temp ? std::max(thir_temp, fuel_temp) : lower_target_temp + temperature_step;
-            for (float target_temp = lower_target_temp; target_temp < target_temp2; target_temp = std::max(target_temp * (1.f + (temperature_step - 1.f) * amplifs[2]), target_temp + temperature_step_min * amplifs[2])) {
-                for (float ratio = 1.0 / ratio_from; ratio <= ratio_to; ratio += ratio * (ratio_step - 1.f) * amplifs[3]) {
-                    ++iters;
-                    if (iters % progress_bar_spacing == 0) {
-                        print_progress(iters, start_time);
+    vector<float> last_stats(num_params, 1.f);
+    vector<float> amplifs(num_params, 1.f);
+    vector<float> best_stats(num_params, maximise ? numeric_limits<float>::min() : numeric_limits<float>::max());
+
+    vector<float> mix_ratios(mix_gases.size());
+    if(!mix_gases.empty()) mix_ratios[0] = 1.0f;
+    vector<float> primer_ratios(primer_gases.size());
+    if(!primer_gases.empty()) primer_ratios[0] = 1.0f;
+
+    std::function<void(int, int)> iter_ratios;
+
+    iter_ratios = 
+        [&](int mix_ratio_idx, int primer_ratio_idx) {
+        if (mix_ratio_idx > num_mix_ratios) { // Iterate primer ratios
+            if (primer_ratio_idx > num_primer_ratios) { // All ratios set, execute innermost logic
+                ++iters;
+                if (iters % progress_bar_spacing == 0) {
+                    print_progress(iters, start_time);
+                }
+                float fuel_pressure, stat;
+                reset();
+                if ((best_stats[2] > best_stats[1]) == (best_stats[2] > best_stats[0])) { // target_temp, fuel_temp, thir_temp
+                    return;
+                }
+                fuel_pressure = mix_input_setup(mix_gases, mix_ratios, primer_gases, primer_ratios, best_stats[1], best_stats[0], best_stats[2]);
+                if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
+                    return;
+                }
+                if (!restrictions_met(pre_restrictions)) {
+                    return;
+                }
+                if (measure_before) {
+                    stat = optimise_stat();
+                }
+                float mix_pressure = get_pressure();
+                loop();
+                if (!measure_before) {
+                    stat = optimise_stat();
+                }
+                bool no_discard = restrictions_met(post_restrictions);
+                bomb_data cur_bomb(mix_ratios, primer_ratios, best_stats[1], fuel_pressure, best_stats[0], mix_pressure, best_stats[2], mix_gases, primer_gases);
+                cur_bomb.results(radius, temperature, get_pressure(), stat, tick, cur_state);
+                if (no_discard && (maximise == (stat > best_bomb.optstat))) {
+                    best_bomb = cur_bomb;
+                }
+                if (log_level >= 5) {
+                    print_bomb(cur_bomb, "\n", true);
+                }
+                if (no_discard && (maximise == (stat > best_bomb_local.optstat))) {
+                    best_bomb_local = cur_bomb;
+                }
+                for (float& s : best_stats) {
+                    if (no_discard && (maximise ? (stat > s) : (stat < s))) {
+                        s = stat;
                     }
-                    float fuel_pressure, stat;
-                    reset();
-                    if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
-                        continue;
-                    }
-                    fuel_pressure = mix_input_setup(gas1, gas2, gas3, fuel_temp, thir_temp, target_temp, ratio);
-                    if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
-                        continue;
-                    }
-                    if (!restrictions_met(pre_restrictions)) {
-                        continue;
-                    }
-                    if (measure_before) {
-                        stat = optimise_stat();
-                    }
-                    float mix_pressure = get_pressure();
-                    loop();
-                    if (!measure_before) {
-                        stat = optimise_stat();
-                    }
-                    bool no_discard = restrictions_met(post_restrictions);
-                    bomb_data cur_bomb(ratio, fuel_temp, fuel_pressure, thir_temp, mix_pressure, target_temp, gas1, gas2, gas3);
-                    cur_bomb.results(radius, temperature, get_pressure(), stat, tick, cur_state);
-                    if (no_discard && (maximise == (stat > best_bomb.optstat))) {
-                        best_bomb = cur_bomb;
-                    }
-                    if (log_level >= 5) {
-                        print_bomb(cur_bomb, "\n", true);
-                    }
-                    if (no_discard && (maximise == (stat > best_bomb_local.optstat))) {
-                        best_bomb_local = cur_bomb;
-                    }
-                    for (float& s : best_stats) {
-                        if (no_discard && (maximise == (stat > s))) {
-                            s = stat;
-                        }
-                    }
-                    #ifdef PLOT
-                    for (float& s : global_best_stats) {
-                        if (no_discard && (maximise == (stat > s))) {
-                            s = stat;
-                        }
-                    }
-                    plot_current(best_stats, x_vals_temp, y_vals_temp, ratio, 3);
-                    #endif
-                    update_amplif(last_stats, amplifs, best_stats, 3, maximise);
                 }
                 #ifdef PLOT
-                check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 3);
-                plot_current(best_stats, x_vals_temp, y_vals_temp, target_temp, 2);
+                for (int i = 0; i < 4 && i < num_params; ++i) {
+                    if (no_discard && (maximise ? (stat > global_best_stats[i]) : (stat < global_best_stats[i]))) {
+                        global_best_stats[i] = stat;
+                    }
+                }
+                if (num_primer_ratios > 0) plot_current(best_stats.data(), x_vals_temp, y_vals_temp, primer_ratios[primer_ratio_idx-1], 3);
                 #endif
-                update_amplif(last_stats, amplifs, best_stats, 2, maximise);
+                return;
+            }
+            int param_idx = 3 + num_mix_ratios + primer_ratio_idx - 1;
+            for (float ratio = 1.0 / ratio_from; ratio <= ratio_to; ratio += ratio * (ratio_step - 1.f) * amplifs[param_idx]) {
+                primer_ratios[primer_ratio_idx] = ratio;
+                iter_ratios(mix_ratio_idx, primer_ratio_idx + 1);
+            }
+            update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), param_idx, maximise);
+        } else { // Iterate mix ratios
+            int param_idx = 3 + mix_ratio_idx - 1;
+            for (float ratio = 1.0 / ratio_from; ratio <= ratio_to; ratio += ratio * (ratio_step - 1.f) * amplifs[param_idx]) {
+                mix_ratios[mix_ratio_idx] = ratio;
+                iter_ratios(mix_ratio_idx + 1, 1);
+            }
+            #ifdef PLOT
+            if(param_idx == 3) check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 3);
+            if(param_idx < 3) plot_current(best_stats.data(), x_vals_temp, y_vals_temp, mix_ratios[mix_ratio_idx], param_idx);
+            #endif
+            update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), param_idx, maximise);
+        }
+    };
+
+    for (float thir_temp = thirt1; thir_temp <= thirt2; thir_temp = std::max(thir_temp * (1.f + (temperature_step - 1.f) * amplifs[0]), thir_temp + temperature_step_min * amplifs[0])) {
+        best_stats[0] = thir_temp;
+        for (float fuel_temp = mixt1; fuel_temp <= mixt2; fuel_temp = std::max(fuel_temp * (1.f + (temperature_step - 1.f) * amplifs[1]), fuel_temp + temperature_step_min * amplifs[1])) {
+            best_stats[1] = fuel_temp;
+            float target_temp2 = step_target_temp ? std::max(thir_temp, fuel_temp) : lower_target_temp + temperature_step;
+            for (float target_temp = lower_target_temp; target_temp < target_temp2; target_temp = std::max(target_temp * (1.f + (temperature_step - 1.f) * amplifs[2]), target_temp + temperature_step_min * amplifs[2])) {
+                best_stats[2] = target_temp;
+                iter_ratios(1, 1);
+                #ifdef PLOT
+                check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 3);
+                plot_current(best_stats.data(), x_vals_temp, y_vals_temp, target_temp, 2);
+                #endif
+                update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 2, maximise);
                 if (log_level == 4) {
                     print_bomb(best_bomb_local, "Current: ");
                     best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
@@ -887,9 +1012,9 @@ bomb_data test_twomix(gas_type gas1, gas_type gas2, gas_type gas3, float mixt1, 
             }
             #ifdef PLOT
             check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 2);
-            plot_current(best_stats, x_vals_temp, y_vals_temp, fuel_temp, 1);
+            plot_current(best_stats.data(), x_vals_temp, y_vals_temp, fuel_temp, 1);
             #endif
-            update_amplif(last_stats, amplifs, best_stats, 1, maximise);
+            update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 1, maximise);
             if (log_level == 3) {
                 print_bomb(best_bomb_local, "Current: ");
                 best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
@@ -897,9 +1022,9 @@ bomb_data test_twomix(gas_type gas1, gas_type gas2, gas_type gas3, float mixt1, 
         }
         #ifdef PLOT
         check_reset_plot(x_vals, y_vals, x_vals_temp, y_vals_temp, global_best_stats, last_best_stats, 1);
-        plot_current(best_stats, x_vals, y_vals, thir_temp, 0);
+        plot_current(best_stats.data(), x_vals, y_vals, thir_temp, 0);
         #endif
-        update_amplif(last_stats, amplifs, best_stats, 0, maximise);
+        update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 0, maximise);
         if (log_level == 2) {
             print_bomb(best_bomb_local, "Current: ");
             best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
@@ -932,7 +1057,9 @@ int main(int argc, char* argv[]) {
     // setup
     setup_params();
 
-    gas_type gas1, gas2, gas3;
+    vector<gas_type> mix_gases;
+    vector<gas_type> primer_gases;
+    string mix_gases_str, primer_gases_str;
     float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
 
     bool redefine_heatcap = false, set_ratio_iter = false, mixing_mode = false, manual_mix = false, do_retest = false, ask_param = false, ask_restrict = false;
@@ -944,9 +1071,8 @@ int main(int argc, char* argv[]) {
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
         argp::make_argument("mixingmode", "m", "different-temperature gas mixer ratio calculator", mixing_mode),
         argp::make_argument("manualmix", "f", "try full input: lets you manually input and a tank's contents and see what it does", manual_mix),
-        argp::make_argument("gas1", "g1", "the type of the first gas in the mix gas (usually fuel, in tank)", gas1),
-        argp::make_argument("gas2", "g2", "the type of the second gas in the mix gas (usually fuel, in tank)", gas2),
-        argp::make_argument("gas3", "g3", "the type of the third gas (usually primer, goes into tank to detonate)", gas3),
+        argp::make_argument("mixgases", "mg", "Comma-separated list of gases in the fuel mix (in tank)", mix_gases_str),
+        argp::make_argument("primergases", "pg", "Comma-separated list of primer gases (injected)", primer_gases_str),
         argp::make_argument("mixt1", "m1", "temperatures for this and the following options are in kelvin", mixt1),
         argp::make_argument("mixt2", "m2", "the maximum of the temperature range to check for the mix gas", mixt2),
         argp::make_argument("thirt1", "t1", "the minimum of the temperature range to check for the third gas", thirt1),
@@ -968,6 +1094,29 @@ int main(int argc, char* argv[]) {
     };
 
     parse_arguments(args, argc, argv);
+    
+    auto parse_gas_list = [](const string& gas_list_str) {
+        vector<gas_type> gases;
+        if (gas_list_str.empty()) {
+            return gases;
+        }
+        stringstream ss(gas_list_str);
+        string gas_name;
+        while(getline(ss, gas_name, ',')) {
+            gas_type g = to_gas(gas_name);
+            if (g.invalid()) {
+                cerr << "Invalid gas name in list: " << gas_name << endl;
+                gases.clear();
+                return gases;
+            }
+            gases.push_back(g);
+        }
+        return gases;
+    };
+
+    mix_gases = parse_gas_list(mix_gases_str);
+    primer_gases = parse_gas_list(primer_gases_str);
+    
     if (ask_param) {
         cout << "Possible optimisations: " << list_params() << endl;
         optimise_val = get_input<dyn_val>("Enter what to optimise: ");
@@ -1053,19 +1202,21 @@ int main(int argc, char* argv[]) {
         cout.setstate(ios::failbit);
     }
     // TODO: unhardcode parameter selection
-    // didn't exit prior, test 1 gas -> 2-gas-mix tanks
-    bool any_invalid = gas1.invalid() || gas2.invalid() || gas3.invalid();
-    if (any_invalid && !silent) {
+    // didn't exit prior, test n gas -> k-gas-mix tanks
+    if ((mix_gases.empty() || primer_gases.empty()) && !silent) {
         cout << "Gases: " << list_gases() << endl;
     }
-    if (gas1.invalid()) {
-        gas1 = get_input<gas_type>("First gas of mix: ");
+    while(mix_gases.empty()) {
+        cout << "Enter mix gases (comma separated): ";
+        string line;
+        getline(cin, line);
+        mix_gases = parse_gas_list(line);
     }
-    if (gas2.invalid()) {
-        gas2 = get_input<gas_type>("Second gas of mix: ");
-    }
-    if (gas3.invalid()) {
-        gas3 = get_input<gas_type>("Inserted gas: ");
+    while(primer_gases.empty()) {
+        cout << "Enter primer gases (comma separated): ";
+        string line;
+        getline(cin, line);
+        primer_gases = parse_gas_list(line);
     }
 
     if (!mixt1) {
@@ -1081,7 +1232,7 @@ int main(int argc, char* argv[]) {
         thirt2 = get_input<float>("inserted temp max: ");
     }
 
-    bomb_data best_bomb = test_twomix(gas1, gas2, gas3, mixt1, mixt2, thirt1, thirt2, optimise_maximise, optimise_before);
+    bomb_data best_bomb = test_mix(mix_gases, primer_gases, mixt1, mixt2, thirt1, thirt2, optimise_maximise, optimise_before);
     cout.clear();
     cout << (simple_output ? "" : "Best:\n") << (simple_output ? best_bomb.print_very_simple() : best_bomb.print_extensive()) << endl;
     if (silent) {
@@ -1089,7 +1240,7 @@ int main(int argc, char* argv[]) {
     }
     if (do_retest) {
         reset();
-        known_input_setup(gas1, gas2, gas3, best_bomb.fuel_temp, best_bomb.thir_temp, best_bomb.fuel_pressure, best_bomb.ratio);
+        known_input_setup(best_bomb.mix_gases, best_bomb.mix_ratios, best_bomb.primer_gases, best_bomb.primer_ratios, best_bomb.fuel_temp, best_bomb.thir_temp, best_bomb.fuel_pressure);
         loop_print();
     }
     return 0;
