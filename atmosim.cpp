@@ -159,7 +159,7 @@ radius = 0.0,
 leaked_heat = 0.0;
 tank_state cur_state = intact;
 int integrity = 3, leak_count = 0, tick = 0,
-tick_cap = 30, pipe_tick_cap = 1000,
+tick_cap = 60, pipe_tick_cap = 1000,
 log_level = 1;
 bool step_target_temp = false,
 check_status = true,
@@ -917,7 +917,7 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
 
     std::function<void(int, int)> iter_ratios;
 
-    iter_ratios = 
+    iter_ratios =
         [&](int mix_ratio_idx, int primer_ratio_idx) {
         if (mix_ratio_idx > num_mix_ratios) { // Iterate primer ratios
             if (primer_ratio_idx > num_primer_ratios) { // All ratios set, execute innermost logic
@@ -1059,7 +1059,6 @@ int main(int argc, char* argv[]) {
 
     vector<gas_type> mix_gases;
     vector<gas_type> primer_gases;
-    string mix_gases_str, primer_gases_str;
     float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
 
     bool redefine_heatcap = false, set_ratio_iter = false, mixing_mode = false, manual_mix = false, do_retest = false, ask_param = false, ask_restrict = false;
@@ -1067,16 +1066,16 @@ int main(int argc, char* argv[]) {
     std::vector<std::shared_ptr<argp::base_argument>> args = {
         argp::make_argument("pipeonly", "", "assume inside pipe: prevent tank-related effects", check_status),
         argp::make_argument("redefineheatcap", "", "redefine heat capacities", redefine_heatcap),
-        argp::make_argument("ratioiter", "", "set gas ratio iteration bounds+step", set_ratio_iter),
+        argp::make_argument("ratioiter", "", "set gas ratio iteration bounds and step", set_ratio_iter),
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
-        argp::make_argument("mixingmode", "m", "different-temperature gas mixer ratio calculator", mixing_mode),
-        argp::make_argument("manualmix", "f", "try full input: lets you manually input and a tank's contents and see what it does", manual_mix),
-        argp::make_argument("mixgases", "mg", "Comma-separated list of gases in the fuel mix (in tank)", mix_gases_str),
-        argp::make_argument("primergases", "pg", "Comma-separated list of primer gases (injected)", primer_gases_str),
-        argp::make_argument("mixt1", "m1", "temperatures for this and the following options are in kelvin", mixt1),
-        argp::make_argument("mixt2", "m2", "the maximum of the temperature range to check for the mix gas", mixt2),
-        argp::make_argument("thirt1", "t1", "the minimum of the temperature range to check for the third gas", thirt1),
-        argp::make_argument("thirt2", "t2", "the maximum of the temperature range to check for the third gas", thirt2),
+        argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
+        argp::make_argument("manualmix", "f", "UTILITY TOOL: manually input a tank's contents and simulate it", manual_mix),
+        argp::make_argument("mixg", "mg", "list of fuel gases (usually, in tank)", mix_gases),
+        argp::make_argument("primerg", "pg", "list of primer gases (usually, in canister)", primer_gases),
+        argp::make_argument("mixt1", "m1", "minimum fuel mix temperature to check, Kelvin", mixt1),
+        argp::make_argument("mixt2", "m2", "maximum fuel mix temperature to check, Kelvin", mixt2),
+        argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
+        argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
         argp::make_argument("doretest", "", "after calculating the bomb, test it again and print every tick as it reacts", do_retest),
         argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
         argp::make_argument("tstep", "", "set temperature iteration multiplier (default " + to_string(temperature_step) + ")", temperature_step),
@@ -1088,35 +1087,32 @@ int main(int argc, char* argv[]) {
         argp::make_argument("restrict", "r", "lets you make atmosim not consider bombs outside of chosen parameters", ask_restrict),
         argp::make_argument("simpleout", "", "makes very simple output, for use by other programs or advanced users", simple_output),
         argp::make_argument("silent", "", "output ONLY the final result, overrides loglevel", silent),
-        argp::make_argument("amplifscale", "", "how aggressively to speed up over regions with worsening optval (default " + to_string(amplif_scale) + ")", amplif_scale),
-        argp::make_argument("maxamplif", "", "maximum speedup over regions with worsening optval (default " + to_string(max_amplif) + ")", max_amplif),
-        argp::make_argument("maxderiv", "", "target optval increase; can be lowered for less aggressive iteration and better results (default " + to_string(max_deriv) + ")", max_deriv)
+        argp::make_argument("amplifscale", "", "amplif: how aggressively to speed up over regions with worsening optval (default " + to_string(amplif_scale) + ")", amplif_scale),
+        argp::make_argument("maxamplif", "", "amplif: maximum speedup over regions with worsening optval (default " + to_string(max_amplif) + ")", max_amplif),
+        argp::make_argument("maxderiv", "", "amplif: target optval increase; can be lowered for less aggressive iteration and better results (default " + to_string(max_deriv) + ")", max_deriv)
     };
 
-    parse_arguments(args, argc, argv);
-    
-    auto parse_gas_list = [](const string& gas_list_str) {
-        vector<gas_type> gases;
-        if (gas_list_str.empty()) {
-            return gases;
-        }
-        stringstream ss(gas_list_str);
-        string gas_name;
-        while(getline(ss, gas_name, ',')) {
-            gas_type g = to_gas(gas_name);
-            if (g.invalid()) {
-                cerr << "Invalid gas name in list: " << gas_name << endl;
-                gases.clear();
-                return gases;
-            }
-            gases.push_back(g);
-        }
-        return gases;
-    };
+    argp::parse_arguments(args, argc, argv,
+    // pre-help
+        "Atmosim: SS14 atmos maxcap calculator utility\n"
+        "  This program contains an optimisation algorithm that attempts to find the best bomb possible according to the desired parameters.\n"
+        "  Additionally, there's a few extra utility tools you can activate instead of the primary mode with their respective flags.\n",
+    // post-help
+        "\n"
+        "Example usage:\n"
+        "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s`\n"
+        "  This should find you a ~13.2 radius maxcap recipe. Experiment with other parameters.\n"
+        "\n"
+        "Tips and tricks\n"
+        "  Using the -s flag may produce considerably better results if you're willing to wait.\n"
+        "  Additionally, consider tuning down amplif, part of the utility's optimiser, with the --maxderiv flag.\n"
+        "  Consider restricting temperature ranges if it's taking a long time to run.\n"
+        "  If you want a long-fuse bomb, try using the -p flag to optimise to maximise ticks and the -r flag to restrict radius to be above a desired value.\n"
+        "  Remember to use the -t flag to raise maximum alotted ticks if you're finding long-fuse bombs.\n"
+        "\n"
+        "  Brought to you by Ilya246 and friends"
+    );
 
-    mix_gases = parse_gas_list(mix_gases_str);
-    primer_gases = parse_gas_list(primer_gases_str);
-    
     if (ask_param) {
         cout << "Possible optimisations: " << list_params() << endl;
         optimise_val = get_input<dyn_val>("Enter what to optimise: ");
@@ -1207,16 +1203,16 @@ int main(int argc, char* argv[]) {
         cout << "Gases: " << list_gases() << endl;
     }
     while(mix_gases.empty()) {
-        cout << "Enter mix gases (comma separated): ";
+        cout << "Enter mix gases (ex. [oxygen, tritium]): ";
         string line;
         getline(cin, line);
-        mix_gases = parse_gas_list(line);
+        mix_gases = argp::parse_value<vector<gas_type>>(line);
     }
     while(primer_gases.empty()) {
-        cout << "Enter primer gases (comma separated): ";
+        cout << "Enter primer gases (ex. [oxygen, tritium]): ";
         string line;
         getline(cin, line);
-        primer_gases = parse_gas_list(line);
+        primer_gases = argp::parse_value<vector<gas_type>>(line);
     }
 
     if (!mixt1) {
