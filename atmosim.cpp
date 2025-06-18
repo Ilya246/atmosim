@@ -1,4 +1,5 @@
 #ifdef PLOT
+#error Plotting is currently unsupported.
 #include <sciplot/sciplot.hpp>
 #endif
 
@@ -9,7 +10,6 @@
 #include <functional>
 #include <iostream>
 #include <limits>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -1033,11 +1033,11 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
         }
     }
     #ifdef PLOT
-    plot4.draw_curve(x_vals[3], y_vals[3]).label("ratio->optstat");
+    plot4.drawCurve(x_vals[3], y_vals[3]).label("ratio->optstat");
     plot4.xtics().logscale(2);
-    plot3.draw_curve(x_vals[2], y_vals[2]).label("target_temp->optstat");
-    plot2.draw_curve(x_vals[1], y_vals[1]).label("fuel_temp->optstat");
-    plot1.draw_curve(x_vals[0], y_vals[0]).label("thir_temp->optstat");
+    plot3.drawCurve(x_vals[2], y_vals[2]).label("target_temp->optstat");
+    plot2.drawCurve(x_vals[1], y_vals[1]).label("fuel_temp->optstat");
+    plot1.drawCurve(x_vals[0], y_vals[0]).label("thir_temp->optstat");
     sciplot::Figure fig = {{plot1, plot2}, {plot3, plot4}};
     sciplot::Canvas canv = {{fig}};
     canv.size(900, 900);
