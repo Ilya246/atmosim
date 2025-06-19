@@ -204,7 +204,6 @@ char get_rotator() {
 }
 
 unordered_map<string, dyn_val> sim_params{
-    {"",            {none_val,  nullptr     }},
     {"radius",      {float_val, &radius     }},
     {"temperature", {float_val, &temperature}},
     {"leaked_heat",  {float_val, &leaked_heat }},
