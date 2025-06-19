@@ -1,10 +1,12 @@
 #include "argparse/args.hpp"
+#include "argparse/read.hpp"
 
 #include <chrono>
 #include <cmath>
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -22,6 +24,11 @@ struct dyn_val {
     }
 };
 
+template<>
+string argp::type_sig<dyn_val> = "param";
+
+istream& operator>>(istream&, dyn_val&);
+
 template <typename T>
 T* get_dyn_ptr(dyn_val val) {
     return (T*)val.value_ptr;
@@ -33,8 +40,16 @@ T& get_dyn(dyn_val val) {
 
 // generic system for specifying what you don't want atmosim to give you
 struct base_restriction {
+    virtual ~base_restriction() {};
     virtual bool OK() = 0;
 };
+
+template<>
+string argp::type_sig<shared_ptr<base_restriction>> = "restriction";
+
+// make argp treat restriction as a container for [] syntax
+template<>
+struct argp::is_container<std::shared_ptr<base_restriction>> : std::true_type {};
 
 template <typename T>
 struct num_restriction : base_restriction {
@@ -65,8 +80,50 @@ struct bool_restriction : base_restriction {
     }
 };
 
-float heat_scale = 1.0;
+istream& operator>>(istream& stream, shared_ptr<base_restriction>& restriction) {
+    try {
+        string all;
+        stream >> all;
+        string_view view(all);
+        size_t cpos = view.find(',');
+        string_view param_s = view.substr(1, cpos - 1);
+        dyn_val param = argp::parse_value<dyn_val>(param_s);
+        if (param.invalid()) {
+            stream.setstate(ios_base::failbit);
+            return stream;
+        }
+        switch (param.type) {
+            case (int_val): {
+                size_t cpos2 = view.find(',', cpos + 1);
+                int restrA = argp::parse_value<int>(view.substr(cpos + 1, cpos2 - cpos - 1));
+                int restrB = argp::parse_value<int>(view.substr(cpos2 + 1, view.size() - cpos2 - 2));
+                restriction = make_shared<num_restriction<int>>(num_restriction<int>((int*)param.value_ptr, restrA, restrB));
+                break;
+            }
+            case (float_val): {
+                size_t cpos2 = view.find(',', cpos + 1);
+                float restrA = argp::parse_value<float>(view.substr(cpos + 1, cpos2 - cpos - 1));
+                float restrB = argp::parse_value<float>(view.substr(cpos2 + 1, view.size() - cpos2 - 2));
+                restriction = make_shared<num_restriction<float>>((float*)param.value_ptr, restrA, restrB);
+                break;
+            }
+            case (bool_val): {
+                bool restr = argp::parse_value<bool>(view.substr(1, view.size() - 2));
+                restriction = make_shared<bool_restriction>((bool*)param.value_ptr, restr);
+                break;
+            }
+            default: {
+                stream.setstate(ios_base::failbit);
+                break;
+            }
+        }
+    } catch (const argp::read_error& e) {
+        stream.setstate(ios_base::failbit);
+    }
+    return stream;
+}
 
+float heat_scale = 1.0;
 
 const int gas_count = 9;
 float gas_amounts[gas_count]{};
@@ -186,11 +243,11 @@ long long last_speed = 0;
 chrono::high_resolution_clock main_clock;
 
 dyn_val optimise_val = {float_val, &radius};
-vector<base_restriction*> pre_restrictions;
-vector<base_restriction*> post_restrictions;
+vector<shared_ptr<base_restriction>> pre_restrictions;
+vector<shared_ptr<base_restriction>> post_restrictions;
 
-bool restrictions_met(const vector<base_restriction*>& restrictions) {
-    for (base_restriction* r : restrictions) {
+bool restrictions_met(vector<shared_ptr<base_restriction>>& restrictions) {
+    for (shared_ptr<base_restriction>& r : restrictions) {
         if (!r->OK()) {
             return false;
         }
@@ -238,7 +295,7 @@ istream& operator>>(istream& stream, dyn_val& param) {
     stream >> val;
     param = get_param(val);
     if (param.invalid()) {
-        cin.setstate(ios_base::failbit);
+        stream.setstate(ios_base::failbit);
     }
     return stream;
 }
@@ -329,7 +386,7 @@ istream& operator>>(istream& stream, gas_type& g) {
     stream >> val;
     g = to_gas(val);
     if (g == invalid_gas) {
-        cin.setstate(ios_base::failbit);
+        stream.setstate(ios_base::failbit);
     }
     return stream;
 }
@@ -996,7 +1053,8 @@ int main(int argc, char* argv[]) {
     vector<gas_type> primer_gases;
     float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
 
-    bool redefine_heatcap = false, set_ratio_iter = false, mixing_mode = false, manual_mix = false, do_retest = false, ask_param = false, ask_restrict = false;
+    bool redefine_heatcap = false, set_ratio_iter = false, mixing_mode = false, manual_mix = false, do_retest = false;
+    tuple<dyn_val, bool, bool> opt_param = {{float_val, &radius}, true, false};
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
         argp::make_argument("pipeonly", "", "assume inside pipe: prevent tank-related effects", check_status),
@@ -1018,8 +1076,9 @@ int main(int argc, char* argv[]) {
         argp::make_argument("volume", "v", "set tank volume (default " + to_string(volume) + ")", volume),
         argp::make_argument("lowertargettemp", "o", "only consider bombs which mix to above this temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(lower_target_temp) + ")", lower_target_temp),
         argp::make_argument("loglevel", "l", "what level of the nested loop to log, 0-6: none, [default] global_best, thir_temp, fuel_temp, target_temp, all, debug", log_level),
-        argp::make_argument("param", "p", "lets you configure what and how to optimise", ask_param),
-        argp::make_argument("restrict", "r", "lets you make atmosim not consider bombs outside of chosen parameters", ask_restrict),
+        argp::make_argument("param", "p", "(param, maximise, measure_before_sim): lets you configure what parameter and how to optimise", opt_param),
+        argp::make_argument("restrictpre", "rb", "lets you make atmosim not consider bombs outside of chosen parameters, measured before simulation", pre_restrictions),
+        argp::make_argument("restrictpost", "ra", "same as -rr, but measured after simulation", post_restrictions),
         argp::make_argument("simpleout", "", "makes very simple output, for use by other programs or advanced users", simple_output),
         argp::make_argument("silent", "", "output ONLY the final result, overrides loglevel", silent),
         argp::make_argument("amplifscale", "", "amplif: how aggressively to speed up over regions with worsening optval (default " + to_string(amplif_scale) + ")", amplif_scale),
@@ -1031,12 +1090,21 @@ int main(int argc, char* argv[]) {
     // pre-help
         "Atmosim: SS14 atmos maxcap calculator utility\n"
         "  This program contains an optimisation algorithm that attempts to find the best bomb possible according to the desired parameters.\n"
-        "  Additionally, there's a few extra utility tools you can activate instead of the primary mode with their respective flags.\n",
+        "  Additionally, there's a few extra utility tools you can activate instead of the primary mode with their respective flags.\n"
+        "\n"
+        "  Available parameter types:\n"
+        "    " + list_params() +
+        "\n"
+        "  Available gas types:\n"
+        "    " + list_gases() +
+        "\n",
     // post-help
         "\n"
         "Example usage:\n"
         "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s`\n"
         "  This should find you a ~13.2 radius maxcap recipe. Experiment with other parameters.\n"
+        "  For --restrictpre (-rb) and --restrictpost (-ra):\n"
+        "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s -ra=[[radius,0,11],[ticks,20,44]]`\n"
         "\n"
         "Tips and tricks\n"
         "  Using the -s flag may produce considerably better results if you're willing to wait.\n"
@@ -1048,57 +1116,10 @@ int main(int argc, char* argv[]) {
         "  Brought to you by Ilya246 and friends"
     );
 
-    if (ask_param) {
-        cout << "Possible optimisations: " << list_params() << endl;
-        optimise_val = get_input<dyn_val>("Enter what to optimise: ");
-        optimise_maximise = get_opt("Maximise?");
-        optimise_before = get_opt("Measure stat before ignition?", false);
-    }
-    if (ask_restrict) {
-        while (true) {
-            string restrict_what = "";
-            cout << "Available parameters: " << list_params() << endl;
-            cout << "Enter -1 as the upper limit on numerical restrictions to have no limit." << endl;
-            dyn_val opt_val = get_input<dyn_val>("Enter what to restrict: ");
-            bool valid = false;
-            base_restriction* restrict;
-            switch (opt_val.type) {
-                case (int_val): {
-                    int minv = get_input<int>("Enter lower limit: ");
-                    int maxv = get_input<int>("Enter upper limit: ");
-                    restrict = new num_restriction<int>(get_dyn_ptr<int>(opt_val), minv, maxv);
-                    valid = true;
-                    break;
-                }
-                case (float_val): {
-                    float minv = get_input<float>("Enter lower limit: ");
-                    float maxv = get_input<float>("Enter upper limit: ");
-                    restrict = new num_restriction<float>(get_dyn_ptr<float>(opt_val), minv, maxv);
-                    valid = true;
-                    break;
-                }
-                case (bool_val): {
-                    restrict = new bool_restriction(get_dyn_ptr<bool>(opt_val), get_opt("Enter target value:"));
-                    valid = true;
-                    break;
-                }
-                default: {
-                    cout << "Invalid parameter." << endl;
-                    break;
-                }
-            }
-            if (valid) {
-                if (get_opt("Restrict (Y=after | N=before) simulation done?")) {
-                    post_restrictions.push_back(restrict);
-                } else {
-                    pre_restrictions.push_back(restrict);
-                }
-            }
-            if (!get_opt("Continue?", false)) {
-                break;
-            }
-        }
-    }
+    optimise_val = get<0>(opt_param);
+    optimise_maximise = get<1>(opt_param);
+    optimise_before = get<2>(opt_param);
+
     if (redefine_heatcap) {
         heat_cap_input_setup();
     }
@@ -1135,32 +1156,9 @@ int main(int argc, char* argv[]) {
     // TODO: unhardcode parameter selection
     // didn't exit prior, test n gas -> k-gas-mix tanks
     if ((mix_gases.empty() || primer_gases.empty()) && !silent) {
+        cout << "No mix or primer gases found, see `./atmosim -h` for usage\n";
         cout << "Gases: " << list_gases() << endl;
-    }
-    while(mix_gases.empty()) {
-        cout << "Enter mix gases (ex. [oxygen, tritium]): ";
-        string line;
-        getline(cin, line);
-        mix_gases = argp::parse_value<vector<gas_type>>(line);
-    }
-    while(primer_gases.empty()) {
-        cout << "Enter primer gases (ex. [oxygen, tritium]): ";
-        string line;
-        getline(cin, line);
-        primer_gases = argp::parse_value<vector<gas_type>>(line);
-    }
-
-    if (!mixt1) {
-        mixt1 = get_input<float>("mix temp min: ");
-    }
-    if (!mixt2) {
-        mixt2 = get_input<float>("mix temp max: ");
-    }
-    if (!thirt1) {
-        thirt1 = get_input<float>("inserted temp min: ");
-    }
-    if (!thirt2) {
-        thirt2 = get_input<float>("inserted temp max: ");
+        return 0;
     }
 
     bomb_data best_bomb = test_mix(mix_gases, primer_gases, mixt1, mixt2, thirt1, thirt2, optimise_maximise, optimise_before);
