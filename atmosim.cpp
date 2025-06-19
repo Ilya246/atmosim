@@ -961,6 +961,7 @@ struct optimizer {
         current = lower_bounds; // copy
 
         amplifs = vector<float>(current.size(), 1.f);
+        best_arg = vector<float>(current.size(), 0.f);
         last_stats = current;
     }
 
@@ -1155,10 +1156,6 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
     optim.find_best();
 
     vector<float> in_args = optim.best_arg;
-    if (in_args.size() < num_params) {
-        throw runtime_error("failed to find viable bomb");
-    }
-
     return get_data(in_args, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
 }
 
