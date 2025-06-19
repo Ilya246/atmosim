@@ -980,17 +980,18 @@ struct optimizer {
                 float res = tres.second ? tres.first : -numeric_limits<float>::max();
                 if (!maximise) res = -res;
 
-                float sign_result = maximise ? best_result : -best_result;
+                float sign_b_result = maximise ? best_result : -best_result;
 
-                if (res > sign_result) {
+                if (res > sign_b_result) {
                     best_result = maximise ? res : -res;
-                    for (float& f : best_ress) {
-                        f = res;
-                    }
-                    for (vector<float>& v : best_args) {
-                        v = current;
-                    }
                     best_arg = current;
+                }
+                for (size_t j = 0; j < paramc; ++j) {
+                    float sign_l_result = maximise ? best_ress[j] : -best_ress[j];
+                    if (res > sign_l_result) {
+                        best_ress[j] = maximise? res : -res;
+                        best_args[j] = current;
+                    }
                 }
             } else if (do_pass) {
                 ++i;
@@ -1003,13 +1004,13 @@ struct optimizer {
                 do_pass = false;
                 c_param = lower_bounds[i];
                 amplifs[i] = 1.f;
-                best_ress[i] = -numeric_limits<float>::max();
                 if ((size_t)log_level == i + 2) {
                     // as-is this is expensive but hopefully we won't run it often
                     bomb_data data = get_data(best_args[i], get<1>(args));
                     print_bomb(data, "Local best: ");
                 }
                 best_args[i] = vector<float>(paramc, 0.f);
+                best_ress[i] = -numeric_limits<float>::max();
                 if (i == 0) {
                     break;
                 }
