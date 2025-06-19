@@ -226,7 +226,7 @@ n2o_decomp_temp = 850.0, N2Odecomposition_rate = 0.5,
 frezon_cool_temp = 23.15, frezon_cool_lower_temperature = 23.15, frezon_cool_mid_temperature = 373.15, frezon_cool_maximum_energy_modifier = 10.0, frezon_cool_rate_modifier = 20.0, frezon_nitrogen_cool_ratio = 5.0, frezon_cool_energy_released = -600000.0 * heat_scale,
 nitrium_decomp_temp = T0C + 70.0, nitrium_decomposition_energy = 30000.0,
 tickrate = 0.5,
-lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.1, ratio_step = 1.005, ratio_from = 10.0, ratio_to = 10.0, amplif_scale = 1.2, amplif_downscale = 1.4, max_amplif = 20.0, max_deriv = 1.01,
+lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.1, ratio_step = 1.005, ratio_bounds = 10.0, amplif_scale = 1.2, amplif_downscale = 1.4, max_amplif = 20.0, max_deriv = 1.01,
 heat_capacity_cache = 0.0;
 vector<gas_type> active_gases;
 string rotator = "|/-\\";
@@ -241,6 +241,9 @@ long long progress_poll_times[progress_polls];
 long long progress_poll = 0;
 long long last_speed = 0;
 chrono::high_resolution_clock main_clock;
+
+long long iters = 0;
+chrono::time_point start_time(main_clock.now());
 
 dyn_val optimise_val = {float_val, &radius};
 vector<shared_ptr<base_restriction>> pre_restrictions;
@@ -908,134 +911,254 @@ void print_progress(long long iters, auto start_time) {
 float optimise_stat() {
     return optimise_val.type == float_val ? get_dyn<float>(optimise_val) : get_dyn<int>(optimise_val);
 }
-void update_amplif(float last_stats[], float amplifs[], float stats[], const int i, bool maximise) {
-    float stat = stats[i];
-    float deriv = stat / last_stats[i];
-    float abs_deriv = maximise ? deriv : 1.f / deriv;
-    float& amplif = amplifs[i];
-    amplif = std::max(1.f, amplif * (abs_deriv > max_deriv && abs_deriv == abs_deriv ? 1.f / (abs_deriv / max_deriv) / amplif_downscale : amplif_scale));
-    amplif = std::min(amplif, max_amplif);
-    last_stats[i] = stat;
-    stats[i] = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
-}
-bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& primer_gases, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measure_before) {
-    // parameters of the tank with the best result we have so far
-    bomb_data best_bomb({0}, {0}, 0.0, 0.0, 0.0, 0.0, 0.0, mix_gases, primer_gases);
-    best_bomb.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
 
-    // same but only best in the current surrounding frame
-    bomb_data best_bomb_local({0}, {0}, 0.0, 0.0, 0.0, 0.0, 0.0, mix_gases, primer_gases);
-    best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
+bomb_data get_data(const vector<float>&, tuple<const vector<gas_type>&, const vector<gas_type>&, bool>);
 
-    int num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
-    int num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
-    int num_params = 3 + num_mix_ratios + num_primer_ratios;
+template<typename T>
+struct optimizer {
+    function<pair<float, bool>(const vector<float>&, T)> funct;
+    tuple<const vector<float>&, T> args;
+    const vector<float>& lower_bounds;
+    const vector<float>& upper_bounds;
+    const vector<float>& min_lin_step;
+    const vector<float>& min_exp_step;
+    bool maximise;
 
-    long long iters = 0;
-    chrono::time_point start_time = main_clock.now();
-    vector<float> last_stats(num_params, 1.f);
-    vector<float> amplifs(num_params, 1.f);
-    vector<float> best_stats(num_params, maximise ? numeric_limits<float>::min() : numeric_limits<float>::max());
+    vector<float> current;
+    vector<float> best_arg;
+    float best_result = -numeric_limits<float>::max();
 
-    vector<float> mix_ratios(mix_gases.size());
-    if(!mix_gases.empty()) mix_ratios[0] = 1.0f;
-    vector<float> primer_ratios(primer_gases.size());
-    if(!primer_gases.empty()) primer_ratios[0] = 1.0f;
+    vector<float> last_stats;
+    vector<float> amplifs;
 
-    std::function<void(int, int)> iter_ratios;
+    optimizer(function<pair<float, bool>(const vector<float>&, T)> func,
+              const vector<float>& lowerb,
+              const vector<float>& upperb,
+              const vector<float>& i_lin_step,
+              const vector<float>& i_exp_step,
+              bool maxm,
+              T i_args) :
+              funct(func),
+              args(current, i_args),
+              lower_bounds(lowerb),
+              upper_bounds(upperb),
+              min_lin_step(i_lin_step),
+              min_exp_step(i_exp_step),
+              maximise(maxm) {
 
-    iter_ratios =
-        [&](int mix_ratio_idx, int primer_ratio_idx) {
-        if (mix_ratio_idx > num_mix_ratios) { // Iterate primer ratios
-            if (primer_ratio_idx > num_primer_ratios) { // All ratios set, execute innermost logic
-                ++iters;
-                if (iters % progress_bar_spacing == 0) {
-                    print_progress(iters, start_time);
-                }
-                float fuel_pressure, stat;
-                reset();
-                if ((best_stats[2] > best_stats[1]) == (best_stats[2] > best_stats[0])) { // target_temp, fuel_temp, thir_temp
-                    return;
-                }
-                fuel_pressure = mix_input_setup(mix_gases, mix_ratios, primer_gases, primer_ratios, best_stats[1], best_stats[0], best_stats[2]);
-                if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
-                    return;
-                }
-                if (!restrictions_met(pre_restrictions)) {
-                    return;
-                }
-                if (measure_before) {
-                    stat = optimise_stat();
-                }
-                float mix_pressure = get_pressure();
-                loop();
-                if (!measure_before) {
-                    stat = optimise_stat();
-                }
-                bool no_discard = restrictions_met(post_restrictions);
-                bomb_data cur_bomb(mix_ratios, primer_ratios, best_stats[1], fuel_pressure, best_stats[0], mix_pressure, best_stats[2], mix_gases, primer_gases);
-                cur_bomb.results(radius, temperature, get_pressure(), stat, tick, cur_state);
-                if (no_discard && (maximise == (stat > best_bomb.optstat))) {
-                    best_bomb = cur_bomb;
-                }
-                if (log_level >= 5) {
-                    print_bomb(cur_bomb, "\n", true);
-                }
-                if (no_discard && (maximise == (stat > best_bomb_local.optstat))) {
-                    best_bomb_local = cur_bomb;
-                }
-                for (float& s : best_stats) {
-                    if (no_discard && (maximise ? (stat > s) : (stat < s))) {
-                        s = stat;
+        size_t misize = std::min({lowerb.size(), upperb.size(), i_lin_step.size(), i_exp_step.size()});
+        size_t masize = std::max({lowerb.size(), upperb.size(), i_lin_step.size(), i_exp_step.size()});
+        if (misize != masize) {
+            throw runtime_error("optimiser parameters have mismatched dimensions");
+        }
+
+        for (size_t i = 0; i < masize; ++i) {
+            if (lowerb[i] > upperb[i]) {
+                throw runtime_error("optimiser upper bound " + to_string(i) + " was smaller than lower bound");
+            }
+        }
+
+        current = lower_bounds; // copy
+
+        amplifs = vector<float>(current.size(), 1.f);
+        last_stats = current;
+    }
+
+    void find_best() {
+        size_t i = 0;
+        size_t paramc = current.size();
+        bool do_pass = true;
+        vector<float> best_ress(paramc, -numeric_limits<float>::max());
+        vector<vector<float>> best_args(paramc);
+        for (vector<float>& v : best_args) {
+            v = vector<float>(paramc, 0.f);
+        }
+        while (true) {
+            if (i == paramc - 1) {
+                do_pass = false;
+                pair<float, bool> tres = apply(funct, args);
+                float res = tres.second ? tres.first : -numeric_limits<float>::max();
+                if (!maximise) res = -res;
+
+                float sign_result = maximise ? best_result : -best_result;
+
+                if (res > sign_result) {
+                    best_result = maximise ? res : -res;
+                    for (float& f : best_ress) {
+                        f = res;
                     }
+                    for (vector<float>& v : best_args) {
+                        v = current;
+                    }
+                    best_arg = current;
                 }
-                return;
+            } else if (do_pass) {
+                ++i;
+                continue;
             }
-            int param_idx = 3 + num_mix_ratios + primer_ratio_idx - 1;
-            for (float ratio = 1.0 / ratio_from; ratio <= ratio_to; ratio += ratio * (ratio_step - 1.f) * amplifs[param_idx]) {
-                primer_ratios[primer_ratio_idx] = ratio;
-                iter_ratios(mix_ratio_idx, primer_ratio_idx + 1);
-            }
-            update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), param_idx, maximise);
-        } else { // Iterate mix ratios
-            int param_idx = 3 + mix_ratio_idx - 1;
-            for (float ratio = 1.0 / ratio_from; ratio <= ratio_to; ratio += ratio * (ratio_step - 1.f) * amplifs[param_idx]) {
-                mix_ratios[mix_ratio_idx] = ratio;
-                iter_ratios(mix_ratio_idx + 1, 1);
-            }
-            update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), param_idx, maximise);
-        }
-    };
-
-    for (float thir_temp = thirt1; thir_temp <= thirt2; thir_temp = std::max(thir_temp * (1.f + (temperature_step - 1.f) * amplifs[0]), thir_temp + temperature_step_min * amplifs[0])) {
-        best_stats[0] = thir_temp;
-        for (float fuel_temp = mixt1; fuel_temp <= mixt2; fuel_temp = std::max(fuel_temp * (1.f + (temperature_step - 1.f) * amplifs[1]), fuel_temp + temperature_step_min * amplifs[1])) {
-            best_stats[1] = fuel_temp;
-            float target_temp2 = step_target_temp ? std::max(thir_temp, fuel_temp) : lower_target_temp + temperature_step;
-            for (float target_temp = lower_target_temp; target_temp < target_temp2; target_temp = std::max(target_temp * (1.f + (temperature_step - 1.f) * amplifs[2]), target_temp + temperature_step_min * amplifs[2])) {
-                best_stats[2] = target_temp;
-                iter_ratios(1, 1);
-                update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 2, maximise);
-                if (log_level == 4) {
-                    print_bomb(best_bomb_local, "Current: ");
-                    best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
+            update_amplif(i, maximise, best_ress[i]);
+            step(i);
+            float& c_param = current[i];
+            if (c_param > upper_bounds[i]) {
+                do_pass = false;
+                c_param = lower_bounds[i];
+                amplifs[i] = 1.f;
+                best_ress[i] = -numeric_limits<float>::max();
+                if ((size_t)log_level == i + 2) {
+                    // as-is this is expensive but hopefully we won't run it often
+                    bomb_data data = get_data(best_args[i], get<1>(args));
+                    print_bomb(data, "Local best: ");
                 }
+                best_args[i] = vector<float>(paramc, 0.f);
+                if (i == 0) {
+                    break;
+                }
+                --i;
+            } else {
+                do_pass = true;
             }
-            update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 1, maximise);
-            if (log_level == 3) {
-                print_bomb(best_bomb_local, "Current: ");
-                best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
-            }
-        }
-        update_amplif(last_stats.data(), amplifs.data(), best_stats.data(), 0, maximise);
-        if (log_level == 2) {
-            print_bomb(best_bomb_local, "Current: ");
-            best_bomb_local.optstat = maximise ? numeric_limits<float>::min() : numeric_limits<float>::max();
-        } else if (log_level == 1) {
-            print_bomb(best_bomb_local, "Best: ");
         }
     }
-    return best_bomb;
+
+    void step(int i) {
+        float& c_param = current[i];
+        float& amplif = amplifs[i];
+        const float& min_l_step = min_lin_step[i];
+        const float& min_e_step = min_exp_step[i];
+        #ifdef STEPDEBUG
+        cout << "stepping: " << i << " " << c_param << " -> ";
+        #endif
+        c_param = std::max(c_param * (1.f + (min_e_step - 1.f) * amplif), c_param + min_l_step * amplif);
+        #ifdef STEPDEBUG
+        cout << c_param << " (amplif " << amplif << ")" << endl;
+        #endif
+    }
+
+    void update_amplif(int i, bool maximise, float stat) {
+        float deriv = stat / last_stats[i];
+        float abs_deriv = maximise ? deriv : 1.f / deriv;
+        float& amplif = amplifs[i];
+        amplif = std::max(1.f, amplif * (abs_deriv > max_deriv && abs_deriv == abs_deriv ? 1.f / (abs_deriv / max_deriv) / amplif_downscale : amplif_scale));
+        amplif = std::min(amplif, max_amplif);
+        last_stats[i] = stat;
+    }
+};
+
+// args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
+pair<float, bool> do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&, const vector<gas_type>&, bool> args) {
+    float target_temp = in_args[0];
+    float fuel_temp = in_args[1];
+    float thir_temp = in_args[2];
+    const vector<gas_type>& mix_gases = get<0>(args);
+    const vector<gas_type>& primer_gases = get<1>(args);
+    bool measure_before = get<2>(args);
+    ++iters;
+    if (iters % progress_bar_spacing == 0) {
+        print_progress(iters, start_time);
+    }
+    float fuel_pressure, stat;
+    reset();
+    if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
+        return {0.f, false};
+    }
+    vector<float> mix_ratios(mix_gases.size(), 1.f);
+    for (size_t i = 0; i < mix_gases.size() - 1; ++i) {
+        mix_ratios[i + 1] = in_args[3 + i];
+    }
+    vector<float> primer_ratios(primer_gases.size(), 1.f);
+    size_t mg_s = mix_gases.size() - 1;
+    for (size_t i = 0; i < primer_gases.size() - 1; ++i) {
+        primer_ratios[i + 1] = in_args[3 + mg_s + i];
+    }
+    fuel_pressure = mix_input_setup(mix_gases, mix_ratios, primer_gases, primer_ratios, fuel_temp, thir_temp, target_temp);
+    if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
+        return {0.f, false};
+    }
+    if (!restrictions_met(pre_restrictions)) {
+        return {0.f, false};
+    }
+    if (measure_before) {
+        stat = optimise_stat();
+    }
+    loop();
+    if (!measure_before) {
+        stat = optimise_stat();
+    }
+    if (!restrictions_met(post_restrictions)) {
+        return {0.f, false};
+    }
+    return {stat, true};
+}
+
+bomb_data get_data(const vector<float>& in_args, tuple<const vector<gas_type>&, const vector<gas_type>&, bool> args) {
+    float fuel_pressure, stat;
+    float target_temp = in_args[0];
+    float fuel_temp = in_args[1];
+    float thir_temp = in_args[2];
+    const vector<gas_type>& mix_gases = get<0>(args);
+    const vector<gas_type>& primer_gases = get<1>(args);
+    bool measure_before = get<2>(args);
+    reset();
+    vector<float> mix_ratios(mix_gases.size(), 1.f);
+    for (size_t i = 0; i < mix_gases.size() - 1; ++i) {
+        mix_ratios[i + 1] = in_args[3 + i];
+    }
+    vector<float> primer_ratios(primer_gases.size(), 1.f);
+    size_t mg_s = mix_gases.size() - 1;
+    for (size_t i = 0; i < primer_gases.size() - 1; ++i) {
+        primer_ratios[i + 1] = in_args[3 + mg_s + i];
+    }
+    fuel_pressure = mix_input_setup(mix_gases, mix_ratios, primer_gases, primer_ratios, fuel_temp, thir_temp, target_temp);
+    if (measure_before) {
+        stat = optimise_stat();
+    }
+    float mix_pressure = get_pressure();
+    loop();
+    if (!measure_before) {
+        stat = optimise_stat();
+    }
+    bomb_data bomb(mix_ratios, primer_ratios, fuel_temp, fuel_pressure, thir_temp, mix_pressure, target_temp, mix_gases, primer_gases);
+    bomb.results(radius, temperature, get_pressure(), stat, tick, cur_state);
+    return bomb;
+}
+
+bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& primer_gases, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measure_before) {
+    size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
+    size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
+    size_t num_params = 3 + num_mix_ratios + num_primer_ratios;
+
+    vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1};
+    lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
+    vector<float> upper_bounds = {std::max(mixt1, thirt1), mixt2, thirt2};
+    if (!step_target_temp) {
+        upper_bounds[0] = lower_bounds[0];
+    }
+    for (size_t i = 0; i < num_params - 3; ++i) {
+        lower_bounds.push_back(1.f / ratio_bounds);
+        upper_bounds.push_back(ratio_bounds);
+    }
+
+    vector<float> min_l_step(lower_bounds.size(), 0.f);
+    vector<float> min_e_step(lower_bounds.size(), 0.f);
+    for (size_t i = 0; i < 3; ++i) {
+        min_l_step[i] = temperature_step_min;
+        min_e_step[i] = temperature_step;
+    }
+    for (size_t i = 3; i < num_params; ++i) {
+        min_l_step[i] = 0.f;
+        min_e_step[i] = ratio_step;
+    }
+
+    optimizer<tuple<const vector<gas_type>&, const vector<gas_type>&, bool>> optim(do_sim, lower_bounds, upper_bounds, min_l_step, min_e_step, maximise, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
+
+    optim.find_best();
+
+    vector<float> in_args = optim.best_arg;
+    if (in_args.size() < num_params) {
+        throw runtime_error("failed to find viable bomb");
+    }
+
+    return get_data(in_args, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
 }
 
 void heat_cap_input_setup() {
@@ -1124,8 +1247,7 @@ int main(int argc, char* argv[]) {
         heat_cap_input_setup();
     }
     if (set_ratio_iter) {
-        ratio_from = get_input<float>("max gas1:gas2: ");
-        ratio_to = get_input<float>("max gas2:gas1: ");
+        ratio_bounds = get_input<float>("max gas ratio: ");
         ratio_step = get_input<float>("ratio step: ");
     }
     if (mixing_mode && manual_mix) {
