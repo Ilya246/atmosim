@@ -1002,7 +1002,7 @@ struct optimizer {
                     current[i] = cur_lower_bounds[i] + (cur_upper_bounds[i] - cur_lower_bounds[i]) * frand();
                 }
                 // do gradient descent until we find a local minimum
-                R c_result = worst_res();
+                R c_result = sample();
                 while (true) {
                     if (log_level >= 3) {
                         cout << "Sampling: ";
