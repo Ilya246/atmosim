@@ -1253,7 +1253,7 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
 
     vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1};
     lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
-    vector<float> upper_bounds = {std::max(mixt1, thirt1), mixt2, thirt2};
+    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2};
     if (!step_target_temp) {
         upper_bounds[0] = lower_bounds[0];
     }
