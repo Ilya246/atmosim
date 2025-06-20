@@ -1022,18 +1022,23 @@ struct optimizer {
         }
     }
 
-    void step(int i) {
-        float& c_param = current[i];
-        float& amplif = amplifs[i];
+    float get_step(int i) {
+        const float& c_param = current[i];
+        const float& amplif = amplifs[i];
         const float& min_l_step = min_lin_step[i];
         const float& min_e_step = min_exp_step[i];
         #ifdef STEPDEBUG
         cout << "stepping: " << i << " " << c_param << " -> ";
         #endif
-        c_param = std::max(c_param * (1.f + (min_e_step - 1.f) * amplif), c_param + min_l_step * amplif);
+        float step = std::max(c_param * (1.f + (min_e_step - 1.f) * amplif), c_param + min_l_step * amplif) - c_param;
         #ifdef STEPDEBUG
         cout << c_param << " (amplif " << amplif << ")" << endl;
         #endif
+        return step;
+    }
+
+    void step(int i) {
+        current[i] += get_step(i);
     }
 
     void update_amplif(int i, bool maximise, float stat) {

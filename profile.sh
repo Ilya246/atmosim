@@ -1,4 +1,4 @@
-profile_command="./atmosim --gas1 plasma --gas2 tritium --gas3 oxygen --mixt1 375.15 --mixt2 593.15 --thirt1 293.15 --thirt2 293.15 --doretest N --ticks 90 -s --simpleout --loglevel 0"
+profile_command="./atmosim --simpleout --ticks 120 -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 --silent"
 
 echo "Building with debug symbols"
 ./build_linux.sh -g
