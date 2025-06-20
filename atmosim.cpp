@@ -6,6 +6,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -123,6 +124,24 @@ istream& operator>>(istream& stream, shared_ptr<base_restriction>& restriction) 
     return stream;
 }
 
+uint32_t __xorshift_seed = rand();
+uint32_t xorshift_rng() {
+    uint32_t& x = __xorshift_seed;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return x;
+}
+
+float frand() {
+    static random_device rd;
+    static mt19937 gen(rd());
+    static uniform_real_distribution<float> distribution;
+
+    return distribution(gen);
+}
+
+
 float heat_scale = 1.0;
 
 const int gas_count = 9;
@@ -226,10 +245,12 @@ n2o_decomp_temp = 850.0, N2Odecomposition_rate = 0.5,
 frezon_cool_temp = 23.15, frezon_cool_lower_temperature = 23.15, frezon_cool_mid_temperature = 373.15, frezon_cool_maximum_energy_modifier = 10.0, frezon_cool_rate_modifier = 20.0, frezon_nitrogen_cool_ratio = 5.0, frezon_cool_energy_released = -600000.0 * heat_scale,
 nitrium_decomp_temp = T0C + 70.0, nitrium_decomposition_energy = 30000.0,
 tickrate = 0.5,
-lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.1, ratio_step = 1.005, ratio_bounds = 10.0, amplif_scale = 1.2, amplif_downscale = 1.4, max_amplif = 20.0, max_deriv = 1.01,
+lower_target_temp = fire_temp + 0.1, temperature_step = 1.001, temperature_step_min = 0.01, ratio_step = 1.005, ratio_bounds = 10.0,
+max_runtime = 3.0,
 heat_capacity_cache = 0.0;
 vector<gas_type> active_gases;
 string rotator = "|/-\\";
+size_t sample_rounds = 3;
 int rotator_chars = 4;
 int rotator_index = rotator_chars - 1;
 long long progress_bar_spacing = 4817;
@@ -923,13 +944,11 @@ struct optimizer {
     const vector<float>& min_lin_step;
     const vector<float>& min_exp_step;
     bool maximise;
+    chrono::duration<float> max_duration;
 
     vector<float> current;
     vector<float> best_arg;
-    float best_result = -numeric_limits<float>::max();
-
-    vector<float> last_stats;
-    vector<float> amplifs;
+    float best_result;
 
     optimizer(function<pair<float, bool>(const vector<float>&, T)> func,
               const vector<float>& lowerb,
@@ -937,14 +956,16 @@ struct optimizer {
               const vector<float>& i_lin_step,
               const vector<float>& i_exp_step,
               bool maxm,
-              T i_args) :
+              T i_args,
+              chrono::duration<float> i_max_duration = chrono::duration<float>(max_runtime)) :
               funct(func),
               args(current, i_args),
               lower_bounds(lowerb),
               upper_bounds(upperb),
               min_lin_step(i_lin_step),
               min_exp_step(i_exp_step),
-              maximise(maxm) {
+              maximise(maxm),
+              max_duration(i_max_duration) {
 
         size_t misize = std::min({lowerb.size(), upperb.size(), i_lin_step.size(), i_exp_step.size()});
         size_t masize = std::max({lowerb.size(), upperb.size(), i_lin_step.size(), i_exp_step.size()});
@@ -960,94 +981,177 @@ struct optimizer {
 
         current = lower_bounds; // copy
 
-        amplifs = vector<float>(current.size(), 1.f);
         best_arg = vector<float>(current.size(), 0.f);
-        last_stats = current;
+
+        best_result = worst_res();
     }
 
     void find_best() {
-        size_t i = 0;
         size_t paramc = current.size();
-        bool do_pass = true;
-        vector<float> best_ress(paramc, -numeric_limits<float>::max());
-        vector<vector<float>> best_args(paramc);
-        for (vector<float>& v : best_args) {
-            v = vector<float>(paramc, 0.f);
-        }
-        while (true) {
-            if (i == paramc - 1) {
-                do_pass = false;
-                pair<float, bool> tres = apply(funct, args);
-                float res = tres.second ? tres.first : -numeric_limits<float>::max();
-                if (!maximise) res = -res;
-
-                float sign_b_result = maximise ? best_result : -best_result;
-
-                if (res > sign_b_result) {
-                    best_result = maximise ? res : -res;
-                    best_arg = current;
+        vector<float> cur_lower_bounds = lower_bounds;
+        vector<float> cur_upper_bounds = upper_bounds;
+        for (size_t samp_idx = 0; samp_idx < sample_rounds; ++samp_idx) {
+            chrono::time_point s_time = main_clock.now();
+            while (main_clock.now() - s_time < max_duration) {
+                // start off a random point in the dimension space
+                for (size_t i = 0; i < current.size(); ++i) {
+                    current[i] = cur_lower_bounds[i] + (cur_upper_bounds[i] - cur_lower_bounds[i]) * frand();
                 }
-                for (size_t j = 0; j < paramc; ++j) {
-                    float sign_l_result = maximise ? best_ress[j] : -best_ress[j];
-                    if (res > sign_l_result) {
-                        best_ress[j] = maximise? res : -res;
-                        best_args[j] = current;
+                // do gradient descent until we find a local minimum
+                float c_result = worst_res();
+                while (true) {
+                    if (log_level >= 3) {
+                        cout << "Sampling: ";
+                        for (float f : current) {
+                            cout << f << " ";
+                        }
+                        cout << endl;
                     }
+                    // movement directions yielding best result
+                    vector<pair<size_t, bool>> best_movedirs = {};
+                    float best_move_res = c_result;
+                    vector<float> old_current = current;
+                    // sample each possible movement direction in the parameter space
+                    for (size_t i = 0; i < paramc; ++i) {
+                        auto do_update = [&](float with, bool sign) {
+                            if (with == best_move_res) {
+                                best_movedirs.push_back({i, sign});
+                            } else if (better_than(with, best_move_res)) {
+                                best_movedirs = {{i, sign}};
+                                best_move_res = with;
+                            }
+                        };
+                        // step forward in this dimension
+                        current[i] += get_step(i);
+                        if (current[i] <= cur_upper_bounds[i]) {
+                            pair<float, bool> res = sample();
+                            do_update(res.first, true);
+                        }
+                        // reset and step backwards
+                        current[i] = old_current[i];
+                        current[i] -= get_step(i);
+                        if (current[i] >= cur_lower_bounds[i]) {
+                            pair<float, bool> res = sample();
+                            do_update(res.first, false);
+                        }
+                        // reset
+                        current[i] = old_current[i];
+                    }
+
+                    // found local minimum
+                    if (best_movedirs.empty()) {
+                        if (log_level >= 2) {
+                            bomb_data data = get_data(get<0>(args), get<1>(args));
+                            print_bomb(data, "Local minimum found: ");
+                        }
+                        break;
+                    }
+
+                    auto do_skipmove = [&](size_t dir, float sign) {
+                        size_t chosen_scl = 0;
+                        for (size_t move_scl = 2; true; move_scl *= 2) {
+                            // step forward in chosen direction with scaling
+                            current[dir] += sign * get_step(dir, move_scl);
+                            // don't try to sample beyond bounds
+                            if (current[dir] < cur_lower_bounds[dir] || current[dir] > cur_upper_bounds[dir]) {
+                                // reset
+                                current[dir] = old_current[dir];
+                                break;
+                            }
+                            // sample and check if scaling the movement produced better or same results
+                            pair<float, bool> res = sample();
+                            if (better_eq_than(res.first, best_move_res)) {
+                                chosen_scl = move_scl;
+                                best_move_res = res.first;
+                            } else {
+                                current[dir] = old_current[dir];
+                                break;
+                            }
+                            current[dir] = old_current[dir];
+                        }
+                        return chosen_scl;
+                    };
+                    pair<size_t, float> chosen;
+                    size_t chosen_scl = 0;
+                    // try skip-move in each prospective movement direction
+                    for (const pair<size_t, bool>& p : best_movedirs) {
+                        float sign = p.second ? +1.f : -1.f;
+                        // check if we can skip-move in this direction
+                        // the function handles checking whether that'd actually be profitable
+                        size_t scl = do_skipmove(p.first, sign);
+                        if (scl != 0) {
+                            chosen = {p.first, sign};
+                            chosen_scl = scl;
+                        }
+                    }
+                    // we failed to find any non-zero movement, break to avoid random walk
+                    if (chosen_scl == 0 || best_move_res == c_result) {
+                        if (log_level >= 2) {
+                            bomb_data data = get_data(get<0>(args), get<1>(args));
+                            print_bomb(data, "Local minimum found: ");
+                        }
+                        break;
+                    }
+                    // perform the movement
+                    current[chosen.first] += chosen.second * get_step(chosen.first, chosen_scl);
+                    c_result = best_move_res;
                 }
-            } else if (do_pass) {
-                ++i;
-                continue;
             }
-            update_amplif(i, maximise, best_ress[i]);
-            step(i);
-            float& c_param = current[i];
-            if (c_param > upper_bounds[i]) {
-                do_pass = false;
-                c_param = lower_bounds[i];
-                amplifs[i] = 1.f;
-                if ((size_t)log_level == i + 2) {
-                    // as-is this is expensive but hopefully we won't run it often
-                    bomb_data data = get_data(best_args[i], get<1>(args));
-                    print_bomb(data, "Local best: ");
+            if (samp_idx + 1 != sample_rounds) {
+                if (log_level >= 1) {
+                    cout << "\nSampling round " << samp_idx + 1 << " complete" << endl;
+                    bomb_data data = get_data(best_arg, get<1>(args));
+                    print_bomb(data, "Best bomb found: ");
                 }
-                best_args[i] = vector<float>(paramc, 0.f);
-                best_ress[i] = -numeric_limits<float>::max();
-                if (i == 0) {
-                    break;
+                // sampling round done, halve sampling area and go again
+                for (size_t i = 0; i < current.size(); ++i) {
+                    float& lowerb = cur_lower_bounds[i];
+                    float& upperb = cur_upper_bounds[i];
+                    const float& best_at = best_arg[i];
+                    lowerb += (best_at - lowerb) * 0.5f;
+                    upperb += (best_at - upperb) * 0.5f;
                 }
-                --i;
-            } else {
-                do_pass = true;
             }
         }
     }
 
-    float get_step(int i) {
+    // returns pair of sign-adjusted result and whether this updated our maximum
+    pair<float, bool> sample() {
+        pair<float, bool> tres = apply(funct, args);
+        float res = tres.second ? tres.first : worst_res();
+
+        if (better_than(res, best_result)) {
+            best_result = res;
+            best_arg = current;
+            return {res, true};
+        }
+
+        return {res, false};
+    }
+
+    bool better_than(float what, float than) {
+        return maximise ? what > than : than > what;
+    }
+
+    bool better_eq_than(float what, float than) {
+        return maximise ? what >= than : than >= what;
+    }
+
+    float worst_res() {
+        float wr = numeric_limits<float>::max();
+        return maximise ? -wr : wr;
+    }
+
+    float get_step(int i, float scale = 1.f) {
         const float& c_param = current[i];
-        const float& amplif = amplifs[i];
         const float& min_l_step = min_lin_step[i];
         const float& min_e_step = min_exp_step[i];
-        #ifdef STEPDEBUG
-        cout << "stepping: " << i << " " << c_param << " -> ";
-        #endif
-        float step = std::max(c_param * (1.f + (min_e_step - 1.f) * amplif), c_param + min_l_step * amplif) - c_param;
-        #ifdef STEPDEBUG
-        cout << c_param << " (amplif " << amplif << ")" << endl;
-        #endif
+        float step = std::max(c_param * (1.f + (min_e_step - 1.f) * scale), c_param + min_l_step * scale) - c_param;
         return step;
     }
 
     void step(int i) {
         current[i] += get_step(i);
-    }
-
-    void update_amplif(int i, bool maximise, float stat) {
-        float deriv = stat / last_stats[i];
-        float abs_deriv = maximise ? deriv : 1.f / deriv;
-        float& amplif = amplifs[i];
-        amplif = std::max(1.f, amplif * (abs_deriv > max_deriv && abs_deriv == abs_deriv ? 1.f / (abs_deriv / max_deriv) / amplif_downscale : amplif_scale));
-        amplif = std::min(amplif, max_amplif);
-        last_stats[i] = stat;
     }
 };
 
@@ -1179,13 +1283,13 @@ int main(int argc, char* argv[]) {
     vector<gas_type> primer_gases;
     float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
 
-    bool redefine_heatcap = false, set_ratio_iter = false, mixing_mode = false, manual_mix = false, do_retest = false;
+    bool redefine_heatcap = false, mixing_mode = false, manual_mix = false, do_retest = false;
     tuple<dyn_val, bool, bool> opt_param = {{float_val, &radius}, true, false};
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
         argp::make_argument("pipeonly", "", "assume inside pipe: prevent tank-related effects", check_status),
         argp::make_argument("redefineheatcap", "", "redefine heat capacities", redefine_heatcap),
-        argp::make_argument("ratioiter", "", "set gas ratio iteration bounds and step", set_ratio_iter),
+        argp::make_argument("ratiobounds", "", "set gas ratio iteration bounds", ratio_bounds),
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
         argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
         argp::make_argument("manualmix", "f", "UTILITY TOOL: manually input a tank's contents and simulate it", manual_mix),
@@ -1207,9 +1311,8 @@ int main(int argc, char* argv[]) {
         argp::make_argument("restrictpost", "ra", "same as -rr, but measured after simulation", post_restrictions),
         argp::make_argument("simpleout", "", "makes very simple output, for use by other programs or advanced users", simple_output),
         argp::make_argument("silent", "", "output ONLY the final result, overrides loglevel", silent),
-        argp::make_argument("amplifscale", "", "amplif: how aggressively to speed up over regions with worsening optval (default " + to_string(amplif_scale) + ")", amplif_scale),
-        argp::make_argument("maxamplif", "", "amplif: maximum speedup over regions with worsening optval (default " + to_string(max_amplif) + ")", max_amplif),
-        argp::make_argument("maxderiv", "", "amplif: target optval increase; can be lowered for less aggressive iteration and better results (default " + to_string(max_deriv) + ")", max_deriv)
+        argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
+        argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds)
     };
 
     argp::parse_arguments(args, argc, argv,
@@ -1248,10 +1351,6 @@ int main(int argc, char* argv[]) {
 
     if (redefine_heatcap) {
         heat_cap_input_setup();
-    }
-    if (set_ratio_iter) {
-        ratio_bounds = get_input<float>("max gas ratio: ");
-        ratio_step = get_input<float>("ratio step: ");
     }
     if (mixing_mode && manual_mix) {
         cerr << "2 modes enabled at the same time. Choose one. Exiting" << endl;
