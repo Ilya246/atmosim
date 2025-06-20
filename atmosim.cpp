@@ -949,6 +949,7 @@ struct optimizer {
     vector<float> current;
     vector<float> best_arg;
     float best_result;
+    bool any_valid = false;
 
     float step_scale = 1.f;
 
@@ -1100,6 +1101,14 @@ struct optimizer {
                     c_result = best_move_res;
                 }
             }
+            if (!any_valid) {
+                if (log_level >= 1) {
+                    cout << "Failed to find any viable bomb, retrying sample 1..." << endl;
+                }
+                --samp_idx;
+                s_time = main_clock.now();
+                continue;
+            }
             if (samp_idx + 1 != sample_rounds) {
                 if (log_level >= 1) {
                     cout << "\nSampling round " << samp_idx + 1 << " complete" << endl;
@@ -1131,6 +1140,7 @@ struct optimizer {
     pair<float, bool> sample() {
         pair<float, bool> tres = apply(funct, args);
         float res = tres.second ? tres.first : worst_res();
+        any_valid |= tres.second;
 
         if (better_than(res, best_result)) {
             best_result = res;
