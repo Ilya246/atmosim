@@ -935,9 +935,9 @@ float optimise_stat() {
 
 bomb_data get_data(const vector<float>&, tuple<const vector<gas_type>&, const vector<gas_type>&, bool>);
 
-template<typename T>
+template<typename T, typename R>
 struct optimizer {
-    function<pair<float, bool>(const vector<float>&, T)> funct;
+    function<R(const vector<float>&, T)> funct;
     tuple<const vector<float>&, T> args;
     const vector<float>& lower_bounds;
     const vector<float>& upper_bounds;
@@ -948,12 +948,12 @@ struct optimizer {
 
     vector<float> current;
     vector<float> best_arg;
-    float best_result;
+    R best_result;
     bool any_valid = false;
 
     float step_scale = 1.f;
 
-    optimizer(function<pair<float, bool>(const vector<float>&, T)> func,
+    optimizer(function<R(const vector<float>&, T)> func,
               const vector<float>& lowerb,
               const vector<float>& upperb,
               const vector<float>& i_lin_step,
@@ -1002,7 +1002,7 @@ struct optimizer {
                     current[i] = cur_lower_bounds[i] + (cur_upper_bounds[i] - cur_lower_bounds[i]) * frand();
                 }
                 // do gradient descent until we find a local minimum
-                float c_result = worst_res();
+                R c_result = worst_res();
                 while (true) {
                     if (log_level >= 3) {
                         cout << "Sampling: ";
@@ -1013,11 +1013,11 @@ struct optimizer {
                     }
                     // movement directions yielding best result
                     vector<pair<size_t, bool>> best_movedirs = {};
-                    float best_move_res = c_result;
+                    R best_move_res = c_result;
                     vector<float> old_current = current;
                     // sample each possible movement direction in the parameter space
                     for (size_t i = 0; i < paramc; ++i) {
-                        auto do_update = [&](float with, bool sign) {
+                        auto do_update = [&](const R& with, bool sign) {
                             if (with == best_move_res) {
                                 best_movedirs.push_back({i, sign});
                             } else if (better_than(with, best_move_res)) {
@@ -1028,15 +1028,15 @@ struct optimizer {
                         // step forward in this dimension
                         current[i] += get_step(i);
                         if (current[i] <= cur_upper_bounds[i]) {
-                            pair<float, bool> res = sample();
-                            do_update(res.first, true);
+                            R res = sample();
+                            do_update(res, true);
                         }
                         // reset and step backwards
                         current[i] = old_current[i];
                         current[i] -= get_step(i);
                         if (current[i] >= cur_lower_bounds[i]) {
-                            pair<float, bool> res = sample();
-                            do_update(res.first, false);
+                            R res = sample();
+                            do_update(res, false);
                         }
                         // reset
                         current[i] = old_current[i];
@@ -1063,10 +1063,10 @@ struct optimizer {
                                 break;
                             }
                             // sample and check if scaling the movement produced better or same results
-                            pair<float, bool> res = sample();
-                            if (better_eq_than(res.first, best_move_res)) {
+                            R res = sample();
+                            if (better_eq_than(res, best_move_res)) {
                                 chosen_scl = move_scl;
-                                best_move_res = res.first;
+                                best_move_res = res;
                             } else {
                                 current[dir] = old_current[dir];
                                 break;
@@ -1137,31 +1137,30 @@ struct optimizer {
     }
 
     // returns pair of sign-adjusted result and whether this updated our maximum
-    pair<float, bool> sample() {
-        pair<float, bool> tres = apply(funct, args);
-        float res = tres.second ? tres.first : worst_res();
-        any_valid |= tres.second;
+    R sample() {
+        R tres = apply(funct, args);
+        bool valid = tres.valid();
+        R res = valid ? tres : worst_res();
+        any_valid |= valid;
 
         if (better_than(res, best_result)) {
             best_result = res;
             best_arg = current;
-            return {res, true};
         }
 
-        return {res, false};
+        return res;
     }
 
-    bool better_than(float what, float than) {
+    bool better_than(R what, R than) {
         return maximise ? what > than : than > what;
     }
 
-    bool better_eq_than(float what, float than) {
+    bool better_eq_than(R what, R than) {
         return maximise ? what >= than : than >= what;
     }
 
-    float worst_res() {
-        float wr = numeric_limits<float>::max();
-        return maximise ? -wr : wr;
+    R worst_res() {
+        return R::worst(maximise);
     }
 
     float get_step(int i, float scale = 1.f) {
@@ -1178,8 +1177,34 @@ struct optimizer {
     }
 };
 
+struct opt_val_wrap {
+    float stat;
+    float pressure;
+
+    static opt_val_wrap worst(bool maximise) {
+        float w = numeric_limits<float>::max() * (maximise ? -1.f : 1.f);
+        return {w, w};
+    }
+
+    bool valid() const {
+        return pressure != 0.f;
+    }
+
+    bool operator>(const opt_val_wrap& rhs) const {
+        return stat == rhs.stat ? pressure > rhs.pressure : stat > rhs.stat;
+    }
+
+    bool operator>=(const opt_val_wrap& rhs) const {
+        return stat >= rhs.stat;
+    }
+
+    bool operator==(const opt_val_wrap& rhs) const {
+        return stat == rhs.stat;
+    }
+};
+
 // args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
-pair<float, bool> do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&, const vector<gas_type>&, bool> args) {
+opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&, const vector<gas_type>&, bool> args) {
     float target_temp = in_args[0];
     float fuel_temp = in_args[1];
     float thir_temp = in_args[2];
@@ -1193,7 +1218,7 @@ pair<float, bool> do_sim(const vector<float>& in_args, tuple<const vector<gas_ty
     float fuel_pressure, stat;
     reset();
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
-        return {0.f, false};
+        return {0.f, 0.f};
     }
     vector<float> mix_ratios(mix_gases.size(), 1.f);
     for (size_t i = 0; i < mix_gases.size() - 1; ++i) {
@@ -1206,11 +1231,9 @@ pair<float, bool> do_sim(const vector<float>& in_args, tuple<const vector<gas_ty
     }
     fuel_pressure = mix_input_setup(mix_gases, mix_ratios, primer_gases, primer_ratios, fuel_temp, thir_temp, target_temp);
     if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
-        return {0.f, false};
+        return {0.f, 0.f};
     }
-    if (!restrictions_met(pre_restrictions)) {
-        return {0.f, false};
-    }
+    bool pre_met = restrictions_met(pre_restrictions);
     if (measure_before) {
         stat = optimise_stat();
     }
@@ -1218,10 +1241,10 @@ pair<float, bool> do_sim(const vector<float>& in_args, tuple<const vector<gas_ty
     if (!measure_before) {
         stat = optimise_stat();
     }
-    if (!restrictions_met(post_restrictions)) {
-        return {0.f, false};
+    if (!pre_met || !restrictions_met(post_restrictions)) {
+        return {0.f, get_pressure()};
     }
-    return {stat, true};
+    return {stat, get_pressure()};
 }
 
 bomb_data get_data(const vector<float>& in_args, tuple<const vector<gas_type>&, const vector<gas_type>&, bool> args) {
@@ -1283,7 +1306,7 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
         min_e_step[i] = ratio_step;
     }
 
-    optimizer<tuple<const vector<gas_type>&, const vector<gas_type>&, bool>> optim(do_sim, lower_bounds, upper_bounds, min_l_step, min_e_step, maximise, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
+    optimizer<tuple<const vector<gas_type>&, const vector<gas_type>&, bool>, opt_val_wrap> optim(do_sim, lower_bounds, upper_bounds, min_l_step, min_e_step, maximise, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
 
     optim.find_best();
 
