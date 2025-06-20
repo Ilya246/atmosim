@@ -1180,14 +1180,15 @@ struct optimizer {
 struct opt_val_wrap {
     float stat;
     float pressure;
+    bool valid_v;
 
     static opt_val_wrap worst(bool maximise) {
         float w = numeric_limits<float>::max() * (maximise ? -1.f : 1.f);
-        return {w, w};
+        return {w, w, false};
     }
 
     bool valid() const {
-        return pressure != 0.f;
+        return valid_v;
     }
 
     bool operator>(const opt_val_wrap& rhs) const {
@@ -1218,7 +1219,7 @@ opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&,
     float fuel_pressure, stat;
     reset();
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
-        return {0.f, 0.f};
+        return {0.f, 0.f, false};
     }
     vector<float> mix_ratios(mix_gases.size(), 1.f);
     for (size_t i = 0; i < mix_gases.size() - 1; ++i) {
@@ -1231,7 +1232,7 @@ opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&,
     }
     fuel_pressure = mix_input_setup(mix_gases, mix_ratios, primer_gases, primer_ratios, fuel_temp, thir_temp, target_temp);
     if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
-        return {0.f, 0.f};
+        return {0.f, 0.f, false};
     }
     bool pre_met = restrictions_met(pre_restrictions);
     if (measure_before) {
@@ -1242,9 +1243,9 @@ opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&,
         stat = optimise_stat();
     }
     if (!pre_met || !restrictions_met(post_restrictions)) {
-        return {0.f, get_pressure()};
+        return {0.f, get_pressure(), false};
     }
-    return {stat, get_pressure()};
+    return {stat, get_pressure(), true};
 }
 
 bomb_data get_data(const vector<float>& in_args, tuple<const vector<gas_type>&, const vector<gas_type>&, bool> args) {
