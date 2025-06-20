@@ -1120,8 +1120,8 @@ struct optimizer {
                     float& lowerb = cur_lower_bounds[i];
                     float& upperb = cur_upper_bounds[i];
                     const float& best_at = best_arg[i];
-                    lowerb += (best_at - lowerb) * bounds_scale;
-                    upperb += (best_at - upperb) * bounds_scale;
+                    lowerb += (best_at - lowerb) * (1.f - bounds_scale);
+                    upperb += (best_at - upperb) * (1.f - bounds_scale);
                     // scale stepping less
                     step_scale *= stepping_scale;
                 }
