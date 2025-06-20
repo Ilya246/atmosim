@@ -245,8 +245,8 @@ n2o_decomp_temp = 850.0, N2Odecomposition_rate = 0.5,
 frezon_cool_temp = 23.15, frezon_cool_lower_temperature = 23.15, frezon_cool_mid_temperature = 373.15, frezon_cool_maximum_energy_modifier = 10.0, frezon_cool_rate_modifier = 20.0, frezon_nitrogen_cool_ratio = 5.0, frezon_cool_energy_released = -600000.0 * heat_scale,
 nitrium_decomp_temp = T0C + 70.0, nitrium_decomposition_energy = 30000.0,
 tickrate = 0.5,
-lower_target_temp = fire_temp + 0.1, temperature_step = 1.001, temperature_step_min = 0.01, ratio_step = 1.005, ratio_bounds = 10.0,
-max_runtime = 3.0,
+lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.05, ratio_step = 1.005, ratio_bounds = 20.0,
+max_runtime = 3.0, bounds_scale = 0.5, stepping_scale = 0.75,
 heat_capacity_cache = 0.0;
 vector<gas_type> active_gases;
 string rotator = "|/-\\";
@@ -950,6 +950,8 @@ struct optimizer {
     vector<float> best_arg;
     float best_result;
 
+    float step_scale = 1.f;
+
     optimizer(function<pair<float, bool>(const vector<float>&, T)> func,
               const vector<float>& lowerb,
               const vector<float>& upperb,
@@ -990,6 +992,7 @@ struct optimizer {
         size_t paramc = current.size();
         vector<float> cur_lower_bounds = lower_bounds;
         vector<float> cur_upper_bounds = upper_bounds;
+        step_scale = 1.f;
         for (size_t samp_idx = 0; samp_idx < sample_rounds; ++samp_idx) {
             chrono::time_point s_time = main_clock.now();
             while (main_clock.now() - s_time < max_duration) {
@@ -1108,8 +1111,17 @@ struct optimizer {
                     float& lowerb = cur_lower_bounds[i];
                     float& upperb = cur_upper_bounds[i];
                     const float& best_at = best_arg[i];
-                    lowerb += (best_at - lowerb) * 0.5f;
-                    upperb += (best_at - upperb) * 0.5f;
+                    lowerb += (best_at - lowerb) * bounds_scale;
+                    upperb += (best_at - upperb) * bounds_scale;
+                    // scale stepping less
+                    step_scale *= stepping_scale;
+                }
+                if (log_level >= 1) {
+                    cout << "New bounds: ";
+                    for (size_t i = 0; i < current.size(); ++i) {
+                        cout << "[" << cur_lower_bounds[i] << "," << cur_upper_bounds[i] << "] ";
+                    }
+                    cout << endl;
                 }
             }
         }
@@ -1143,6 +1155,7 @@ struct optimizer {
     }
 
     float get_step(int i, float scale = 1.f) {
+        scale *= step_scale;
         const float& c_param = current[i];
         const float& min_l_step = min_lin_step[i];
         const float& min_e_step = min_exp_step[i];
@@ -1312,7 +1325,9 @@ int main(int argc, char* argv[]) {
         argp::make_argument("simpleout", "", "makes very simple output, for use by other programs or advanced users", simple_output),
         argp::make_argument("silent", "", "output ONLY the final result, overrides loglevel", silent),
         argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
-        argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds)
+        argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds),
+        argp::make_argument("boundsscale", "", "how much to scale bounds each sample round (default " + to_string(bounds_scale) + ")", bounds_scale),
+        argp::make_argument("steppingscale", "", "how much to scale minimum step each sample round (default " + to_string(stepping_scale) + ")", stepping_scale)
     };
 
     argp::parse_arguments(args, argc, argv,
