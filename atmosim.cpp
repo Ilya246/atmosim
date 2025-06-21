@@ -1,7 +1,3 @@
-#include "argparse/args.hpp"
-#include "argparse/read.hpp"
-#include "include/constants.hpp"
-
 #include <chrono>
 #include <cmath>
 #include <format>
@@ -15,126 +11,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include <argparse/args.hpp>
+#include <argparse/read.hpp>
+
+#include "constants.hpp"
+#include "gas.hpp"
+
 using namespace std;
-
-enum value_type {int_val, float_val, bool_val, none_val};
-
-struct dyn_val {
-    value_type type;
-    void* value_ptr;
-
-    bool invalid() {
-        return type == none_val || value_ptr == nullptr;
-    }
-};
-
-template<>
-string argp::type_sig<dyn_val> = "param";
-
-istream& operator>>(istream&, dyn_val&);
-
-template <typename T>
-T* get_dyn_ptr(dyn_val val) {
-    return (T*)val.value_ptr;
-}
-template <typename T>
-T& get_dyn(dyn_val val) {
-    return *get_dyn_ptr<T>(val);
-}
-
-// generic system for specifying what you don't want atmosim to give you
-struct base_restriction {
-    virtual ~base_restriction() {};
-    virtual bool OK() = 0;
-};
-
-template<>
-string argp::type_sig<shared_ptr<base_restriction>> = "restriction";
-
-// make argp treat restriction as a container for [] syntax
-template<>
-struct argp::is_container<std::shared_ptr<base_restriction>> : std::true_type {};
-
-template <typename T>
-struct num_restriction : base_restriction {
-    T* value_ptr;
-    T min_value;
-    T max_value;
-
-    num_restriction(T* ptr, T min, T max): value_ptr(ptr), min_value(min), max_value(max) {
-        if (max_value < 0) {
-            max_value = numeric_limits<T>::max();
-        }
-    }
-
-    bool OK() override {
-        return *value_ptr >= min_value
-        &&     *value_ptr <= max_value;
-    }
-};
-
-struct bool_restriction : base_restriction {
-    bool* value_ptr;
-    bool target_value;
-
-    bool_restriction(bool* ptr, bool target): value_ptr(ptr), target_value(target) {}
-
-    bool OK() override {
-        return *value_ptr == target_value;
-    }
-};
-
-istream& operator>>(istream& stream, shared_ptr<base_restriction>& restriction) {
-    try {
-        string all;
-        stream >> all;
-        string_view view(all);
-        size_t cpos = view.find(',');
-        string_view param_s = view.substr(1, cpos - 1);
-        dyn_val param = argp::parse_value<dyn_val>(param_s);
-        if (param.invalid()) {
-            stream.setstate(ios_base::failbit);
-            return stream;
-        }
-        switch (param.type) {
-            case (int_val): {
-                size_t cpos2 = view.find(',', cpos + 1);
-                int restrA = argp::parse_value<int>(view.substr(cpos + 1, cpos2 - cpos - 1));
-                int restrB = argp::parse_value<int>(view.substr(cpos2 + 1, view.size() - cpos2 - 2));
-                restriction = make_shared<num_restriction<int>>(num_restriction<int>((int*)param.value_ptr, restrA, restrB));
-                break;
-            }
-            case (float_val): {
-                size_t cpos2 = view.find(',', cpos + 1);
-                float restrA = argp::parse_value<float>(view.substr(cpos + 1, cpos2 - cpos - 1));
-                float restrB = argp::parse_value<float>(view.substr(cpos2 + 1, view.size() - cpos2 - 2));
-                restriction = make_shared<num_restriction<float>>((float*)param.value_ptr, restrA, restrB);
-                break;
-            }
-            case (bool_val): {
-                bool restr = argp::parse_value<bool>(view.substr(1, view.size() - 2));
-                restriction = make_shared<bool_restriction>((bool*)param.value_ptr, restr);
-                break;
-            }
-            default: {
-                stream.setstate(ios_base::failbit);
-                break;
-            }
-        }
-    } catch (const argp::read_error& e) {
-        stream.setstate(ios_base::failbit);
-    }
-    return stream;
-}
-
-uint32_t __xorshift_seed = rand();
-uint32_t xorshift_rng() {
-    uint32_t& x = __xorshift_seed;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    return x;
-}
 
 float frand() {
     static random_device rd;
@@ -144,76 +27,10 @@ float frand() {
     return distribution(gen);
 }
 
-const int gas_count = 9;
-float gas_amounts[gas_count]{};
-float gas_heat_caps[gas_count]{20.f * heat_scale, 30.f * heat_scale, 200.f * heat_scale, 10.f * heat_scale, 40.f * heat_scale, 30.f * heat_scale, 600.f * heat_scale, 40.f * heat_scale, 10.f * heat_scale};
-const string gas_names[gas_count]{  "oxygen",         "nitrogen",       "plasma",          "tritium",        "water_vapour",    "carbon_dioxide",  "frezon",          "nitrous_oxide",  "nitrium"};
-
-const int invalid_gas_num = -1;
-
-// integer container struct denoting a gas type
-struct gas_type {
-    int gas = invalid_gas_num;
-
-    float& amount() const {
-        return gas_amounts[gas];
-    }
-
-    void update_amount(const float& delta, float& heat_capacity_cache) {
-        amount() += delta;
-        heat_capacity_cache += delta * heat_cap();
-    }
-
-    float& heat_cap() const {
-        return gas_heat_caps[gas];
-    }
-
-    bool invalid() const {
-        return gas == invalid_gas_num;
-    }
-
-    string name() const {
-        return gas_names[gas];
-    }
-
-    bool operator== (const gas_type& other) {
-        return gas == other.gas;
-    }
-
-    bool operator!= (const gas_type& other) {
-        return gas != other.gas;
-    }
-};
-
-gas_type oxygen{0};
-gas_type nitrogen{1};
-gas_type plasma{2};
-gas_type tritium{3};
-gas_type water_vapour{4};
-gas_type carbon_dioxide{5};
-gas_type frezon{6};
-gas_type nitrous_oxide{7};
-gas_type nitrium{8};
-gas_type invalid_gas{invalid_gas_num};
-
-gas_type gases[]{oxygen, nitrogen, plasma, tritium, water_vapour, carbon_dioxide, frezon, nitrous_oxide, nitrium};
-
-unordered_map<string, gas_type> gas_map{
-    {"oxygen",         oxygen         },
-    {"nitrogen",       nitrogen       },
-    {"plasma",         plasma         },
-    {"tritium",        tritium        },
-    {"water_vapour",   water_vapour   },
-    {"carbon_dioxide", carbon_dioxide },
-    {"frezon",         frezon         },
-    {"nitrous_oxide",  nitrous_oxide  },
-    {"nitrium",        nitrium        }
-};
-
 string list_gases() {
     string out;
-    for (gas_type g : gases) {
-        out += g.name() + ", ";
+    for (const gas_type& g : gases) {
+        out += g.name + ", ";
     }
     out.resize(out.size() - 2);
     return out;
@@ -225,9 +42,6 @@ enum tank_state {
     exploded = 2
 };
 
-float temperature = 293.15, volume = 5.0,
-radius = 0.0,
-leaked_heat = 0.0;
 tank_state cur_state = intact;
 int integrity = 3, leak_count = 0, tick = 0,
 tick_cap = 60, pipe_tick_cap = 1000,
@@ -244,59 +58,6 @@ size_t sample_rounds = 3;
 
 long long iters = 0;
 chrono::time_point start_time(main_clock.now());
-
-dyn_val optimise_val = {float_val, &radius};
-vector<shared_ptr<base_restriction>> pre_restrictions;
-vector<shared_ptr<base_restriction>> post_restrictions;
-
-bool restrictions_met(vector<shared_ptr<base_restriction>>& restrictions) {
-    for (shared_ptr<base_restriction>& r : restrictions) {
-        if (!r->OK()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-unordered_map<string, dyn_val> sim_params{
-    {"radius",      {float_val, &radius     }},
-    {"temperature", {float_val, &temperature}},
-    {"leaked_heat",  {float_val, &leaked_heat }},
-    {"ticks",       {int_val,   &tick       }},
-    {"tank_state",   {int_val,   &cur_state  }}};
-
-// ran at the start of main()
-void setup_params() {
-    for (gas_type g : gases) {
-        sim_params["gases." + g.name()] = {float_val, &g.amount()};
-    }
-}
-
-string list_params() {
-    string out;
-    for (const auto& [key, value] : sim_params) {
-        out += key + ", ";
-    }
-    out.resize(out.size() - 2);
-    return out;
-}
-
-dyn_val get_param(const string& name) {
-    if (sim_params.contains(name)) {
-        return sim_params[name];
-    }
-    return sim_params[""];
-}
-
-istream& operator>>(istream& stream, dyn_val& param) {
-    string val;
-    stream >> val;
-    param = get_param(val);
-    if (param.invalid()) {
-        stream.setstate(ios_base::failbit);
-    }
-    return stream;
-}
 
 // flushes a basic_istream<char> until after \n
 basic_istream<char>& flush_stream(basic_istream<char>& stream) {
@@ -344,215 +105,11 @@ bool get_opt(const string& what, bool default_opt = true) {
     cin >> opt;
     return eval_opt(opt, default_opt);
 }
-
-void reset() {
-    for (gas_type g : gases) {
-        g.amount() = 0.0;
-    }
-    temperature = 293.15;
-    cur_state = intact;
-    integrity = 3;
-    tick = 0;
-    leak_count = 0;
-    radius = 0.0;
-    leaked_heat = 0.0;
-}
-
-bool is_gas(const string& gas) {
-    return gas_map.contains(gas);
-}
-
-// string-to-gas
-gas_type to_gas(const string& gas) {
-    if (!is_gas(gas)) {
-        return invalid_gas;
-    }
-    return gas_map[gas];
-}
-
-// string-to-gas but throw an exception if invalid
-gas_type parse_gas(const string& gas) {
-    gas_type out = to_gas(gas);
-    if (out.invalid()) {
-        throw invalid_argument("Parsed invalid gas type.");
-    }
-    return out;
-}
-
-istream& operator>>(istream& stream, gas_type& g) {
-    string val;
-    stream >> val;
-    g = to_gas(val);
-    if (g == invalid_gas) {
-        stream.setstate(ios_base::failbit);
-    }
-    return stream;
-}
-
-float get_heat_capacity() {
-    float sum = 0.0;
-    for (const gas_type& g : gases) {
-        sum += g.amount() * g.heat_cap();
-    }
-    return sum;
-}
-void update_heat_capacity(const gas_type& type, const float& moles_delta, float& capacity) {
-    capacity += type.heat_cap() * moles_delta;
-}
-float get_gas_mols() {
-    float sum = 0.0;
-    for (const gas_type& g : gases) {
-        sum += g.amount();
-    }
-    return sum;
-}
-float pressure_temp_to_mols(float pressure, float temp, float vol = volume) {
-    return pressure * vol / temp / R;
-}
-float mols_temp_to_pressure(float mols, float temp, float vol = volume) {
-    return mols * R * temp / vol;
-}
-float gases_temps_to_temp(gas_type gas1, float temp1, gas_type gas2, float temp2) {
-    return (gas1.amount() * temp1 * gas1.heat_cap() + gas2.amount() * temp2 * gas2.heat_cap()) / (gas1.amount() * gas1.heat_cap() + gas2.amount() * gas2.heat_cap());
-}
-float mix_gas_temps_to_temp(float gasc1, float gashc1, float temp1, gas_type gas2, float temp2) {
-    return (gasc1 * temp1 * gashc1 + gas2.amount() * temp2 * gas2.heat_cap()) / (gasc1 * gashc1 + gas2.amount() * gas2.heat_cap());
-}
-float get_pressure() {
-    return get_gas_mols() * R * temperature / volume;
 }
 float get_cur_range() {
     return sqrt((get_pressure() - tank_fragment_pressure) / tank_fragment_scale);
 }
 
-void do_plasma_fire() {
-    float old_heat_capacity = heat_capacity_cache;
-    float energy_released = 0.0;
-    float temperature_scale = 0.0;
-    if (temperature > plasma_upper_temperature) {
-        temperature_scale = 1.0;
-    } else {
-        temperature_scale = (temperature - fire_temp) / (plasma_upper_temperature - fire_temp);
-    }
-    if (temperature_scale > 0) {
-        float oxygen_burn_rate = oxygen_burn_rate_base - temperature_scale;
-        float plasma_burn_rate = temperature_scale * (oxygen.amount() > plasma.amount() * plasma_oxygen_fullburn ? plasma.amount() / plasma_burn_rate_delta : oxygen.amount() / plasma_oxygen_fullburn / plasma_burn_rate_delta);
-        if (plasma_burn_rate > minimum_heat_capacity) {
-            plasma_burn_rate = std::min(plasma_burn_rate, std::min(plasma.amount(), oxygen.amount() / oxygen_burn_rate));
-            float supersaturation = std::min(1.0f, std::max((oxygen.amount() / plasma.amount() - super_saturation_ends) / (super_saturation_threshold - super_saturation_ends), 0.0f));
-
-            plasma.update_amount(-plasma_burn_rate, heat_capacity_cache);
-
-            oxygen.update_amount(-plasma_burn_rate * oxygen_burn_rate, heat_capacity_cache);
-
-            float trit_delta = plasma_burn_rate * supersaturation;
-            tritium.update_amount(trit_delta, heat_capacity_cache);
-
-            float carbon_delta = plasma_burn_rate - trit_delta;
-            carbon_dioxide.update_amount(carbon_delta, heat_capacity_cache);
-
-            energy_released += fire_plasma_energy_released * plasma_burn_rate;
-        }
-    }
-    if (heat_capacity_cache > minimum_heat_capacity) {
-        temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
-    }
-}
-void do_trit_fire() {
-    float old_heat_capacity = heat_capacity_cache;
-    float energy_released = 0.f;
-    float burned_fuel = 0.f;
-    if (oxygen.amount() < tritium.amount() || minimum_tritium_oxyburn_energy > temperature * heat_capacity_cache) {
-        burned_fuel = std::min(tritium.amount(), oxygen.amount() / tritium_burn_oxy_factor);
-        float trit_delta = -burned_fuel;
-        tritium.update_amount(trit_delta, heat_capacity_cache);
-    } else {
-        burned_fuel = tritium.amount();
-        float trit_delta = -tritium.amount() / tritium_burn_trit_factor;
-
-        tritium.update_amount(trit_delta, heat_capacity_cache);
-        oxygen.update_amount(-tritium.amount(), heat_capacity_cache);
-
-        energy_released += fire_hydrogen_energy_released * burned_fuel * (tritium_burn_trit_factor - 1.f);
-    }
-    if (burned_fuel > 0.f) {
-        energy_released += fire_hydrogen_energy_released * burned_fuel;
-
-        water_vapour.update_amount(burned_fuel, heat_capacity_cache);
-    }
-    if (heat_capacity_cache > minimum_heat_capacity) {
-        temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
-    }
-}
-void doN2ODecomposition() {
-    float old_heat_capacity = heat_capacity_cache;
-    float& n2o = nitrous_oxide.amount();
-    float burned_fuel = n2o * N2Odecomposition_rate;
-    nitrous_oxide.update_amount(-burned_fuel, heat_capacity_cache);
-    nitrogen.update_amount(burned_fuel, heat_capacity_cache);
-    oxygen.update_amount(burned_fuel * 0.5f, heat_capacity_cache);
-    temperature *= old_heat_capacity / heat_capacity_cache;
-}
-void do_frezon_coolant() {
-    float old_heat_capacity = heat_capacity_cache;
-    float energy_modifier = 1.f;
-    float scale = (temperature - frezon_cool_lower_temperature) / (frezon_cool_mid_temperature - frezon_cool_lower_temperature);
-    if (scale > 1.f) {
-        energy_modifier = std::min(scale, frezon_cool_maximum_energy_modifier);
-        scale = 1.f;
-    }
-    float burn_rate = frezon.amount() * scale / frezon_cool_rate_modifier;
-    float energy_released = 0.f;
-    if (burn_rate > minimum_heat_capacity) {
-        float nit_delta = -std::min(burn_rate * frezon_nitrogen_cool_ratio, nitrogen.amount());
-        float frezon_delta = -std::min(burn_rate, frezon.amount());
-
-        nitrogen.update_amount(nit_delta, heat_capacity_cache);
-        frezon.update_amount(frezon_delta, heat_capacity_cache);
-        nitrous_oxide.update_amount(-nit_delta - frezon_delta, heat_capacity_cache);
-
-        energy_released = burn_rate * frezon_cool_energy_released * energy_modifier;
-    }
-    if (heat_capacity_cache > minimum_heat_capacity) {
-        temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
-    }
-}
-void do_nitrium_decomposition() {
-        float efficiency = std::min(temperature / 2984.0f, nitrium.amount());
-
-        if (nitrium.amount() - efficiency < 0)
-            return;
-
-        nitrium.update_amount(-efficiency, heat_capacity_cache);
-        water_vapour.update_amount(efficiency, heat_capacity_cache);
-        nitrogen.update_amount(efficiency, heat_capacity_cache);
-
-        float energy_released = efficiency * nitrium_decomposition_energy;
-        if (heat_capacity_cache > minimum_heat_capacity) {
-            temperature = (temperature * heat_capacity_cache + energy_released) / heat_capacity_cache;
-        }
-}
-
-void react() {
-    heat_capacity_cache = get_heat_capacity();
-    if (temperature < nitrium_decomp_temp && oxygen.amount() >= 0.01f && nitrium.amount() >= 0.01f) {
-        do_nitrium_decomposition();
-    }
-    if (temperature >= frezon_cool_temp && nitrogen.amount() >= 0.01f && frezon.amount() >= 0.01f) {
-        do_frezon_coolant();
-    }
-    if (temperature >= n2o_decomp_temp && nitrous_oxide.amount() >= 0.01f) {
-        doN2ODecomposition();
-    }
-    if (oxygen.amount() >= 0.01f && temperature >= fire_temp) {
-        if (tritium.amount() >= 0.01f) {
-            do_trit_fire();
-        }
-        if (plasma.amount() >= 0.01f) {
-            do_plasma_fire();
-        }
-    }
-}
 void tank_check_status() {
     float pressure = get_pressure();
     if (pressure > tank_leak_pressure) {
