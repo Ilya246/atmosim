@@ -1081,7 +1081,7 @@ struct optimizer {
             }
             if (!any_valid) {
                 if (log_level >= 1) {
-                    cout << "Failed to find any viable bomb, retrying sample 1..." << endl;
+                    cout << "Failed to find any viable result, retrying sample 1..." << endl;
                 }
                 --samp_idx;
                 s_time = main_clock.now();
@@ -1091,7 +1091,7 @@ struct optimizer {
                 if (log_level >= 1) {
                     cout << "\nSampling round " << samp_idx + 1 << " complete" << endl;
                     bomb_data data = get_data(best_arg, get<1>(args));
-                    print_bomb(data, "Best bomb found: ");
+                    print_bomb(data, "Best so far: ");
                 }
                 // sampling round done, halve sampling area and go again
                 for (size_t i = 0; i < current.size(); ++i) {
