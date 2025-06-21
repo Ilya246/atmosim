@@ -1,5 +1,6 @@
 #include "argparse/args.hpp"
 #include "argparse/read.hpp"
+#include "include/constants.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -143,9 +144,6 @@ float frand() {
     return distribution(gen);
 }
 
-
-float heat_scale = 1.0;
-
 const int gas_count = 9;
 float gas_amounts[gas_count]{};
 float gas_heat_caps[gas_count]{20.f * heat_scale, 30.f * heat_scale, 200.f * heat_scale, 10.f * heat_scale, 40.f * heat_scale, 30.f * heat_scale, 600.f * heat_scale, 40.f * heat_scale, 10.f * heat_scale};
@@ -227,7 +225,7 @@ enum tank_state {
     exploded = 2
 };
 
-float temperature = 293.15, volume = 5.0, pressure_cap = 1013.25, pipe_pressure_cap = 4500.0, required_transfer_volume = 1400.0,
+float temperature = 293.15, volume = 5.0,
 radius = 0.0,
 leaked_heat = 0.0;
 tank_state cur_state = intact;
@@ -238,32 +236,11 @@ bool step_target_temp = false,
 check_status = true,
 simple_output = false, silent = false,
 optimise_int = false, optimise_maximise = true, optimise_before = false;
-float TCMB = 2.7, T0C = 273.15, T20C = 293.15,
-fire_temp = 373.15, minimum_heat_capacity = 0.0003, one_atmosphere = 101.325, R = 8.314462618,
-tank_leak_pressure = 30.0 * one_atmosphere, tank_rupture_pressure = 40.0 * one_atmosphere, tank_fragment_pressure = 50.0 * one_atmosphere, tank_fragment_scale = 2.0 * one_atmosphere,
-fire_hydrogen_energy_released = 284000.0 * heat_scale, minimum_tritium_oxyburn_energy = 143000.0, tritium_burn_oxy_factor = 100.0, tritium_burn_trit_factor = 10.0,
-fire_plasma_energy_released = 160000.0 * heat_scale, super_saturation_threshold = 96.0, super_saturation_ends = super_saturation_threshold / 3.0, oxygen_burn_rate_base = 1.4, plasma_upper_temperature = 1643.15, plasma_oxygen_fullburn = 10.0, plasma_burn_rate_delta = 9.0,
-n2o_decomp_temp = 850.0, N2Odecomposition_rate = 0.5,
-frezon_cool_temp = 23.15, frezon_cool_lower_temperature = 23.15, frezon_cool_mid_temperature = 373.15, frezon_cool_maximum_energy_modifier = 10.0, frezon_cool_rate_modifier = 20.0, frezon_nitrogen_cool_ratio = 5.0, frezon_cool_energy_released = -600000.0 * heat_scale,
-nitrium_decomp_temp = T0C + 70.0, nitrium_decomposition_energy = 30000.0,
-tickrate = 0.5,
-lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.05, ratio_step = 1.005, ratio_bounds = 20.0,
+float lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.05, ratio_step = 1.005, ratio_bounds = 20.0,
 max_runtime = 3.0, bounds_scale = 0.5, stepping_scale = 0.75,
 heat_capacity_cache = 0.0;
 vector<gas_type> active_gases;
-string rotator = "|/-\\";
 size_t sample_rounds = 3;
-int rotator_chars = 4;
-int rotator_index = rotator_chars - 1;
-long long progress_bar_spacing = 4817;
-// ETA values are in ms
-const long long progress_update_spacing = progress_bar_spacing * 25;
-const int progress_polls = 20;
-const long long progress_poll_window = progress_update_spacing * progress_polls;
-long long progress_poll_times[progress_polls];
-long long progress_poll = 0;
-long long last_speed = 0;
-chrono::high_resolution_clock main_clock;
 
 long long iters = 0;
 chrono::time_point start_time(main_clock.now());
@@ -279,11 +256,6 @@ bool restrictions_met(vector<shared_ptr<base_restriction>>& restrictions) {
         }
     }
     return true;
-}
-
-char get_rotator() {
-    rotator_index = (rotator_index + 1) % rotator_chars;
-    return rotator[rotator_index];
 }
 
 unordered_map<string, dyn_val> sim_params{
@@ -888,24 +860,6 @@ struct bomb_data {
 void print_bomb(const bomb_data& bomb, const string& what, bool extensive = false) {
     cout << what << (simple_output ? bomb.print_very_simple() : (extensive ? bomb.print_full() : bomb.print_inline())) << endl;
 }
-string get_progress_bar(long progress, long size) {
-    string progress_bar = '[' + string(progress, '#') + string(size - progress, ' ') + ']';
-    return progress_bar;
-}
-void print_progress(long long iters, auto start_time) {
-    printf("%lli Iterations %c ", iters, get_rotator());
-    if (iters % progress_update_spacing == 0) {
-        long long cur_time = chrono::duration_cast<chrono::milliseconds>(main_clock.now() - start_time).count();
-        progress_poll_times[progress_poll] = cur_time;
-        progress_poll = (progress_poll + 1) % progress_polls;
-        long long poll_time = progress_poll_times[progress_poll];
-        long long time_passed = cur_time - poll_time;
-        float progress_passed = std::min(progress_poll_window, iters);
-        last_speed = (float)progress_passed / time_passed * 1000.f;
-    }
-    printf("[Speed: %lli iters/s]\r", last_speed);
-    cout.flush();
-}
 
 float optimise_stat() {
     return optimise_val.type == float_val ? get_dyn<float>(optimise_val) : get_dyn<int>(optimise_val);
@@ -1191,10 +1145,7 @@ opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_type>&,
     const vector<gas_type>& mix_gases = get<0>(args);
     const vector<gas_type>& primer_gases = get<1>(args);
     bool measure_before = get<2>(args);
-    ++iters;
-    if (iters % progress_bar_spacing == 0) {
-        print_progress(iters, start_time);
-    }
+
     float fuel_pressure, stat;
     reset();
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
