@@ -21,9 +21,9 @@ TEST_CASE("Gas System Fundamentals") {
 
     SECTION("Utility functions") {
         REQUIRE(to_mols(101.325f, 1.0f, 273.15f) == Approx(0.044615f));
-        REQUIRE(to_pressure(1.0f, 1.0f, 273.15f) == Approx(2279.57f).epsilon(0.01));
+        REQUIRE(to_pressure(1.0f, 1.0f, 273.15f) == Approx(2271.03f).epsilon(0.01));
         REQUIRE(to_volume(101.325f, 1.0f, 273.15f) == Approx(22.414f).epsilon(0.01));
-        REQUIRE(to_mix_temp(1000, 2, 300, 2000, 1, 400) == Approx(333.333f));
+        REQUIRE(to_mix_temp(2.0f, 1.0f, 300.0f, 1.0f, 1.0f, 400.0f) == Approx(333.333f));
     }
 }
 
