@@ -50,6 +50,10 @@ void gas_mixture::adjust_amount_of(gas_ref gas, float by) {
     amounts[gas.idx] += by;
 }
 
+void gas_mixture::adjust_pressure_of(gas_ref gas, float by) {
+    amounts[gas.idx] += to_mols(by, volume, temperature);
+}
+
 gas_mixture& gas_mixture::operator+=(const gas_mixture& rhs) {
     float energy = heat_energy();
     for (size_t i = 0; i < gas_count; ++i) {
@@ -58,6 +62,19 @@ gas_mixture& gas_mixture::operator+=(const gas_mixture& rhs) {
     }
     temperature = (energy + rhs.heat_energy()) / heat_capacity();
     return *this;
+}
+
+std::string gas_mixture::to_string() const {
+    std::string out_str;
+    for (size_t i = 0; i < gas_count; ++i) {
+        gas_ref gas = {i};
+        float amt = amount_of(gas);
+        if (amt > 0.f) {
+            if (!out_str.empty()) out_str += ' ';
+            out_str += std::string(gas.name()) + " " + std::to_string(amt) + "mol";
+        }
+    }
+    return out_str;
 }
 
 // UP TO DATE AS OF: 21.06.2025

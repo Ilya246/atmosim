@@ -1,14 +1,16 @@
 #include <cmath>
 
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <argparse/args.hpp>
 
 #include "gas.hpp"
+#include "tank.hpp"
 
 using Catch::Approx;
 
-TEST_CASE("Gas System Fundamentals") {
+TEST_CASE("Gas system fundamentals") {
     SECTION("Gas index mapping") {
         REQUIRE(gas_count == 9);
         REQUIRE(string_gas_map.size() == gas_count);
@@ -40,8 +42,23 @@ TEST_CASE("Gas System Fundamentals") {
     }
 }
 
-TEST_CASE("Gas Reactions") {
-    gas_mixture mix(1.0f);
+TEST_CASE("Gas system argparse test") {
+    gas_ref read_gas;
+
+    SECTION("Gas read") {
+        std::vector<std::shared_ptr<argp::base_argument>> args = {
+            argp::make_argument("gas", "", "", read_gas)
+        };
+
+        char* argv[] = {(char*)"./atmosim", (char*)"-gas=tritium"};
+        argp::parse_arguments(args, 2, argv);
+
+        REQUIRE(read_gas == tritium);
+    }
+}
+
+TEST_CASE("Gas reactions") {
+    gas_mixture mix(tank_volume);
 
     // UP TO DATE AS OF: 21.06.2025
     SECTION("Plasma fire reaction") {
@@ -77,14 +94,14 @@ TEST_CASE("Gas Reactions") {
     SECTION("Tritium fire reaction") {
         mix.adjust_amount_of(oxygen, 20.0f);
         mix.adjust_amount_of(tritium, 2.0f);
-        mix.temperature = 400.0f;
+        mix.temperature = 12000.0f;
 
         mix.reaction_tick();
 
         REQUIRE(mix.amount_of(tritium) < 2.0f);
         REQUIRE(mix.amount_of(oxygen) < 20.0f);
         REQUIRE(mix.amount_of(water_vapour) > 0.0f);
-        REQUIRE(mix.temperature > 400.0f);
+        REQUIRE(mix.temperature > 12000.0f);
     }
 
     // UP TO DATE AS OF: 21.06.2025
@@ -125,5 +142,54 @@ TEST_CASE("Gas Reactions") {
         REQUIRE(mix.amount_of(water_vapour) > 0.0f);
         REQUIRE(mix.amount_of(nitrogen) > 0.0f);
         REQUIRE(mix.temperature > 200.0f);
+    }
+}
+
+TEST_CASE("Tank simulation validation") {
+    gas_tank tank;
+
+    // UP TO DATE AS OF: 21.06.2025
+    SECTION("ticks-13r-22.5s-PT+O") {
+        float mix_pressure = 684.853f;
+        float mix_temp = 382.42734f;
+        float plasma_frac = 0.52208485f;
+        float tritium_frac = 1.f - plasma_frac;
+        float radius_expected = 13.02f;
+        size_t ticks_expected = 45;
+
+        tank.mix.temperature = mix_temp;
+        tank.mix.adjust_pressure_of(plasma, mix_pressure * plasma_frac);
+        tank.mix.adjust_pressure_of(tritium, mix_pressure * tritium_frac);
+        tank.fill_with(oxygen, T20C);
+
+        size_t ticks = tank.tick_n(ticks_expected);
+
+        REQUIRE(tank.state == tank.st_exploded);
+        REQUIRE(tank.radius_cache == Catch::Approx(radius_expected).epsilon(0.01f));
+        REQUIRE(ticks == ticks_expected);
+    }
+
+    // UP TO DATE AS OF: 21.06.2025
+    SECTION("ticks-26r-8.5s-O/T/N2+F") {
+        float mix_pressure = 726.60645f;
+        float mix_temp = 112.840805f;
+        float thir_temp = 542.761f;
+        float oxygen_frac = 0.14539835f;
+        float tritium_frac = 0.16864481f;
+        float oxide_frac = 0.6859568f;
+        float radius_expected = 26.13f;
+        size_t ticks_expected = 17;
+
+        tank.mix.temperature = mix_temp;
+        tank.mix.adjust_pressure_of(oxygen, mix_pressure * oxygen_frac);
+        tank.mix.adjust_pressure_of(tritium, mix_pressure * tritium_frac);
+        tank.mix.adjust_pressure_of(nitrous_oxide, mix_pressure * oxide_frac);
+        tank.fill_with(frezon, thir_temp);
+
+        size_t ticks = tank.tick_n(ticks_expected);
+
+        REQUIRE(tank.state == tank.st_exploded);
+        REQUIRE(tank.radius_cache == Catch::Approx(radius_expected).epsilon(0.01f));
+        REQUIRE(ticks == ticks_expected);
     }
 }

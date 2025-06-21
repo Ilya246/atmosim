@@ -289,7 +289,8 @@ struct optimizer {
               const vector<float>& i_exp_step,
               bool maxm,
               T i_args,
-              chrono::duration<float> i_max_duration = chrono::duration<float>(max_runtime)) :
+              chrono::duration<float> i_max_duration = chrono::duration<float>(max_runtime))
+    :
               funct(func),
               args(current, i_args),
               lower_bounds(lowerb),
@@ -607,41 +608,6 @@ bomb_data get_data(const vector<float>& in_args, tuple<const vector<gas_type>&, 
     return bomb;
 }
 
-bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& primer_gases, float mixt1, float mixt2, float thirt1, float thirt2, bool maximise, bool measure_before) {
-    size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
-    size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
-    size_t num_params = 3 + num_mix_ratios + num_primer_ratios;
-
-    vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1};
-    lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
-    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2};
-    if (!step_target_temp) {
-        upper_bounds[0] = lower_bounds[0];
-    }
-    for (size_t i = 0; i < num_params - 3; ++i) {
-        lower_bounds.push_back(1.f / ratio_bounds);
-        upper_bounds.push_back(ratio_bounds);
-    }
-
-    vector<float> min_l_step(lower_bounds.size(), 0.f);
-    vector<float> min_e_step(lower_bounds.size(), 0.f);
-    for (size_t i = 0; i < 3; ++i) {
-        min_l_step[i] = temperature_step_min;
-        min_e_step[i] = temperature_step;
-    }
-    for (size_t i = 3; i < num_params; ++i) {
-        min_l_step[i] = 0.f;
-        min_e_step[i] = ratio_step;
-    }
-
-    optimizer<tuple<const vector<gas_type>&, const vector<gas_type>&, bool>, opt_val_wrap> optim(do_sim, lower_bounds, upper_bounds, min_l_step, min_e_step, maximise, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
-
-    optim.find_best();
-
-    vector<float> in_args = optim.best_arg;
-    return get_data(in_args, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
-}
-
 int main(int argc, char* argv[]) {
     vector<gas_ref> mix_gases;
     vector<gas_ref> primer_gases;
@@ -743,6 +709,39 @@ int main(int argc, char* argv[]) {
         cout << "Gases: " << list_gases() << endl;
         return 0;
     }
+
+    size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
+    size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
+    size_t num_params = 3 + num_mix_ratios + num_primer_ratios;
+
+    vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1};
+    lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
+    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2};
+    if (!step_target_temp) {
+        upper_bounds[0] = lower_bounds[0];
+    }
+    for (size_t i = 0; i < num_params - 3; ++i) {
+        lower_bounds.push_back(1.f / ratio_bounds);
+        upper_bounds.push_back(ratio_bounds);
+    }
+
+    vector<float> min_l_step(lower_bounds.size(), 0.f);
+    vector<float> min_e_step(lower_bounds.size(), 0.f);
+    for (size_t i = 0; i < 3; ++i) {
+        min_l_step[i] = temperature_step_min;
+        min_e_step[i] = temperature_step;
+    }
+    for (size_t i = 3; i < num_params; ++i) {
+        min_l_step[i] = 0.f;
+        min_e_step[i] = ratio_step;
+    }
+
+    optimizer<tuple<const vector<gas_type>&, const vector<gas_type>&, bool>, opt_val_wrap> optim(do_sim, lower_bounds, upper_bounds, min_l_step, min_e_step, maximise, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
+
+    optim.find_best();
+
+    vector<float> in_args = optim.best_arg;
+    return get_data(in_args, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
 
     bomb_data best_bomb = test_mix(mix_gases, primer_gases, mixt1, mixt2, thirt1, thirt2, optimise_maximise, optimise_before);
     cout.clear();

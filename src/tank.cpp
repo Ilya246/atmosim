@@ -7,6 +7,8 @@ float gas_tank::calc_radius(float pressure) {
 }
 
 bool gas_tank::tick() {
+    mix.reaction_tick();
+
     float pressure = mix.pressure();
     if (pressure > tank_leak_pressure) {
         if (pressure > tank_rupture_pressure) {
@@ -14,12 +16,12 @@ bool gas_tank::tick() {
                 for (int i = 0; i < 3; ++i) {
                     mix.reaction_tick();
                 }
-                state = exploded;
+                state = st_exploded;
                 radius_cache = calc_radius(mix.pressure());
                 return false;
             }
             if (integrity <= 0) {
-                state = ruptured;
+                state = st_ruptured;
                 radius_cache = 0.0;
                 return false;
             }
@@ -41,9 +43,21 @@ bool gas_tank::tick() {
     return true;
 }
 
-bool gas_tank::tick_n(size_t ticks_limit) {
+size_t gas_tank::tick_n(size_t ticks_limit) {
     for (size_t i = 0; i < ticks_limit; ++i) {
-        if (!tick()) return false;
+        if (!tick()) return i + 1;
     }
-    return true;
+    return ticks_limit;
+}
+
+void gas_tank::fill_with(gas_ref gas, float temperature) {
+    gas_mixture fill_mix(mix.volume);
+    fill_mix.temperature = temperature;
+    fill_mix.adjust_pressure_of(gas, pressure_cap - mix.pressure());
+
+    mix += fill_mix;
+}
+
+void gas_tank::fill_with(gas_ref gas) {
+    fill_with(gas, mix.temperature);
 }

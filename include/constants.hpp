@@ -2,7 +2,7 @@
 
 #include <chrono>
 
-inline const float heat_scale = 8.0,
+inline const float heat_scale = 1.0 / 8.0,
 
 pressure_cap = 1013.25,
 pipe_pressure_cap = 4500.0,
@@ -26,7 +26,7 @@ tank_volume = 5.0,
 reaction_min_gas = 0.01,
 
 fire_hydrogen_energy_released = 284000.0 * heat_scale,
-minimum_tritium_oxyburn_energy = 143000.0,
+minimum_tritium_oxyburn_energy = 143000.0 * heat_scale,
 tritium_burn_oxy_factor = 100.0,
 tritium_burn_trit_factor = 10.0,
 

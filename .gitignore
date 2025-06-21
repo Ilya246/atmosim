@@ -10,5 +10,4 @@ fastmosim
 *.kate-swp
 .aider*
 .vscode
-build
 out/*

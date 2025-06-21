@@ -15,7 +15,7 @@ LIBS := $(wildcard $(LIB_DIR)/**/*.cpp)
 # Targets
 EXEC := out/atmosim
 WIN_EXEC := out/atmosim.exe
-TEST_EXEC := out/gas_tests
+TEST_EXEC := out/tests/gas_tests
 
 .PHONY: all build win_build deploy test clean profile
 
@@ -28,19 +28,19 @@ win_build: $(WIN_EXEC)
 $(EXEC): $(SRCS)
 	mkdir -p out
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@
-	@echo "Built Linux executable"
+	@echo "Built executable"
 
 $(WIN_EXEC): $(SRCS)
 	mkdir -p out
 	$(CROSS_PREFIX)$(CXX) $(CXXFLAGS) $(LDFLAGS) --static $^ -o $@
-	@echo "Built Windows executable"
+	@echo "Cross-built Windows executable"
 
 test: $(TEST_EXEC)
-	./$(TEST_EXEC) --success
+	./$(TEST_EXEC)
 
 $(TEST_EXEC): $(TEST_SRCS) $(SRCS)
-	mkdir -p out
-	$(CXX) $(CXXFLAGS) $^ -o $@ -lCatch2Main -lCatch2
+	mkdir -p out/tests
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@ -lCatch2Main -lCatch2
 	@echo "Built test suite"
 
 deploy: win_build build

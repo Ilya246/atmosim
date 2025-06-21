@@ -46,6 +46,10 @@ struct gas_ref {
     std::string_view name() const {
         return gases[idx].name;
     }
+
+    bool operator==(const gas_ref& rhs) {
+        return idx == rhs.idx;
+    }
 };
 
 inline const std::map<std::string, gas_ref> string_gas_map = []() {
@@ -86,8 +90,11 @@ struct gas_mixture {
     float pressure() const;
 
     void adjust_amount_of(gas_ref gas, float by);
+    void adjust_pressure_of(gas_ref gas, float by);
 
     gas_mixture& operator+=(const gas_mixture& rhs);
+
+    std::string to_string() const;
 
     // do gas reactions
     void reaction_tick();
