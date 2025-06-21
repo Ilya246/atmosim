@@ -3,32 +3,31 @@ STRIP := strip
 
 STANDARD := c++20
 SHAREDFLAGS ?= -Ofast -flto=auto -Wall -Wextra -pedantic -g
-CXXFLAGS ?= -c -std=$(STANDARD)
+CXXFLAGS ?= $(SHAREDFLAGS) -c -std=$(STANDARD)
 override CXXFLAGS += -Ilibs -Iinclude
 LDFLAGS ?= $(SHAREDFLAGS)
+
+TESTLDFLAGS ?= $(LDFLAGS) -lCatch2Main -lCatch2
 
 SRC := src
 OBJ := out/obj
 BUILD := out
 BINARY := atmosim
 
+TESTSRC := tests
+TESTBINARY := tests
+
 sources := $(shell find $(SRC) -type f -name "*.cpp")
 objects := $(sources:$(SRC)/%.cpp=$(OBJ)/%.o)
 depends := $(sources:$(SRC)/%.cpp=$(OBJ)/%.d)
 
-all: $(BUILD)/$(BINARY)
+test_sources := $(shell find $(TESTSRC) -type f -name "*.cpp")
+test_objects := $(filter-out $(OBJ)/main.o, $(objects)) $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.o)
+test_depends := $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.d)
 
-$(OBJ)/%.o: $(SRC)/%.cpp
-	@printf "CC\t%s\n" $@
-	@mkdir -p $(@D)
-	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
+build: $(BUILD)/$(BINARY)
 
--include $(depends)
-
-$(BUILD)/$(BINARY): $(objects)
-	@printf "LD\t%s\n" $@
-	@mkdir -p $(BUILD)
-	@$(CXX) $^ -o $@ $(LDFLAGS)
+all: build test
 
 clean:
 	rm -rf $(OBJ)
@@ -36,7 +35,29 @@ clean:
 strip: all
 	$(STRIP) $(BUILD)/$(BINARY)
 
-run: all
-	@(BUILD)/$(BINARY)
+test: $(BUILD)/$(TESTBINARY)
+	@$(BUILD)/$(TESTBINARY)
 
-.PHONY: all
+$(OBJ)/%.o: $(SRC)/%.cpp
+	@printf "CC\t%s\n" $@
+	@mkdir -p $(@D)
+	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
+
+$(OBJ)/$(TESTSRC)/%.o: $(TESTSRC)/%.cpp
+	@printf "CC\t%s\n" $@
+	@mkdir -p $(@D)
+	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
+
+-include $(depends) $(test_depends)
+
+$(BUILD)/$(BINARY): $(objects)
+	@printf "LD\t%s\n" $@
+	@mkdir -p $(BUILD)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
+
+$(BUILD)/$(TESTBINARY): $(test_objects)
+	@printf "LD\t%s\n" $@
+	@mkdir -p $(BUILD)
+	@$(CXX) $^ -o $@ $(TESTLDFLAGS)
+
+.PHONY: all build clean strip test
