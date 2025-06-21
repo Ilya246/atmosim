@@ -5,8 +5,6 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
-#include <random>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -52,28 +50,6 @@ T get_input(const string& what, const string& invalid_err = "Invalid value. Try 
         }
     }
     return val;
-}
-
-// returns true if user entered nothing, false otherwise
-bool await_input() {
-    return flush_stream(cin).peek() == '\n';
-}
-
-// evaluates a string as an [y/n] option
-bool eval_opt(const string& opt, bool default_opt = true) {
-    return opt == "y" || opt == "Y" // is it Y?
-    ||    (opt != "n" && opt != "N" && default_opt); // it's not Y, so check if it's not N, and if so, return default
-}
-
-// requests an [y/n] input from user
-bool get_opt(const string& what, bool default_opt = true) {
-    cout << what << (default_opt ? " [Y/n] " : " [y/N] ");
-
-    if (await_input()) return default_opt; // did the user just press enter?
-
-    string opt; // we have non-empty input so check what it is
-    cin >> opt;
-    return eval_opt(opt, default_opt);
 }
 
 float get_gasmix_spec_heat(const vector<gas_ref>& gases, const vector<float>& ratios) {

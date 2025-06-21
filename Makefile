@@ -1,65 +1,42 @@
-# Compiler settings
-CXX := g++
-CXXFLAGS := -std=c++20 -Ofast -flto=auto -Wall -Wextra -pedantic -Iinclude -Ilibs
-LDFLAGS := -flto=auto
-CROSS_PREFIX := x86_64-w64-mingw32-
-SRC_DIR := src
-TEST_DIR := tests
-LIB_DIR := libs
+CXX ?= g++
+STRIP := strip
 
-# File locations
-SRCS := $(wildcard $(SRC_DIR)/*.cpp)
-TEST_SRCS := $(wildcard $(TEST_DIR)/*.cpp)
-LIBS := $(wildcard $(LIB_DIR)/**/*.cpp)
+STANDARD := c++20
+SHAREDFLAGS ?= -Ofast -flto=auto -Wall -Wextra -pedantic -g
+CXXFLAGS ?= -c -std=$(STANDARD)
+override CXXFLAGS += -Ilibs -Iinclude
+LDFLAGS ?= $(SHAREDFLAGS)
 
-# Targets
-EXEC := out/atmosim
-WIN_EXEC := out/atmosim.exe
-TEST_EXEC := out/tests/gas_tests
+SRC := src
+OBJ := out/obj
+BUILD := out
+BINARY := atmosim
 
-.PHONY: all build win_build deploy test clean profile
+sources := $(shell find $(SRC) -type f -name "*.cpp")
+objects := $(sources:$(SRC)/%.cpp=$(OBJ)/%.o)
+depends := $(sources:$(SRC)/%.cpp=$(OBJ)/%.d)
 
-all: build test
+all: $(BUILD)/$(BINARY)
 
-build: $(EXEC)
+$(OBJ)/%.o: $(SRC)/%.cpp
+	@printf "CC\t%s\n" $@
+	@mkdir -p $(@D)
+	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
 
-win_build: $(WIN_EXEC)
+-include $(depends)
 
-$(EXEC): $(SRCS)
-	mkdir -p out
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@
-	@echo "Built executable"
-
-$(WIN_EXEC): $(SRCS)
-	mkdir -p out
-	$(CROSS_PREFIX)$(CXX) $(CXXFLAGS) $(LDFLAGS) --static $^ -o $@
-	@echo "Cross-built Windows executable"
-
-test: $(TEST_EXEC)
-	./$(TEST_EXEC)
-
-# Test sources excluding main.cpp
-TEST_SRC_DEPS := $(TEST_SRCS) $(filter-out src/main.cpp, $(SRCS))
-
-$(TEST_EXEC): $(TEST_SRC_DEPS)
-	mkdir -p out/tests
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@ -lCatch2Main -lCatch2
-	@echo "Built test suite"
-
-deploy: win_build build
-	mkdir -p deploy
-	strip -s $(WIN_EXEC) -o deploy/$(notdir $(WIN_EXEC))
-	strip -s $(EXEC) -o deploy/$(notdir $(EXEC))
-	cd deploy && zip -q atmosim_windows.zip $(notdir $(WIN_EXEC))
-	cd deploy && tar -czf atmosim_linux.tar.gz $(notdir $(EXEC))
-	@echo "Created deployment packages"
-
-profile: CXXFLAGS += -g
-profile: build
-	valgrind --dump-instr=yes --collect-jumps=yes --tool=callgrind \
-	./$(EXEC) --simpleout --ticks 120 -mg=[plasma,tritium] -pg=[oxygen] \
-	-m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 --silent
-	kcachegrind callgrind.out.* &
+$(BUILD)/$(BINARY): $(objects)
+	@printf "LD\t%s\n" $@
+	@mkdir -p $(BUILD)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 
 clean:
-	rm -rf out/* deploy/*
+	rm -rf $(OBJ)
+
+strip: all
+	$(STRIP) $(BUILD)/$(BINARY)
+
+run: all
+	@(BUILD)/$(BINARY)
+
+.PHONY: all
