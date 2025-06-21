@@ -1,6 +1,6 @@
 # Compiler settings
 CXX := g++
-CXXFLAGS := -std=c++20 -Ofast -flto=auto -Wall -Wextra -pedantic -Iinclude
+CXXFLAGS := -std=c++20 -Ofast -flto=auto -Wall -Wextra -pedantic -Iinclude -Ilibs
 LDFLAGS := -flto=auto
 CROSS_PREFIX := x86_64-w64-mingw32-
 SRC_DIR := src
