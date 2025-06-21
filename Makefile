@@ -13,9 +13,9 @@ TEST_SRCS := $(wildcard $(TEST_DIR)/*.cpp)
 LIBS := $(wildcard $(LIB_DIR)/**/*.cpp)
 
 # Targets
-EXEC := atmosim
-WIN_EXEC := atmosim.exe
-TEST_EXEC := gas_tests
+EXEC := out/atmosim
+WIN_EXEC := out/atmosim.exe
+TEST_EXEC := out/gas_tests
 
 .PHONY: all build win_build deploy test clean profile
 
@@ -26,10 +26,12 @@ build: $(EXEC)
 win_build: $(WIN_EXEC)
 
 $(EXEC): $(SRCS)
+	mkdir -p out
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@
 	@echo "Built Linux executable"
 
 $(WIN_EXEC): $(SRCS)
+	mkdir -p out
 	$(CROSS_PREFIX)$(CXX) $(CXXFLAGS) $(LDFLAGS) --static $^ -o $@
 	@echo "Built Windows executable"
 
@@ -37,15 +39,16 @@ test: $(TEST_EXEC)
 	./$(TEST_EXEC) --success
 
 $(TEST_EXEC): $(TEST_SRCS) $(SRCS)
+	mkdir -p out
 	$(CXX) $(CXXFLAGS) $^ -o $@ -lCatch2Main -lCatch2
 	@echo "Built test suite"
 
 deploy: win_build build
 	mkdir -p deploy
-	strip -s $(WIN_EXEC) -o deploy/$(WIN_EXEC)
-	strip -s $(EXEC) -o deploy/$(EXEC)
-	cd deploy && zip -q atmosim_windows.zip $(WIN_EXEC)
-	cd deploy && tar -czf atmosim_linux.tar.gz $(EXEC)
+	strip -s $(WIN_EXEC) -o deploy/$(notdir $(WIN_EXEC))
+	strip -s $(EXEC) -o deploy/$(notdir $(EXEC))
+	cd deploy && zip -q atmosim_windows.zip $(notdir $(WIN_EXEC))
+	cd deploy && tar -czf atmosim_linux.tar.gz $(notdir $(EXEC))
 	@echo "Created deployment packages"
 
 profile: CXXFLAGS += -g
@@ -56,4 +59,4 @@ profile: build
 	kcachegrind callgrind.out.* &
 
 clean:
-	rm -f $(EXEC) $(WIN_EXEC) $(TEST_EXEC) deploy/*.zip deploy/*.tar.gz
+	rm -rf out deploy
