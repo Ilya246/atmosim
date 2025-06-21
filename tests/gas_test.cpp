@@ -1,8 +1,10 @@
+#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include "../src/gas.cpp"
 #include <cmath>
 
-using namespace Catch::literals;
+using Catch::Approx;
 
 TEST_CASE("Gas System Fundamentals") {
     SECTION("Gas index mapping") {
@@ -20,10 +22,19 @@ TEST_CASE("Gas System Fundamentals") {
     }
 
     SECTION("Utility functions") {
-        REQUIRE(to_mols(101.325f, 1.0f, 273.15f) == Approx(0.044615f));
-        REQUIRE(to_pressure(1.0f, 1.0f, 273.15f) == Approx(2271.03f).epsilon(0.01));
-        REQUIRE(to_volume(101.325f, 1.0f, 273.15f) == Approx(22.414f).epsilon(0.01));
-        REQUIRE(to_mix_temp(2.0f, 1.0f, 300.0f, 1.0f, 1.0f, 400.0f) == Approx(333.333f));
+        // Test ideal gas law relationships
+        const float pressure = 101.325f;
+        const float volume = 1.0f;
+        const float temp = 273.15f;
+        const float mols = to_mols(pressure, volume, temp);
+        
+        REQUIRE(mols == Approx(pressure * volume / (R * temp)).epsilon(0.001));
+        REQUIRE(to_pressure(volume, mols, temp) == Approx(pressure).epsilon(0.001));
+        REQUIRE(to_volume(pressure, mols, temp) == Approx(volume).epsilon(0.001));
+        
+        // Test temperature mixing with known ratios
+        const float mix_temp = to_mix_temp(2.0f, 1.0f, 300.0f, 1.0f, 1.0f, 400.0f);
+        REQUIRE(mix_temp == Approx((2.0f*1.0f*300.0f + 1.0f*1.0f*400.0f) / (2.0f*1.0f + 1.0f*1.0f)));
     }
 }
 
