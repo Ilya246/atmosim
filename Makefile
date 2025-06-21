@@ -38,7 +38,10 @@ $(WIN_EXEC): $(SRCS)
 test: $(TEST_EXEC)
 	./$(TEST_EXEC)
 
-$(TEST_EXEC): $(TEST_SRCS) $(SRCS)
+# Test sources excluding main.cpp
+TEST_SRC_DEPS := $(TEST_SRCS) $(filter-out src/main.cpp, $(SRCS))
+
+$(TEST_EXEC): $(TEST_SRC_DEPS)
 	mkdir -p out/tests
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@ -lCatch2Main -lCatch2
 	@echo "Built test suite"
