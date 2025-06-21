@@ -831,13 +831,6 @@ struct bomb_data {
         return out_str;
     }
 
-    // format:
-    /*
-        STATS: time 8.5s, explosion radius 26.1til
-        MIX: 14.538% oxygen | 16.863% tritium | 68.598% nitrous_oxide | at 112.84K | at 726.6kPa
-        CAN: 100% frezon | at 542.78K | above 1304.5kPa
-        minimum produced amount required: 158.2mol oxygen | 183.5mol tritium | 746.5mol nitrous_oxide | 404.7mol frezon
-    */
     string print_full() const {
         string out_str;
 
