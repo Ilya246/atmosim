@@ -1098,8 +1098,9 @@ struct optimizer {
                     float& lowerb = cur_lower_bounds[i];
                     float& upperb = cur_upper_bounds[i];
                     const float& best_at = best_arg[i];
-                    lowerb += (best_at - lowerb) * (1.f - bounds_scale);
-                    upperb += (best_at - upperb) * (1.f - bounds_scale);
+                    float c_scale = pow(bounds_scale, samp_idx + 1);
+                    lowerb = lower_bounds[i] + (best_at - lower_bounds[i]) * (1.f - c_scale);
+                    upperb = upper_bounds[i] + (best_at - upper_bounds[i]) * (1.f - c_scale);
                     // scale stepping less
                     step_scale *= stepping_scale;
                 }
@@ -1358,16 +1359,15 @@ int main(int argc, char* argv[]) {
         "\n"
         "Example usage:\n"
         "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s`\n"
-        "  This should find you a ~13.2 radius maxcap recipe. Experiment with other parameters.\n"
+        "  This should find you a ~13.5 radius maxcap recipe. Experiment with other parameters.\n"
         "  For --restrictpre (-rb) and --restrictpost (-ra):\n"
         "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s -ra=[[radius,0,11],[ticks,20,44]]`\n"
         "\n"
         "Tips and tricks\n"
-        "  Using the -s flag may produce considerably better results if you're willing to wait.\n"
-        "  Additionally, consider tuning down amplif, part of the utility's optimiser, with the --maxamplif flag.\n"
-        "  Consider restricting temperature ranges if it's taking a long time to run.\n"
+        "  Consider using the -s flag for radius-optimised bombs. Not recommended for ticks-optimised bombs.\n"
+        "  Additionally, consider letting the optimiser think for longer using the -rt and -sr flags.\n"
         "  If you want a long-fuse bomb, try using the -p flag to optimise to maximise ticks and the -r flag to restrict radius to be above a desired value.\n"
-        "  Remember to use the -t flag to raise maximum alotted ticks if you're finding long-fuse bombs.\n"
+        "  Remember to use the -t flag to raise maximum alotted ticks if you're trying to find long-fuse bombs.\n"
         "\n"
         "  Brought to you by Ilya246 and friends"
     );
