@@ -1,4 +1,4 @@
-#include <cmath>
+#include <vector>
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch_test_macros.hpp>
@@ -43,17 +43,25 @@ TEST_CASE("Gas system fundamentals") {
 }
 
 TEST_CASE("Gas system argparse test") {
-    gas_ref read_gas;
-
     SECTION("Gas read") {
+        gas_ref read_gas1, read_gas2;
+        std::vector<gas_ref> gas_vec;
+
         std::vector<std::shared_ptr<argp::base_argument>> args = {
-            argp::make_argument("gas", "", "", read_gas)
+            argp::make_argument("gas", "", "", read_gas1),
+            argp::make_argument("gas2", "g2", "", read_gas2),
+            argp::make_argument("gases", "", "", gas_vec)
         };
 
-        char* argv[] = {(char*)"./atmosim", (char*)"-gas=tritium"};
-        argp::parse_arguments(args, 2, argv);
+        char* argv[] = {(char*)"./atmosim", (char*)"--gas=tritium", (char*)"-g2=nitrous_oxide", (char*)"--gases=[oxygen,plasma,water_vapour]"};
+        argp::parse_arguments(args, 4, argv);
 
-        REQUIRE(read_gas == tritium);
+        REQUIRE(read_gas1 == tritium);
+        REQUIRE(read_gas2 == nitrous_oxide);
+        REQUIRE(gas_vec.size() == 3);
+        REQUIRE(gas_vec[0] == oxygen);
+        REQUIRE(gas_vec[1] == plasma);
+        REQUIRE(gas_vec[2] == water_vapour);
     }
 }
 

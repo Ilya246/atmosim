@@ -46,6 +46,10 @@ float gas_mixture::pressure() const {
     return total_gas() * R * temperature / volume;
 }
 
+void gas_mixture::set_amount_of(gas_ref gas, float to) {
+    amounts[gas.idx] = to;
+}
+
 void gas_mixture::adjust_amount_of(gas_ref gas, float by) {
     amounts[gas.idx] += by;
 }

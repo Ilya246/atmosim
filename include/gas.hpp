@@ -3,6 +3,8 @@
 #include <map>
 #include <string>
 
+#include <argparse/read.hpp>
+
 #include "constants.hpp"
 
 /// <gas_type>
@@ -37,7 +39,7 @@ inline const size_t gas_count = std::end(gases) - std::begin(gases);
 
 // for when we need to serialize a reference to a gas type
 struct gas_ref {
-    size_t idx;
+    size_t idx = -1;
 
     float specific_heat() const {
         return gases[idx].specific_heat;
@@ -70,7 +72,10 @@ inline const gas_ref frezon =         string_gas_map.at("frezon");
 inline const gas_ref nitrous_oxide =  string_gas_map.at("nitrous_oxide");
 inline const gas_ref nitrium =        string_gas_map.at("nitrium");
 
-std::istream& operator>>(std::istream& stream, const gas_type*& g);
+std::istream& operator>>(std::istream& stream, gas_ref& g);
+
+template<>
+inline std::string argp::type_sig<gas_ref> = "gas";
 
 /// </gas_type>
 
@@ -79,7 +84,7 @@ std::istream& operator>>(std::istream& stream, const gas_type*& g);
 struct gas_mixture {
     float amounts[gas_count] {0.f};
     float temperature = T20C;
-    const float volume;
+    float volume;
 
     gas_mixture(float volume): volume(volume) {};
 
@@ -89,6 +94,7 @@ struct gas_mixture {
     float heat_energy() const;
     float pressure() const;
 
+    void set_amount_of(gas_ref gas, float to);
     void adjust_amount_of(gas_ref gas, float by);
     void adjust_pressure_of(gas_ref gas, float by);
 
