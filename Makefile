@@ -59,4 +59,4 @@ profile: build
 	kcachegrind callgrind.out.* &
 
 clean:
-	rm -rf out deploy
+	rm -rf out/* deploy/*

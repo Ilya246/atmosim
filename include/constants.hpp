@@ -16,10 +16,14 @@ minimum_heat_capacity = 0.0003,
 R = 8.314462618,
 
 one_atmosphere = 101.325,
+
 tank_leak_pressure = 30.0 * one_atmosphere,
 tank_rupture_pressure = 40.0 * one_atmosphere,
 tank_fragment_pressure = 50.0 * one_atmosphere,
 tank_fragment_scale = 2.0 * one_atmosphere,
+tank_volume = 5.0,
+
+reaction_min_gas = 0.01,
 
 fire_hydrogen_energy_released = 284000.0 * heat_scale,
 minimum_tritium_oxyburn_energy = 143000.0,

@@ -35,27 +35,36 @@ inline const gas_type gases[] {
 
 inline const size_t gas_count = std::end(gases) - std::begin(gases);
 
-extern const std::map<std::string, size_t> string_gas_map;
+// for when we need to serialize a reference to a gas type
+struct gas_ref {
+    size_t idx;
 
-inline const size_t oxygen_idx =         string_gas_map.at("oxygen");
-inline const size_t nitrogen_idx =       string_gas_map.at("nitrogen");
-inline const size_t plasma_idx =         string_gas_map.at("plasma");
-inline const size_t tritium_idx =        string_gas_map.at("tritium");
-inline const size_t water_vapour_idx =   string_gas_map.at("water_vapour");
-inline const size_t carbon_dioxide_idx = string_gas_map.at("carbon_dioxide");
-inline const size_t frezon_idx =         string_gas_map.at("frezon");
-inline const size_t nitrous_oxide_idx =  string_gas_map.at("nitrous_oxide");
-inline const size_t nitrium_idx =        string_gas_map.at("nitrium");
+    float specific_heat() const {
+        return gases[idx].specific_heat;
+    }
 
-inline const gas_type& oxygen =         gases[oxygen_idx];
-inline const gas_type& nitrogen =       gases[nitrogen_idx];
-inline const gas_type& plasma =         gases[plasma_idx];
-inline const gas_type& tritium =        gases[tritium_idx];
-inline const gas_type& water_vapour =   gases[water_vapour_idx];
-inline const gas_type& carbon_dioxide = gases[carbon_dioxide_idx];
-inline const gas_type& frezon =         gases[frezon_idx];
-inline const gas_type& nitrous_oxide =  gases[nitrous_oxide_idx];
-inline const gas_type& nitrium =        gases[nitrium_idx];
+    std::string_view name() const {
+        return gases[idx].name;
+    }
+};
+
+inline const std::map<std::string, gas_ref> string_gas_map = []() {
+    std::map<std::string, gas_ref> map;
+    for (size_t i = 0; i < gas_count; ++i) {
+        map[gases[i].name] = {i};
+    }
+    return map;
+}();
+
+inline const gas_ref oxygen =         string_gas_map.at("oxygen");
+inline const gas_ref nitrogen =       string_gas_map.at("nitrogen");
+inline const gas_ref plasma =         string_gas_map.at("plasma");
+inline const gas_ref tritium =        string_gas_map.at("tritium");
+inline const gas_ref water_vapour =   string_gas_map.at("water_vapour");
+inline const gas_ref carbon_dioxide = string_gas_map.at("carbon_dioxide");
+inline const gas_ref frezon =         string_gas_map.at("frezon");
+inline const gas_ref nitrous_oxide =  string_gas_map.at("nitrous_oxide");
+inline const gas_ref nitrium =        string_gas_map.at("nitrium");
 
 std::istream& operator>>(std::istream& stream, const gas_type*& g);
 
@@ -70,23 +79,21 @@ struct gas_mixture {
 
     gas_mixture(float volume): volume(volume) {};
 
-    float amount_of(size_t idx) const;
-    // for `amount_of(oxygen)` syntax
-    float amount_of(const gas_type& gas) const;
-
-    void update_amount_of(size_t idx, float by);
-    void update_amount_of(const gas_type& gas, float by);
-
+    float amount_of(gas_ref gas) const;
     float total_gas() const;
     float heat_capacity() const;
+    float heat_energy() const;
     float pressure() const;
+
+    void adjust_amount_of(gas_ref gas, float by);
+
+    gas_mixture& operator+=(const gas_mixture& rhs);
 
     // do gas reactions
     void reaction_tick();
 
 private:
-    void update_amount_of(size_t idx, float by, float&);
-    void update_amount_of(const gas_type& gas, float by, float&);
+    void adjust_amount_of(gas_ref gas, float by, float&);
 
     // all supported reactions - if it's not here, it's not supported
     void react_plasma_fire(float&);

@@ -36,29 +36,6 @@ string list_gases() {
     return out;
 }
 
-enum tank_state {
-    intact = 0,
-    ruptured = 1,
-    exploded = 2
-};
-
-tank_state cur_state = intact;
-int integrity = 3, leak_count = 0, tick = 0,
-tick_cap = 60, pipe_tick_cap = 1000,
-log_level = 1;
-bool step_target_temp = false,
-check_status = true,
-simple_output = false, silent = false,
-optimise_int = false, optimise_maximise = true, optimise_before = false;
-float lower_target_temp = fire_temp + 0.1, temperature_step = 1.002, temperature_step_min = 0.05, ratio_step = 1.005, ratio_bounds = 20.0,
-max_runtime = 3.0, bounds_scale = 0.5, stepping_scale = 0.75,
-heat_capacity_cache = 0.0;
-vector<gas_type> active_gases;
-size_t sample_rounds = 3;
-
-long long iters = 0;
-chrono::time_point start_time(main_clock.now());
-
 // flushes a basic_istream<char> until after \n
 basic_istream<char>& flush_stream(basic_istream<char>& stream) {
     stream.ignore(numeric_limits<streamsize>::max(), '\n');
@@ -105,107 +82,7 @@ bool get_opt(const string& what, bool default_opt = true) {
     cin >> opt;
     return eval_opt(opt, default_opt);
 }
-}
-float get_cur_range() {
-    return sqrt((get_pressure() - tank_fragment_pressure) / tank_fragment_scale);
-}
 
-void tank_check_status() {
-    float pressure = get_pressure();
-    if (pressure > tank_leak_pressure) {
-        if (pressure > tank_rupture_pressure) {
-            if (pressure > tank_fragment_pressure) {
-                for (int i = 0; i < 3; ++i) {
-                    react();
-                }
-                cur_state = exploded;
-                radius = get_cur_range();
-                for (gas_type g : gases) {
-                    leaked_heat += g.amount() * g.heat_cap() * temperature;
-                }
-                return;
-            }
-            if (integrity <= 0) {
-                cur_state = ruptured;
-                radius = 0.0;
-                for (gas_type g : gases) {
-                    leaked_heat += g.amount() * g.heat_cap() * temperature;
-                }
-                return;
-            }
-            integrity--;
-            return;
-        }
-        if (integrity <= 0) {
-            for (gas_type g : gases) {
-                leaked_heat += g.amount() * g.heat_cap() * temperature * 0.25;
-                g.amount() *= 0.75;
-            }
-            leak_count++;
-        } else {
-            integrity--;
-        }
-        return;
-    }
-    if (integrity < 3) {
-        integrity++;
-    }
-}
-
-void status() {
-    cout << "TICK: " << tick << " || Status: pressure " << get_pressure() << "kPa \\ integrity " << integrity << " \\ temperature " << temperature << "K\n_contents: ";
-    for (gas_type g : gases) {
-        cout << g.name() << ": " << g.amount() << " mol; ";
-    }
-    cout << endl;
-    if (cur_state == exploded) {
-        cout << "EXPLOSION: range " << get_cur_range() << endl;
-    } else if (cur_state == ruptured) {
-        cout << "RUPTURED" << endl;
-    }
-}
-
-void loop(int n) {
-    while (tick < n) {
-        react();
-        ++tick;
-    }
-}
-void loop() {
-    if (!check_status) {
-        loop(tick_cap);
-        return;
-    }
-    while (tick < tick_cap && cur_state == intact) {
-        react();
-        tank_check_status();
-        ++tick;
-    }
-}
-void loop_print() {
-    while (tick < tick_cap && cur_state == intact) {
-        react();
-        tank_check_status();
-        ++tick;
-        status();
-    }
-}
-
-void full_input_setup() {
-    float sumheat = 0.0;
-    while (true) {
-        cout << "Available gases: " << list_gases() << endl;
-        gas_type gas = get_input<gas_type>("Enter gas to add: ");
-        float moles = get_input<float>("Enter moles: ");
-        float temp = get_input<float>("Enter temperature: ");
-        sumheat += temp * gas.heat_cap() * moles;
-        gas.amount() += moles;
-        if (!get_opt("Continue?")) {
-            break;
-        }
-    }
-    temperature = sumheat / get_heat_capacity();
-}
 float get_gasmix_spec_heat(const vector<gas_type>& gases, const vector<float>& ratios) {
     float total_heat_cap = 0;
     float total_ratio = 0;
@@ -243,43 +120,6 @@ float mix_input_setup(const vector<gas_type>& mix_gases, const vector<float>& mi
 
     temperature = (fuel_mols * fuel_specheat * fuel_temp + primer_mols * primer_specheat * primer_temp) / (fuel_mols * fuel_specheat + primer_mols * primer_specheat);
     return fuel_pressure;
-}
-void known_input_setup(const vector<gas_type>& mix_gases, const vector<float>& mix_ratios, const vector<gas_type>& primer_gases, const vector<float>& primer_ratios, float fuel_temp, float primer_temp, float fuel_pressure) {
-    float fuel_specheat = get_gasmix_spec_heat(mix_gases, mix_ratios);
-    float primer_specheat = get_gasmix_spec_heat(primer_gases, primer_ratios);
-
-    float fuel_mols = pressure_temp_to_mols(fuel_pressure, fuel_temp);
-    float total_mix_ratio = 0;
-    for(float r : mix_ratios) total_mix_ratio += r;
-    if(total_mix_ratio > 0) {
-        for(size_t i = 0; i < mix_gases.size(); ++i) {
-            mix_gases[i].amount() = fuel_mols * mix_ratios[i] / total_mix_ratio;
-        }
-    }
-
-    float primer_mols = pressure_temp_to_mols(pressure_cap - fuel_pressure, primer_temp);
-    float total_primer_ratio = 0;
-    for(float r : primer_ratios) total_primer_ratio += r;
-    if(total_primer_ratio > 0) {
-        for(size_t i = 0; i < primer_gases.size(); ++i) {
-            primer_gases[i].amount() = primer_mols * primer_ratios[i] / total_primer_ratio;
-        }
-    }
-
-    temperature = (fuel_mols * fuel_specheat * fuel_temp + primer_mols * primer_specheat * primer_temp) / (fuel_mols * fuel_specheat + primer_mols * primer_specheat);
-}
-float unimix_input_setup(gas_type gas1, gas_type gas2, float temp1, float temp2, float target_temp) {
-    float fuel_pressure = (target_temp / temp2 - 1.0) * pressure_cap / (gas1.heat_cap() / gas2.heat_cap() - 1.0 + target_temp * (1.0 / temp2 - gas1.heat_cap() / gas2.heat_cap() / temp1));
-    gas1.amount() = pressure_temp_to_mols(fuel_pressure, temp1);
-    gas2.amount() = pressure_temp_to_mols(pressure_cap - fuel_pressure, temp2);
-    temperature = mix_gas_temps_to_temp(gas1.amount(), gas1.heat_cap(), temp1, gas2, temp2);
-    return fuel_pressure;
-}
-void unimix_to_input_setup(gas_type gas1, gas_type gas2, float temp, float second_per_first) {
-    temperature = temp;
-    float total = pressure_temp_to_mols(pressure_cap, temperature);
-    gas1.amount() = total / (1.0 + second_per_first);
-    gas2.amount() = total - gas1.amount();
 }
 
 struct bomb_data {
@@ -802,31 +642,18 @@ bomb_data test_mix(const vector<gas_type>& mix_gases, const vector<gas_type>& pr
     return get_data(in_args, make_tuple(ref(mix_gases), ref(primer_gases), measure_before));
 }
 
-void heat_cap_input_setup() {
-    cout << "Enter heat capacities for " << list_gases() << ": ";
-    for (gas_type g : gases) {
-        cin >> g.heat_cap();
-    };
-}
-
 int main(int argc, char* argv[]) {
-    // setup
-    setup_params();
-
-    vector<gas_type> mix_gases;
-    vector<gas_type> primer_gases;
+    vector<gas_ref> mix_gases;
+    vector<gas_ref> primer_gases;
     float mixt1 = 0.0, mixt2 = 0.0, thirt1 = 0.0, thirt2 = 0.0;
 
-    bool redefine_heatcap = false, mixing_mode = false, manual_mix = false, do_retest = false;
+    bool mixing_mode = false, manual_mix = false, do_retest = false;
     tuple<dyn_val, bool, bool> opt_param = {{float_val, &radius}, true, false};
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
-        argp::make_argument("pipeonly", "", "assume inside pipe: prevent tank-related effects", check_status),
-        argp::make_argument("redefineheatcap", "", "redefine heat capacities", redefine_heatcap),
         argp::make_argument("ratiobounds", "", "set gas ratio iteration bounds", ratio_bounds),
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
         argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
-        argp::make_argument("manualmix", "f", "UTILITY TOOL: manually input a tank's contents and simulate it", manual_mix),
         argp::make_argument("mixg", "mg", "list of fuel gases (usually, in tank)", mix_gases),
         argp::make_argument("primerg", "pg", "list of primer gases (usually, in canister)", primer_gases),
         argp::make_argument("mixt1", "m1", "minimum fuel mix temperature to check, Kelvin", mixt1),
@@ -884,9 +711,6 @@ int main(int argc, char* argv[]) {
     optimise_maximise = get<1>(opt_param);
     optimise_before = get<2>(opt_param);
 
-    if (redefine_heatcap) {
-        heat_cap_input_setup();
-    }
     if (mixing_mode && manual_mix) {
         cerr << "2 modes enabled at the same time. Choose one. Exiting" << endl;
         return 1;
