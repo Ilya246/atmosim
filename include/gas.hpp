@@ -20,7 +20,13 @@ inline const gas_type gases[] {
     {10.f  * heat_scale, "nitrium"}
 };
 
-inline const std::map<std::string_view, const gas_type&> string_gas_map;
+inline const std::map<std::string_view, const gas_type&> string_gas_map = []() {
+    std::map<std::string_view, const gas_type&> map;
+    for (const auto& gas : gases) {
+        map.emplace(gas.name, gas);
+    }
+    return map;
+}();
 
 inline const gas_type& oxygen =         gases[0];
 inline const gas_type& nitrogen =       gases[1];
