@@ -15,7 +15,23 @@
 using namespace std;
 using namespace asim;
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+EM_JS(void, setup_console, (), {
+    Module.print = function(text) {
+        console.log(text);
+        if (typeof window.updateOutput === 'function') {
+            window.updateOutput(text);
+        }
+    };
+});
+
 int main(int argc, char* argv[]) {
+    setup_console();
+#else
+int main(int argc, char* argv[]) {
+#endif
     size_t log_level = 2;
 
     bool mixing_mode = false, do_retest = false;
@@ -162,5 +178,13 @@ int main(int argc, char* argv[]) {
     if (silent) {
         cout.setstate(ios::failbit);
     }
-    return 0;
+    int ret = 0;
+#ifdef __EMSCRIPTEN__
+    // Free allocated arguments
+    for(int i = 0; i < argc; i++) {
+        free(argv[i]);
+    }
+    free(argv);
+#endif
+    return ret;
 }

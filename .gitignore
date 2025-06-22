@@ -12,3 +12,4 @@ fastmosim
 .vscode
 out/*
 libs/*
+web/*

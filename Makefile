@@ -6,6 +6,8 @@ WIN_STRIP := x86_64-w64-mingw32-strip
 STANDARD := c++20
 SHAREDFLAGS ?= -Ofast -flto=auto -Wall -Wextra -pedantic -g
 WIN_LDFLAGS ?= -static -static-libgcc -static-libstdc++
+WEB_SHAREDFLAGS ?= -O3 -ffast-math -flto=auto -Wall -Wextra -pedantic
+WEB_LDFLAGS ?= -sEXPORTED_RUNTIME_METHODS=callMain -sMODULARIZE=1 -sENVIRONMENT=web -sNO_EXIT_RUNTIME=1 -sEXPORT_NAME='createAtmosim' -sINVOKE_RUN=0
 CXXFLAGS ?= $(SHAREDFLAGS) -c -std=$(STANDARD)
 override CXXFLAGS += -Ilibs -Iinclude
 LDFLAGS ?= $(SHAREDFLAGS)
@@ -19,6 +21,7 @@ OBJ := $(BUILD)/obj
 OBJ_WIN := $(BUILD)/obj_win
 BINARY := atmosim
 WIN_BINARY := atmosim.exe
+WEB_BINARY := out/web/atmosim.js
 DEPLOY := deploy
 
 TESTSRC := tests
@@ -36,7 +39,7 @@ depends_win := $(sources:$(SRC)/%.cpp=$(OBJ_WIN)/%.d)
 test_objects := $(filter-out $(OBJ)/main.o, $(objects)) $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.o)
 test_depends := $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.d)
 
-.PHONY: all build clean strip test deploy submodule
+.PHONY: all build clean strip test deploy submodule web
 
 build: $(BUILD)/$(BINARY)
 
@@ -51,12 +54,15 @@ strip: all
 test: $(BUILD)/$(TESTBINARY)
 	@$(BUILD)/$(TESTBINARY)
 
-deploy: $(BUILD)/$(BINARY) $(BUILD)/$(WIN_BINARY)
+web: $(WEB_BINARY)
+
+deploy: $(BUILD)/$(BINARY) $(BUILD)/$(WIN_BINARY) web
 	@mkdir -p $(DEPLOY)
 	$(STRIP) $(BUILD)/$(BINARY) -o deploy/$(BINARY)
 	$(WIN_STRIP) $(BUILD)/$(WIN_BINARY) -o deploy/$(WIN_BINARY)
 	@tar -czvf $(DEPLOY)/$(BINARY)-linux-amd64.tar.gz -C $(DEPLOY) $(BINARY)
 	@zip -j $(DEPLOY)/$(BINARY)-windows-amd64.zip $(DEPLOY)/$(WIN_BINARY)
+	@cp web/* $(DEPLOY)/
 	@echo "Created deployment archives in ./deploy/"
 
 submodule:
@@ -90,6 +96,10 @@ $(BUILD)/$(WIN_BINARY): $(objects_win)
 	@printf "WIN_LD\t%s\n" $@
 	@mkdir -p $(BUILD)
 	@$(WIN_CXX) $^ -o $@ $(LDFLAGS) $(WIN_LDFLAGS)
+
+$(WEB_BINARY): $(sources)
+	@mkdir -p $(@D)
+	em++ $(WEB_SHAREDFLAGS) -std=$(STANDARD) -Ilibs -Iinclude $(sources) -o $(WEB_BINARY) $(WEB_LDFLAGS)
 
 $(BUILD)/$(TESTBINARY): $(test_objects)
 	@printf "LD\t%s\n" $@
