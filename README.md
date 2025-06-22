@@ -7,8 +7,16 @@
 
 ## Compiling it yourself (will run faster)
 
-Just make sure you have git and a C++ compiler ready, `git submodule init`, `git submodule update`, then run build.bat or build_linux.sh depending on your OS<br>
-A proper makefile is currently TODO
+1. Ensure you have git, make and a C++ compiler installed
+2. Clone the repository with submodules:
+```bash
+git clone --recursive https://github.com/ilya246/atmosim
+cd atmosim
+```
+3. Build using the Makefile:
+```bash
+make
+```
 
 ## Running
 

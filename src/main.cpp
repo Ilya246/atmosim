@@ -83,10 +83,10 @@ int main(int argc, char* argv[]) {
     // post-help
         "\n"
         "Example usage:\n"
-        "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s`\n"
+        "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -rt=0.5 -sr=10`\n"
         "  This should find you a ~13.5 radius maxcap recipe. Experiment with other parameters.\n"
         "  For --restrictpre (-rb) and --restrictpost (-ra):\n"
-        "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -s -ra=[[radius,0,11],[ticks,20,44]]`\n"
+        "  `./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -ra=[[radius,0,11],[ticks,20,44]]`\n"
         "\n"
         "Tips and tricks\n"
         "  Consider using the -s flag for radius-optimised bombs. Not recommended for ticks-optimised bombs.\n"
