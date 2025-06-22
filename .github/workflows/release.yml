@@ -10,13 +10,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Install Packages
-        run: sudo apt update && sudo apt install g++ g++-mingw-w64-x86-64 && git submodule init && git submodule update
-        
+        run: sudo apt update && sudo apt install g++ g++-mingw-w64-x86-64 make
+
       - name: Build
-        run: ./deploy.sh
-        
+        run: make deploy
+
       - name: Upload artifacts
         uses: Roang-zero1/github-upload-release-artifacts-action@v2
         with:
