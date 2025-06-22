@@ -9,6 +9,7 @@ float gas_tank::calc_radius() {
 }
 
 float gas_tank::calc_radius(float pressure) {
+    if (pressure < tank_fragment_pressure) return 0.f;
     return std::sqrt((pressure - tank_fragment_pressure) / tank_fragment_scale);
 }
 

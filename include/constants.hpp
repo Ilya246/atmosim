@@ -4,6 +4,8 @@
 
 namespace asim {
 
+inline const size_t LOG_NONE = 0, LOG_BASIC = 1, LOG_INFO = 2, LOG_DEBUG = 3, LOG_TRACE = 4;
+
 inline const float heat_scale = 1.0 / 8.0,
 
 pressure_cap = 1013.25,

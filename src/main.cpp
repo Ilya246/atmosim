@@ -1,8 +1,6 @@
 #include <chrono>
 #include <cmath>
-#include <format>
 #include <iostream>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -12,7 +10,6 @@
 #include "constants.hpp"
 #include "optimiser.hpp"
 #include "gas.hpp"
-#include "tank.hpp"
 #include "sim.hpp"
 
 using namespace std;
@@ -34,8 +31,10 @@ int main(int argc, char* argv[]) {
     bool step_target_temp = false;
     size_t tick_cap = 60;
 
-    field_ref<bomb_data> radius_opt_param(offsetof(bomb_data, fin_radius), field_ref<bomb_data>::float_f);
-    tuple<field_ref<bomb_data>, bool, bool> opt_params{radius_opt_param, true, false};
+    tuple<field_ref<bomb_data>, bool, bool> opt_params{bomb_data::radius_field, true, false};
+
+    vector<field_restriction<bomb_data>> pre_restrictions;
+    vector<field_restriction<bomb_data>> post_restrictions;
 
     float max_runtime = 3.f;
     size_t sample_rounds = 5;
@@ -59,9 +58,8 @@ int main(int argc, char* argv[]) {
         argp::make_argument("lowertargettemp", "o", "only consider bombs which mix to above this temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(lower_target_temp) + ")", lower_target_temp),
         argp::make_argument("loglevel", "l", "how much to log (default " + to_string(log_level) + ")", log_level),
         argp::make_argument("param", "p", "(param, maximise, measure_before_sim): lets you configure what parameter and how to optimise", opt_params),
-        // TODO critical
-        // argp::make_argument("restrictpre", "rb", "lets you make atmosim not consider bombs outside of chosen parameters, measured before simulation", pre_restrictions),
-        // argp::make_argument("restrictpost", "ra", "same as -rr, but measured after simulation", post_restrictions),
+        argp::make_argument("restrictpre", "rb", "lets you make atmosim not consider bombs outside of chosen parameters, measured before simulation", pre_restrictions),
+        argp::make_argument("restrictpost", "ra", "same as -rr, but measured after simulation", post_restrictions),
         argp::make_argument("simpleout", "", "makes very simple output, for use by other programs or advanced users", simple_output),
         argp::make_argument("silent", "", "output ONLY the final result, overrides loglevel", silent),
         argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
@@ -93,7 +91,7 @@ int main(int argc, char* argv[]) {
         "Tips and tricks\n"
         "  Consider using the -s flag for radius-optimised bombs. Not recommended for ticks-optimised bombs.\n"
         "  Additionally, consider letting the optimiser think for longer using the -rt and -sr flags.\n"
-        "  If you want a long-fuse bomb, try using the -p flag to optimise to maximise ticks and the -r flag to restrict radius to be above a desired value.\n"
+        "  If you want a long-fuse bomb, try using the -p flag to optimise to maximise ticks and the -ra flag to restrict radius to be above a desired value.\n"
         "  Remember to use the -t flag to raise maximum alotted ticks if you're trying to find long-fuse bombs.\n"
         "\n"
         "  Brought to you by Ilya246 and friends"
@@ -140,18 +138,19 @@ int main(int argc, char* argv[]) {
         min_e_step[i] = ratio_step;
     }
 
-    optimiser<tuple<vector<gas_ref>, vector<gas_ref>, bool, size_t, field_ref<bomb_data>>, opt_val_wrap>
+    optimiser<tuple<vector<gas_ref>, vector<gas_ref>, bool, size_t, field_ref<bomb_data>, vector<field_restriction<bomb_data>>, vector<field_restriction<bomb_data>>>, opt_val_wrap>
     optim(do_sim,
           lower_bounds,
           upper_bounds,
           min_l_step,
           min_e_step,
           optimise_maximise,
-          make_tuple(mix_gases, primer_gases, optimise_measure_before, tick_cap, opt_param),
+          make_tuple(mix_gases, primer_gases, optimise_measure_before, tick_cap, opt_param, pre_restrictions, post_restrictions),
           chrono::duration<float>(max_runtime),
           sample_rounds,
           bounds_scale,
-          stepping_scale);
+          stepping_scale,
+          log_level);
 
     optim.find_best();
 

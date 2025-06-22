@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <iostream>
 #include <tuple>
 #include <vector>
 
@@ -19,6 +20,12 @@ struct optimiser {
     std::vector<float> min_exp_step;
     bool maximise;
     std::chrono::duration<float> max_duration;
+
+    size_t log_level;
+    size_t sample_count = 0, last_sample_count = 0;
+    std::chrono::duration<float> log_spacing = std::chrono::duration<float>(0.5f);
+    std::chrono::time_point<__typeof__ main_clock> last_log_time;
+    bool force_log = false;
 
     std::vector<float> current;
     std::vector<float> best_arg;
@@ -41,7 +48,8 @@ struct optimiser {
               std::chrono::duration<float> i_max_duration,
               size_t rounds,
               float bounds_scale = 0.75f,
-              float stepping_scale = 0.5f)
+              float stepping_scale = 0.5f,
+              size_t log_level = LOG_NONE)
     :
               funct(func),
               args(current, i_args),
@@ -51,6 +59,7 @@ struct optimiser {
               min_exp_step(i_exp_step),
               maximise(maxm),
               max_duration(i_max_duration),
+              log_level(log_level),
               bounds_scale(bounds_scale),
               sample_rounds(rounds),
               stepping_scale(stepping_scale) {
@@ -76,6 +85,16 @@ struct optimiser {
         best_result = worst_res();
         any_valid = false;
         step_scale = 1.f;
+
+        sample_count = last_sample_count = 0;
+        last_log_time = main_clock.now();
+    }
+
+    void log(std::string_view str, size_t level, bool endl = true, bool clear = true) {
+        if (log_level < level) return;
+        if (clear) std::cout << "\33[2K\r";
+        std::cout << str;
+        if (endl) std::cout << std::endl;
     }
 
     void find_best() {
@@ -93,13 +112,6 @@ struct optimiser {
                 // do gradient descent until we find a local minimum
                 R c_result = sample();
                 while (true) {
-                    /* if (log_level >= 3) {
-                        cout << "Sampling: ";
-                        for (float f : current) {
-                            cout << f << " ";
-                        }
-                        cout << endl;
-                    } */
                     // movement directions yielding best result
                     std::vector<std::pair<size_t, bool>> best_movedirs = {};
                     R best_move_res = c_result;
@@ -133,10 +145,7 @@ struct optimiser {
 
                     // found local minimum
                     if (best_movedirs.empty()) {
-                        /* if (log_level >= 2) {
-                            bomb_data data = get_data(get<0>(args), get<1>(args));
-                            print_bomb(data, "Local minimum found: ");
-                        } */
+                        log("Local minimum found", LOG_DEBUG);
                         break;
                     }
 
@@ -179,10 +188,7 @@ struct optimiser {
                     }
                     // we failed to find any non-zero movement, break to avoid random walk
                     if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
-                        /* if (log_level >= 2) {
-                            bomb_data data = get_data(get<0>(args), get<1>(args));
-                            print_bomb(data, "Local minimum found: ");
-                        } */
+                        log("Local minimum found", LOG_DEBUG);
                         break;
                     }
                     // perform the movement
@@ -191,19 +197,15 @@ struct optimiser {
                 }
             }
             if (!any_valid) {
-                /* if (log_level >= 1) {
-                    cout << "Failed to find any viable result, retrying sample 1..." << endl;
-                } */
+                log("Failed to find any viable result, retrying sample 1...", LOG_BASIC);
                 --samp_idx;
                 s_time = main_clock.now();
                 continue;
             }
             if (samp_idx + 1 != sample_rounds) {
-                /* if (log_level >= 1) {
-                    cout << "\nSampling round " << samp_idx + 1 << " complete" << endl;
-                    bomb_data data = get_data(best_arg, get<1>(args));
-                    print_bomb(data, "Best so far: ");
-                } */
+                log(std::format("Sampling round {} complete", samp_idx + 1), LOG_BASIC);
+                force_log = true;
+
                 // sampling round done, halve sampling area and go again
                 for (size_t i = 0; i < current.size(); ++i) {
                     float& lowerb = cur_lower_bounds[i];
@@ -215,19 +217,39 @@ struct optimiser {
                     // scale stepping less
                     step_scale *= stepping_scale;
                 }
-                /* if (log_level >= 1) {
-                    cout << "New bounds: ";
+                if (log_level >= LOG_BASIC) {
+                    log("New bounds: ", LOG_BASIC, false);
                     for (size_t i = 0; i < current.size(); ++i) {
-                        cout << "[" << cur_lower_bounds[i] << "," << cur_upper_bounds[i] << "] ";
+                        log(std::format("[{},{}]", cur_lower_bounds[i], cur_upper_bounds[i]), LOG_BASIC, false, false);
                     }
-                    cout << endl;
-                } */
+                    log("", true, false);
+                }
             }
         }
     }
 
     // returns pair of sign-adjusted result and whether this updated our maximum
     R sample() {
+        if (log_level >= LOG_DEBUG) {
+            log("Sampling: ", LOG_DEBUG, false);
+            for (float f : current) {
+                log(std::format("{} ", f), LOG_DEBUG, false, false);
+            }
+            log("", false, true);
+        }
+        ++sample_count;
+        if (log_level >= LOG_INFO) {
+            auto now = main_clock.now();
+            std::chrono::duration<float> tdiff = now - last_log_time;
+            if (tdiff > log_spacing || force_log) {
+                float sec = tdiff.count();
+                log(std::format("{:<7} Samples ({:<7.0f} samples/s)", sample_count, (sample_count - last_sample_count) / sec), LOG_INFO, false);
+                std::flush(std::cout);
+                last_sample_count = sample_count;
+                last_log_time = now;
+                force_log = false;
+            }
+        }
         R tres = apply(funct, args);
         bool valid = tres.valid();
         R res = valid ? tres : worst_res();
