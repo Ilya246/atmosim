@@ -227,8 +227,6 @@ void print_bomb(const bomb_data& bomb, const string& what, bool extensive = fals
     cout << what << (simple ? bomb.print_very_simple() : (extensive ? bomb.print_full() : bomb.print_inline())) << endl;
 }
 
-bomb_data get_data(const vector<float>&, tuple<const vector<gas_type>&, const vector<gas_type>&, bool>);
-
 struct opt_val_wrap {
     float stat;
     float pressure;
