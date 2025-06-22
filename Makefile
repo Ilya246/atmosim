@@ -21,12 +21,8 @@ BINARY := atmosim
 WIN_BINARY := atmosim.exe
 DEPLOY := deploy
 
-SUBMODULES := argparse
-
 TESTSRC := tests
 TESTBINARY := tests
-
-submodules := $(SUBMODULES:%=$(LIBS)/%)
 
 sources := $(shell find $(SRC) -type f -name "*.cpp")
 test_sources := $(shell find $(TESTSRC) -type f -name "*.cpp")
@@ -40,7 +36,7 @@ depends_win := $(sources:$(SRC)/%.cpp=$(OBJ_WIN)/%.d)
 test_objects := $(filter-out $(OBJ)/main.o, $(objects)) $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.o)
 test_depends := $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.d)
 
-.PHONY: all build clean strip test deploy
+.PHONY: all build clean strip test deploy submodule
 
 build: $(BUILD)/$(BINARY)
 
@@ -63,12 +59,17 @@ deploy: $(BUILD)/$(BINARY) $(BUILD)/$(WIN_BINARY)
 	@zip -j $(DEPLOY)/$(BINARY)-windows-amd64.zip $(DEPLOY)/$(WIN_BINARY)
 	@echo "Created deployment archives in ./deploy/"
 
-$(OBJ)/%.o: $(SRC)/%.cpp $(submodules)
+submodule:
+	@mkdir -p $(LIBS)
+	@printf "git submodule update --init --recursive"
+	@git submodule update --init --recursive
+
+$(OBJ)/%.o: $(SRC)/%.cpp
 	@printf "CC\t%s\n" $@
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
 
-$(OBJ_WIN)/%.o: $(SRC)/%.cpp $(submodules)
+$(OBJ_WIN)/%.o: $(SRC)/%.cpp
 	@printf "WIN_CC\t%s\n" $@
 	@mkdir -p $(@D)
 	@$(WIN_CXX) $(CXXFLAGS) $(WIN_LDFLAGS) -MMD -MP $< -o $@
@@ -77,10 +78,6 @@ $(OBJ)/$(TESTSRC)/%.o: $(TESTSRC)/%.cpp
 	@printf "CC\t%s\n" $@
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
-
-$(LIBS)/%:
-	@git submodule init $@
-	@git submodule update $@
 
 -include $(depends) $(test_depends)
 
