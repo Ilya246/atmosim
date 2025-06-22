@@ -10,10 +10,14 @@ namespace asim {
 
 /// <gas_type>
 
+bool is_valid_gas(std::string_view name) {
+    return string_gas_map.contains((std::string)name);
+}
+
 std::istream& operator>>(std::istream& stream, gas_ref& g) {
     std::string val;
     stream >> val;
-    if (string_gas_map.count(val) == 0) {
+    if (!is_valid_gas(val)) {
         stream.setstate(std::ios_base::failbit);
     } else {
         g = string_gas_map.at(val);

@@ -4,6 +4,10 @@
 
 namespace asim {
 
+float gas_tank::calc_radius() {
+    return calc_radius(mix.pressure());
+}
+
 float gas_tank::calc_radius(float pressure) {
     return std::sqrt((pressure - tank_fragment_pressure) / tank_fragment_scale);
 }
@@ -19,12 +23,10 @@ bool gas_tank::tick() {
                     mix.reaction_tick();
                 }
                 state = st_exploded;
-                radius_cache = calc_radius(mix.pressure());
                 return false;
             }
             if (integrity <= 0) {
                 state = st_ruptured;
-                radius_cache = 0.0;
                 return false;
             }
             integrity--;

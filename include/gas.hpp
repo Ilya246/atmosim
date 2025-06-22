@@ -74,6 +74,8 @@ inline const gas_ref frezon =         string_gas_map.at("frezon");
 inline const gas_ref nitrous_oxide =  string_gas_map.at("nitrous_oxide");
 inline const gas_ref nitrium =        string_gas_map.at("nitrium");
 
+bool is_valid_gas(std::string_view name);
+
 std::istream& operator>>(std::istream& stream, gas_ref& g);
 
 std::string list_gases(std::string_view sep = ", ");

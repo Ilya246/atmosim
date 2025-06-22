@@ -175,7 +175,7 @@ TEST_CASE("Tank simulation validation") {
         size_t ticks = tank.tick_n(ticks_expected);
 
         REQUIRE(tank.state == tank.st_exploded);
-        REQUIRE(tank.radius_cache == Catch::Approx(radius_expected).epsilon(0.01f));
+        REQUIRE(tank.calc_radius() == Catch::Approx(radius_expected).epsilon(0.01f));
         REQUIRE(ticks == ticks_expected);
     }
 
@@ -199,7 +199,7 @@ TEST_CASE("Tank simulation validation") {
         size_t ticks = tank.tick_n(ticks_expected);
 
         REQUIRE(tank.state == tank.st_exploded);
-        REQUIRE(tank.radius_cache == Catch::Approx(radius_expected).epsilon(0.01f));
+        REQUIRE(tank.calc_radius() == Catch::Approx(radius_expected).epsilon(0.01f));
         REQUIRE(ticks == ticks_expected);
     }
 }

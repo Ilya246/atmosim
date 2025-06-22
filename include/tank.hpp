@@ -23,7 +23,7 @@ struct gas_tank {
     // returns: how many ticks we went forward
     size_t tick_n(size_t ticks_limit);
 
-    float radius_cache = 0.f;
+    float calc_radius();
     static float calc_radius(float pressure);
 
     std::string get_status();
