@@ -1,8 +1,8 @@
 #include <chrono>
 #include <cmath>
 #include <format>
-#include <functional>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -22,15 +22,15 @@ struct bomb_data {
     float fuel_temp, fuel_pressure, thir_temp, mix_to_pressure, mix_to_temp;
     vector<gas_ref> mix_gases, primer_gases;
     gas_tank tank;
-    float radius = 0.0, pressure = -1.0, optstat = -1.0;
-    int ticks = -1;
+    float radius, pressure, optstat;
+    int ticks;
 
     // TODO: make this more sane somehow?
     bomb_data(vector<float> mix_ratios, vector<float> primer_ratios,
               float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_pressure, float mix_to_temp,
               const vector<gas_ref>& mix_gases, const vector<gas_ref>& primer_gases,
-              gas_tank tank, float radius, float pressure, float optstat,
-              int ticks)
+              gas_tank tank, float radius = -1.f, float pressure = -1.f, float optstat = -1.f,
+              int ticks = -1)
     :
         mix_ratios(mix_ratios), primer_ratios(primer_ratios),
         fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_pressure(mix_to_pressure), mix_to_temp(mix_to_temp),
@@ -38,6 +38,13 @@ struct bomb_data {
         tank(tank),
         radius(radius), pressure(pressure), optstat(optstat),
         ticks(ticks) {};
+
+    void set_state(float i_radius, float i_pressure, float i_optstat, int i_ticks) {
+        radius = i_radius;
+        pressure = i_pressure;
+        optstat = i_optstat;
+        ticks = i_ticks;
+    }
 
     string mix_string(const vector<gas_ref>& gases, const vector<float>& fractions) const {
         string out;
@@ -130,26 +137,36 @@ struct opt_val_wrap {
     }
 
     bool operator>(const opt_val_wrap& rhs) const {
-        if (!valid_v) return false;
-        if (!rhs.valid_v) return valid_v;
         return data->optstat == rhs.data->optstat ? data->pressure > rhs.data->pressure : data->optstat > rhs.data->optstat;
     }
 
     bool operator>=(const opt_val_wrap& rhs) const {
-        if (!valid_v) return !rhs.valid_v;
-        if (!rhs.valid_v) return true;
         return data->optstat >= rhs.data->optstat;
     }
 
     bool operator==(const opt_val_wrap& rhs) const {
-        if (!valid_v) return !rhs.valid_v;
-        if (!rhs.valid_v) return !valid_v;
         return data->optstat == rhs.data->optstat;
     }
 };
 
+template<typename T>
+struct field_ref {
+    enum field_type {invalid_f, int_f, float_f};
+
+    size_t offset;
+    field_type type = invalid_f;
+
+    float get(T& from) {
+        switch (type) {
+            case (float_f): return *(float*)((char*)&from + offset);
+            case (int_f): return *(int*)((char*)&from + offset);
+            default: throw runtime_error("tried getting value of invalid field reference");
+        }
+    }
+};
+
 // args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
-opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_ref>&, const vector<gas_ref>&, bool, size_t> args) {
+opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_ref>&, const vector<gas_ref>&, bool, size_t, field_ref<gas_tank>> args) {
     // read input parameters
     float target_temp = in_args[0];
     float fuel_temp = in_args[1];
@@ -162,6 +179,7 @@ opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_ref>&, 
     const vector<gas_ref>& primer_gases = get<1>(args);
     bool measure_before = get<2>(args);
     size_t tick_cap = get<3>(args);
+    field_ref optstat_ref = get<4>(args);
 
     // read gas ratios
     vector<float> mix_ratios(mix_gases.size(), 1.f);
@@ -194,25 +212,25 @@ opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_ref>&, 
     if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
         return {};
     }
-    size_t tick = tank.tick_n(tick_cap);
-    // TODO critical
-    /*
-    bool pre_met = restrictions_met(pre_restrictions);
-    if (measure_before) {
-        stat = optimise_stat();
-    }
-    if (!measure_before) {
-        stat = optimise_stat();
-    }
-    if (!pre_met || !restrictions_met(post_restrictions)) {
-        return {0.f, get_pressure(), false};
-    } */
-    float stat = tank.radius_cache;
     shared_ptr<bomb_data> bomb = make_shared<bomb_data>(mix_ratios, primer_ratios,
                    fuel_temp, fuel_pressure, thir_temp, mix_pressure, target_temp,
                    mix_gases, primer_gases,
-                   tank, tank.radius_cache, tank.mix.pressure(), stat,
-                   tick);
+                   tank);
+    float stat = -1.f;
+    // TODO critical
+    // bool pre_met = restrictions_met(pre_restrictions);
+    if (measure_before) stat = optstat_ref.get(tank);
+
+    // simulate for up to tick_cap ticks
+    size_t ticks = tank.tick_n(tick_cap);
+
+    if (!measure_before) stat = optstat_ref.get(tank);
+    // TODO critical
+    //if (!pre_met || !restrictions_met(post_restrictions)) {
+    //    return {0.f, get_pressure(), false};
+    //}
+
+    bomb->set_state(tank.radius_cache, tank.mix.pressure(), stat, ticks);
     return opt_val_wrap(bomb);
 }
 
@@ -231,6 +249,8 @@ int main(int argc, char* argv[]) {
     float lower_target_temp = fire_temp + 0.1f;
     bool step_target_temp = false;
     size_t tick_cap = 60;
+
+    field_ref<gas_tank> opt_param(offsetof(gas_tank, radius_cache), field_ref<gas_tank>::float_f);
 
     float max_runtime = 5.f;
     size_t sample_rounds = 3;
@@ -340,14 +360,14 @@ int main(int argc, char* argv[]) {
         min_e_step[i] = ratio_step;
     }
 
-    optimizer<tuple<const vector<gas_ref>&, const vector<gas_ref>&, bool, size_t>, opt_val_wrap>
+    optimiser<tuple<vector<gas_ref>, vector<gas_ref>, bool, size_t, field_ref<gas_tank>>, opt_val_wrap>
     optim(do_sim,
           lower_bounds,
           upper_bounds,
           min_l_step,
           min_e_step,
           optimise_maximise,
-          make_tuple(ref(mix_gases), ref(primer_gases), optimise_measure_before, tick_cap),
+          make_tuple(mix_gases, primer_gases, optimise_measure_before, tick_cap, opt_param),
           chrono::duration<float>(max_runtime),
           sample_rounds,
           bounds_scale,

@@ -1,3 +1,4 @@
+#include <cmath>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -6,8 +7,10 @@
 
 #include "gas.hpp"
 #include "tank.hpp"
+#include "optimiser.hpp"
 
 using Catch::Approx;
+using namespace asim;
 
 TEST_CASE("Gas system fundamentals") {
     SECTION("Gas index mapping") {
@@ -198,5 +201,77 @@ TEST_CASE("Tank simulation validation") {
         REQUIRE(tank.state == tank.st_exploded);
         REQUIRE(tank.radius_cache == Catch::Approx(radius_expected).epsilon(0.01f));
         REQUIRE(ticks == ticks_expected);
+    }
+}
+
+// wrapper for bomb_data for use by the optimiser
+struct float_wrap {
+    float data = 0.f;
+    bool valid_v = true;
+
+    float_wrap(): valid_v(false) {}
+    float_wrap(float f): data(f) {}
+
+    static const float_wrap worst(bool) {
+        return {};
+    }
+
+    bool valid() const {
+        return valid_v;
+    }
+
+    bool operator>(const float_wrap& rhs) const {
+        return data > rhs.data;
+    }
+
+    bool operator>=(const float_wrap& rhs) const {
+        return data >= rhs.data;
+    }
+
+    bool operator==(const float_wrap& rhs) const {
+        return data == rhs.data;
+    }
+};
+
+float_wrap opt_sine(std::vector<float> in_args, std::tuple<>) {
+    return {std::sin(in_args[0])};
+}
+
+TEST_CASE("Optimiser validation") {
+    SECTION("Sine wave optimisation") {
+        optimiser<std::tuple<>, float_wrap>
+        optim(opt_sine,
+            {-M_PI * 0.5f},
+            {M_PI * 0.5f},
+            {0.01f},
+            {1.001f},
+            true,
+            std::make_tuple(),
+            std::chrono::duration<float>(0.01f),
+            5,
+            0.5f,
+            0.75f);
+
+        SECTION("Minimisation") {
+            optim.maximise = false;
+
+            optim.find_best();
+            std::vector<float> in_args = optim.best_arg;
+            const float_wrap& best_res = optim.best_result;
+
+            REQUIRE(best_res.valid());
+            REQUIRE(in_args[0] == Approx(-M_PI * 0.5f).epsilon(0.001f));
+            REQUIRE(best_res.data == Approx(-1.f).epsilon(0.001f));
+        }
+
+        SECTION("Maximisation") {
+            optim.find_best();
+            std::vector<float> in_args = optim.best_arg;
+            const float_wrap& best_res = optim.best_result;
+
+            REQUIRE(best_res.valid());
+            REQUIRE(in_args[0] == Approx(M_PI * 0.5f).epsilon(0.001f));
+            REQUIRE(best_res.data == Approx(1.f).epsilon(0.001f));
+        }
     }
 }

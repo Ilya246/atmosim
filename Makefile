@@ -9,10 +9,13 @@ LDFLAGS ?= $(SHAREDFLAGS)
 
 TESTLDFLAGS ?= $(LDFLAGS) -lCatch2Main -lCatch2
 
+LIBS := libs
 SRC := src
 OBJ := out/obj
 BUILD := out
 BINARY := atmosim
+
+SUBMODULES := argparse
 
 TESTSRC := tests
 TESTBINARY := tests
@@ -20,6 +23,7 @@ TESTBINARY := tests
 sources := $(shell find $(SRC) -type f -name "*.cpp")
 objects := $(sources:$(SRC)/%.cpp=$(OBJ)/%.o)
 depends := $(sources:$(SRC)/%.cpp=$(OBJ)/%.d)
+submodules := $(SUBMODULES:%=$(LIBS)/%)
 
 test_sources := $(shell find $(TESTSRC) -type f -name "*.cpp")
 test_objects := $(filter-out $(OBJ)/main.o, $(objects)) $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.o)
@@ -38,7 +42,7 @@ strip: all
 test: $(BUILD)/$(TESTBINARY)
 	@$(BUILD)/$(TESTBINARY)
 
-$(OBJ)/%.o: $(SRC)/%.cpp
+$(OBJ)/%.o: $(SRC)/%.cpp $(submodules)
 	@printf "CC\t%s\n" $@
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
@@ -47,6 +51,10 @@ $(OBJ)/$(TESTSRC)/%.o: $(TESTSRC)/%.cpp
 	@printf "CC\t%s\n" $@
 	@mkdir -p $(@D)
 	@$(CXX) $(CXXFLAGS) -MMD -MP $< -o $@
+
+$(LIBS)/%:
+	@git submodule init $@
+	@git submodule update $@
 
 -include $(depends) $(test_depends)
 

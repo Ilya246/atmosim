@@ -1,5 +1,6 @@
 #include <vector>
 
+// define this to omit exception checks in hotcode
 #ifdef ASIM_NOEXCEPT
 #define CHECKEXCEPT if constexpr (false)
 #else

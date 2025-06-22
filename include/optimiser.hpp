@@ -10,13 +10,13 @@
 namespace asim {
 
 template<typename T, typename R>
-struct optimizer {
+struct optimiser {
     std::function<R(const std::vector<float>&, T)> funct;
     std::tuple<const std::vector<float>&, T> args;
-    const std::vector<float>& lower_bounds;
-    const std::vector<float>& upper_bounds;
-    const std::vector<float>& min_lin_step;
-    const std::vector<float>& min_exp_step;
+    std::vector<float> lower_bounds;
+    std::vector<float> upper_bounds;
+    std::vector<float> min_lin_step;
+    std::vector<float> min_exp_step;
     bool maximise;
     std::chrono::duration<float> max_duration;
 
@@ -25,14 +25,13 @@ struct optimizer {
     R best_result;
     bool any_valid = false;
 
-
     float bounds_scale;
     size_t sample_rounds;
     float stepping_scale;
 
     float step_scale = 1.f;
 
-    optimizer(std::function<R(const std::vector<float>&, T)> func,
+    optimiser(std::function<R(const std::vector<float>&, T)> func,
               const std::vector<float>& lowerb,
               const std::vector<float>& upperb,
               const std::vector<float>& i_lin_step,
@@ -68,11 +67,15 @@ struct optimizer {
             }
         }
 
-        current = lower_bounds; // copy
+        reset();
+    }
 
+    void reset() {
+        current = lower_bounds;
         best_arg = std::vector<float>(current.size(), 0.f);
-
         best_result = worst_res();
+        any_valid = false;
+        step_scale = 1.f;
     }
 
     void find_best() {
@@ -104,7 +107,7 @@ struct optimizer {
                     // sample each possible movement direction in the parameter space
                     for (size_t i = 0; i < paramc; ++i) {
                         auto do_update = [&](const R& with, bool sign) {
-                            if (with == best_move_res) {
+                            if (eq_to(with, best_move_res)) {
                                 best_movedirs.push_back({i, sign});
                             } else if (better_than(with, best_move_res)) {
                                 best_movedirs = {{i, sign}};
@@ -175,7 +178,7 @@ struct optimizer {
                         }
                     }
                     // we failed to find any non-zero movement, break to avoid random walk
-                    if (chosen_scl == 0 || best_move_res == c_result) {
+                    if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
                         /* if (log_level >= 2) {
                             bomb_data data = get_data(get<0>(args), get<1>(args));
                             print_bomb(data, "Local minimum found: ");
@@ -239,11 +242,21 @@ struct optimizer {
     }
 
     bool better_than(const R& what, const R& than) {
+        if (!than.valid()) return what.valid();
+        if (!what.valid()) return false;
         return maximise ? what > than : than > what;
     }
 
     bool better_eq_than(const R& what, const R& than) {
+        if (!than.valid()) return true;
+        if (!what.valid()) return !than.valid();
         return maximise ? what >= than : than >= what;
+    }
+
+    bool eq_to(const R& what, const R& than) {
+        if (!than.valid()) return !what.valid();
+        if (!what.valid()) return !than.valid();
+        return what == than;
     }
 
     const R worst_res() {
