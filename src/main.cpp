@@ -93,6 +93,42 @@ float mix_input_setup(gas_tank& tank, const vector<gas_ref>& mix_gases, const ve
 
 struct bomb_data {
     vector<float> mix_ratios, primer_ratios;
+    
+private:
+    // Helper to calculate ratio fractions for both mixes
+    pair<vector<float>, vector<float>> get_ratio_fractions() const {
+        vector<float> mix_fractions(mix_gases.size());
+        float total_mix = accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
+        for (size_t i = 0; i < mix_gases.size(); ++i) {
+            mix_fractions[i] = mix_ratios[i] / total_mix;
+        }
+
+        vector<float> primer_fractions(primer_gases.size());
+        float total_primer = accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
+        for (size_t i = 0; i < primer_gases.size(); ++i) {
+            primer_fractions[i] = primer_ratios[i] / total_primer;
+        }
+
+        return {mix_fractions, primer_fractions};
+    }
+
+    // Helper to build ratio strings with formatted header
+    string build_ratio_string(string_view prefix, const vector<gas_ref>& gases, 
+                            const vector<float>& fractions, float temp, float pressure) const {
+        string out;
+        out += format("{}:   [ ", prefix);
+        for (size_t i = 0; i < gases.size(); ++i) {
+            out += format("{}% {} | ", fractions[i] * 100.f, gases[i].name());
+        }
+        if (pressure > 0.0f) {
+            out += format("{}K | {}kPa ]{}\n", temp, pressure, prefix == "MIX" ? "\n" : "");
+        } else {
+            out += format("{}K ]{}\n", temp, prefix == "MIX" ? "\n" : "");
+        }
+        return out;
+    }
+
+public:
     float fuel_temp, fuel_pressure, thir_temp, mix_to_pressure, mix_to_temp;
     vector<gas_ref> mix_gases, primer_gases;
     gas_tank tank;
@@ -135,35 +171,15 @@ struct bomb_data {
     string print_inline() const {
         string out_str;
 
+        auto [mix_fractions, primer_fractions] = get_ratio_fractions();
         size_t mix_c = mix_gases.size(), primer_c = primer_gases.size();
-
-        // get mix and primer fractions for each gas
-        vector<float> mix_fractions(mix_c);
-        float total_mix_ratio = accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
-        for (size_t i = 0; i < mix_c; ++i) {
-            mix_fractions[i] = mix_ratios[i] / total_mix_ratio;
-        }
-
-        vector<float> primer_fractions(primer_c);
-        float total_primer_ratio = accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
-        for (size_t i = 0; i < primer_c; ++i) {
-            primer_fractions[i] = primer_ratios[i] / total_primer_ratio;
-        }
 
         float required_primer_p = pressure_cap + (pressure_cap - fuel_pressure);
 
         out_str += format("[ time {:.1f}s | radius {:.2f}til | optstat {} ]; ", ticks * tickrate, radius, optstat);
 
-        out_str += "M: [ ";
-        for (size_t i = 0; i < mix_c; ++i) {
-            out_str += format("{}% {} | ", mix_fractions[i] * 100.f, mix_gases[i].name());
-        }
-        out_str += format("{}K | {}kPa ]; ", fuel_temp, fuel_pressure);
-
-        out_str += "C: [ ";
-        for (size_t i = 0; i < primer_c; ++i) {
-            out_str += format("{}% {} | ", primer_fractions[i] * 100.f, primer_gases[i].name());
-        }
+        out_str += build_ratio_string("M", mix_gases, mix_fractions, fuel_temp, fuel_pressure);
+        out_str += build_ratio_string("C", primer_gases, primer_fractions, thir_temp, 0.0f);
         out_str += format("{}K | >{}kPa ]", thir_temp, required_primer_p);
 
         return out_str;
@@ -172,20 +188,8 @@ struct bomb_data {
     string print_full() const {
         string out_str;
 
-        size_t mix_c = mix_gases.size(), primer_c = primer_gases.size(), total_c = mix_c + primer_c;
-
-        // get mix and primer fractions for each gas
-        vector<float> mix_fractions(mix_c);
-        float total_mix_ratio = accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
-        for (size_t i = 0; i < mix_c; ++i) {
-            mix_fractions[i] = mix_ratios[i] / total_mix_ratio;
-        }
-
-        vector<float> primer_fractions(primer_c);
-        float total_primer_ratio = accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
-        for (size_t i = 0; i < primer_c; ++i) {
-            primer_fractions[i] = primer_ratios[i] / total_primer_ratio;
-        }
+        auto [mix_fractions, primer_fractions] = get_ratio_fractions();
+        size_t mix_c = mix_gases.size(), primer_c = primer_gases.size(), total_c = mix_c + primer_gases.size();
 
         vector<pair<float, string>> min_amounts(mix_gases.size() + primer_gases.size());
         float required_volume = (required_transfer_volume + tank.mix.volume);
@@ -200,16 +204,8 @@ struct bomb_data {
 
         out_str += format("STATS: [ time {:.1f}s | radius {:.2f}til | optstat {} ]\n", ticks * tickrate, radius, optstat);
 
-        out_str += "MIX:   [ ";
-        for (size_t i = 0; i < mix_c; ++i) {
-            out_str += format("{}% {} | ", mix_fractions[i] * 100.f, mix_gases[i].name());
-        }
-        out_str += format("{}K | {}kPa ]\n", fuel_temp, fuel_pressure);
-
-        out_str += "CAN:   [ ";
-        for (size_t i = 0; i < primer_c; ++i) {
-            out_str += format("{}% {} | ", primer_fractions[i] * 100.f, primer_gases[i].name());
-        }
+        out_str += build_ratio_string("MIX", mix_gases, mix_fractions, fuel_temp, fuel_pressure);
+        out_str += build_ratio_string("CAN", primer_gases, primer_fractions, thir_temp, 0.0f);
         out_str += format("{}K | >{}kPa ]\n", thir_temp, required_primer_p);
 
         out_str += "REQ:   [ ";
