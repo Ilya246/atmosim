@@ -1,10 +1,13 @@
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <tuple>
 #include <vector>
 
 #include "utility.hpp"
 #include "constants.hpp"
+
+namespace asim {
 
 template<typename T, typename R>
 struct optimizer {
@@ -203,7 +206,7 @@ struct optimizer {
                     float& lowerb = cur_lower_bounds[i];
                     float& upperb = cur_upper_bounds[i];
                     const float& best_at = best_arg[i];
-                    float c_scale = pow(bounds_scale, samp_idx + 1);
+                    float c_scale = std::pow(bounds_scale, samp_idx + 1);
                     lowerb = lower_bounds[i] + (best_at - lower_bounds[i]) * (1.f - c_scale);
                     upperb = upper_bounds[i] + (best_at - upper_bounds[i]) * (1.f - c_scale);
                     // scale stepping less
@@ -235,15 +238,15 @@ struct optimizer {
         return res;
     }
 
-    bool better_than(R what, R than) {
+    bool better_than(const R& what, const R& than) {
         return maximise ? what > than : than > what;
     }
 
-    bool better_eq_than(R what, R than) {
+    bool better_eq_than(const R& what, const R& than) {
         return maximise ? what >= than : than >= what;
     }
 
-    R worst_res() {
+    const R worst_res() {
         return R::worst(maximise);
     }
 
@@ -260,3 +263,5 @@ struct optimizer {
         current[i] += get_step(i);
     }
 };
+
+}

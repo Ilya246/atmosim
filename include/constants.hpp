@@ -2,6 +2,8 @@
 
 #include <chrono>
 
+namespace asim {
+
 inline const float heat_scale = 1.0 / 8.0,
 
 pressure_cap = 1013.25,
@@ -55,3 +57,5 @@ nitrium_decomposition_energy = 30000.0,
 tickrate = 0.5;
 
 inline std::chrono::high_resolution_clock main_clock;
+
+}

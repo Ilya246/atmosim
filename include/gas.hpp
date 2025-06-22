@@ -7,6 +7,8 @@
 
 #include "constants.hpp"
 
+namespace asim {
+
 /// <gas_type>
 
 // a gas type definition
@@ -74,8 +76,7 @@ inline const gas_ref nitrium =        string_gas_map.at("nitrium");
 
 std::istream& operator>>(std::istream& stream, gas_ref& g);
 
-template<>
-inline std::string argp::type_sig<gas_ref> = "gas";
+std::string list_gases(std::string_view sep = ", ");
 
 /// </gas_type>
 
@@ -97,6 +98,15 @@ struct gas_mixture {
     void set_amount_of(gas_ref gas, float to);
     void adjust_amount_of(gas_ref gas, float by);
     void adjust_pressure_of(gas_ref gas, float by);
+
+    // fills gas mix to target pressure
+    // NOTE: uses gas canister filling logic, will yield wrong pressure if filling non-empty mix
+    void canister_fill_to(gas_ref gas, float temperature, float to_pressure);
+    void canister_fill_to(gas_ref gas, float to_pressure);
+    // NOTE: for optimisation purposes, this takes fractions and not ratios
+    // if you want to use those with ratios, call get_fractions first
+    void canister_fill_to(const std::vector<gas_ref>& gases, const std::vector<float>& fractions, float temperature, float to_pressure);
+    void canister_fill_to(const std::vector<gas_ref>& gases, const std::vector<float>& fractions, float to_pressure);
 
     gas_mixture& operator+=(const gas_mixture& rhs);
 
@@ -128,4 +138,12 @@ float to_volume(float pressure, float mols, float temp);
 // get temperature you would get after mixing 2 gases
 float to_mix_temp(float lhs_c, float lhs_n, float lhs_t, float rhs_c, float rhs_n, float rhs_t);
 
+// call with get_fractions() to get specific heat
+float get_mix_heat_capacity(const std::vector<gas_ref>& gases, const std::vector<float>& amounts);
+
 /// </utility>
+
+}
+
+template<>
+inline std::string argp::type_sig<asim::gas_ref> = "gas";

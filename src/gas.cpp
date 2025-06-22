@@ -1,8 +1,12 @@
 #include <map>
 #include <numeric>
+#include <stdexcept>
 #include <string>
 
 #include "gas.hpp"
+#include "utility.hpp"
+
+namespace asim {
 
 /// <gas_type>
 
@@ -15,6 +19,14 @@ std::istream& operator>>(std::istream& stream, gas_ref& g) {
         g = string_gas_map.at(val);
     }
     return stream;
+}
+
+std::string list_gases(std::string_view sep) {
+    std::string out_str = gases[0].name;
+    for (size_t i = 1; i < gas_count; ++i) {
+        out_str += (std::string)sep + gases[i].name;
+    }
+    return out_str;
 }
 
 /// </gas_type>
@@ -56,6 +68,38 @@ void gas_mixture::adjust_amount_of(gas_ref gas, float by) {
 
 void gas_mixture::adjust_pressure_of(gas_ref gas, float by) {
     amounts[gas.idx] += to_mols(by, volume, temperature);
+}
+
+void gas_mixture::canister_fill_to(gas_ref gas, float temperature, float to_pressure) {
+    gas_mixture fill_mix(volume);
+    fill_mix.temperature = temperature;
+    fill_mix.adjust_pressure_of(gas, to_pressure - pressure());
+
+    *this += fill_mix;
+}
+
+void gas_mixture::canister_fill_to(gas_ref gas, float to_pressure) {
+    canister_fill_to(gas, temperature, to_pressure);
+}
+
+void gas_mixture::canister_fill_to(const std::vector<gas_ref>& gases, const std::vector<float>& fractions, float temperature, float to_pressure) {
+    CHECKEXCEPT {
+        if (gases.size() != fractions.size()) throw std::runtime_error("amount of gases not equal to amount of fractions");
+        if (std::abs(std::accumulate(fractions.begin(), fractions.end(), 0.f) - 1.f) > 0.001f) throw std::runtime_error("fractions did not sum up to 1");
+    }
+    gas_mixture fill_mix(volume);
+    fill_mix.temperature = temperature;
+    float delta_p = to_pressure - pressure();
+    size_t gasc = gases.size();
+    for (size_t i = 0; i < gasc; ++i) {
+        fill_mix.adjust_pressure_of(gases[i], delta_p * fractions[i]);
+    }
+
+    *this += fill_mix;
+}
+
+void gas_mixture::canister_fill_to(const std::vector<gas_ref>& gases, const std::vector<float>& fractions, float to_pressure) {
+    canister_fill_to(gases, fractions, temperature, to_pressure);
 }
 
 gas_mixture& gas_mixture::operator+=(const gas_mixture& rhs) {
@@ -247,4 +291,15 @@ float to_mix_temp(float lhs_c, float lhs_n, float lhs_t, float rhs_c, float rhs_
     return (lhs_C * lhs_t + rhs_C * rhs_t) / (lhs_C + rhs_C);
 }
 
+float get_mix_heat_capacity(const std::vector<gas_ref>& gases, const std::vector<float>& amounts) {
+    float total_heat_cap = 0.f;
+    size_t ct = gases.size();
+    for(size_t i = 0; i < ct; ++i) {
+        total_heat_cap += gases[i].specific_heat() * amounts[i];
+    }
+    return total_heat_cap;
+}
+
 /// </utility>
+
+}

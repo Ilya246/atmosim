@@ -167,7 +167,7 @@ TEST_CASE("Tank simulation validation") {
         tank.mix.temperature = mix_temp;
         tank.mix.adjust_pressure_of(plasma, mix_pressure * plasma_frac);
         tank.mix.adjust_pressure_of(tritium, mix_pressure * tritium_frac);
-        tank.fill_with(oxygen, T20C);
+        tank.mix.canister_fill_to(oxygen, T20C, pressure_cap);
 
         size_t ticks = tank.tick_n(ticks_expected);
 
@@ -191,7 +191,7 @@ TEST_CASE("Tank simulation validation") {
         tank.mix.adjust_pressure_of(oxygen, mix_pressure * oxygen_frac);
         tank.mix.adjust_pressure_of(tritium, mix_pressure * tritium_frac);
         tank.mix.adjust_pressure_of(nitrous_oxide, mix_pressure * oxide_frac);
-        tank.fill_with(frezon, thir_temp);
+        tank.mix.canister_fill_to(frezon, thir_temp, pressure_cap);
 
         size_t ticks = tank.tick_n(ticks_expected);
 

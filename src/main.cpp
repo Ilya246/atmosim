@@ -3,8 +3,6 @@
 #include <format>
 #include <functional>
 #include <iostream>
-#include <limits>
-#include <numeric>
 #include <string>
 #include <vector>
 
@@ -17,170 +15,68 @@
 #include "tank.hpp"
 
 using namespace std;
-
-string list_gases() {
-    string out;
-    for (const gas_type& g : gases) {
-        out += g.name + ", ";
-    }
-    out.resize(out.size() - 2);
-    return out;
-}
-
-// flushes a basic_istream<char> until after \n
-basic_istream<char>& flush_stream(basic_istream<char>& stream) {
-    stream.ignore(numeric_limits<streamsize>::max(), '\n');
-    return stream;
-}
-
-// query user input from keyboard, ask again if invalid
-template <typename T>
-T get_input(const string& what, const string& invalid_err = "Invalid value. Try again.\n") {
-    bool valid = false;
-    T val;
-    while (!valid) {
-        valid = true;
-        cout << what;
-        cin >> val;
-        if (cin.fail() || cin.peek() != '\n') {
-            cerr << invalid_err;
-            cin.clear();
-            flush_stream(cin);
-            valid = false;
-        }
-    }
-    return val;
-}
-
-float get_gasmix_spec_heat(const vector<gas_ref>& gases, const vector<float>& ratios) {
-    float total_heat_cap = 0;
-    float total_ratio = 0;
-    for(size_t i = 0; i < gases.size(); ++i) {
-        total_heat_cap += gases[i].specific_heat() * ratios[i];
-        total_ratio += ratios[i];
-    }
-    if (total_ratio == 0) return 0;
-    return total_heat_cap / total_ratio;
-}
-
-float mix_input_setup(gas_tank& tank, const vector<gas_ref>& mix_gases, const vector<float>& mix_ratios, const vector<gas_ref>& primer_gases, const vector<float>& primer_ratios, float fuel_temp, float primer_temp, float target_temp) {
-    float fuel_specheat = get_gasmix_spec_heat(mix_gases, mix_ratios);
-    float primer_specheat = get_gasmix_spec_heat(primer_gases, primer_ratios);
-    if (primer_specheat == 0) return -1.0;
-    float fuel_pressure = (target_temp / primer_temp - 1.0) * pressure_cap / (fuel_specheat / primer_specheat - 1.0 + target_temp * (1.0 / primer_temp - fuel_specheat / primer_specheat / fuel_temp));
-
-    float fuel_mols = to_mols(fuel_pressure, tank.mix.volume, fuel_temp);
-    float total_mix_ratio = 0;
-    for(float r : mix_ratios) total_mix_ratio += r;
-    if(total_mix_ratio > 0) {
-        for(size_t i = 0; i < mix_gases.size(); ++i) {
-            tank.mix.set_amount_of(mix_gases[i], fuel_mols * mix_ratios[i] / total_mix_ratio);
-        }
-    }
-
-    float primer_mols = to_mols(pressure_cap - fuel_pressure, tank.mix.volume, primer_temp);
-    float total_primer_ratio = 0;
-    for(float r : primer_ratios) total_primer_ratio += r;
-    if(total_primer_ratio > 0) {
-        for(size_t i = 0; i < primer_gases.size(); ++i) {
-            tank.mix.set_amount_of(primer_gases[i], primer_mols * primer_ratios[i] / total_primer_ratio);
-        }
-    }
-
-    tank.mix.temperature = (fuel_mols * fuel_specheat * fuel_temp + primer_mols * primer_specheat * primer_temp) / (fuel_mols * fuel_specheat + primer_mols * primer_specheat);
-    return fuel_pressure;
-}
+using namespace asim;
 
 struct bomb_data {
     vector<float> mix_ratios, primer_ratios;
-    
-private:
-    // Helper to calculate ratio fractions for both mixes
-    pair<vector<float>, vector<float>> get_ratio_fractions() const {
-        vector<float> mix_fractions(mix_gases.size());
-        float total_mix = accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
-        for (size_t i = 0; i < mix_gases.size(); ++i) {
-            mix_fractions[i] = mix_ratios[i] / total_mix;
-        }
-
-        vector<float> primer_fractions(primer_gases.size());
-        float total_primer = accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
-        for (size_t i = 0; i < primer_gases.size(); ++i) {
-            primer_fractions[i] = primer_ratios[i] / total_primer;
-        }
-
-        return {mix_fractions, primer_fractions};
-    }
-
-    // Helper to build ratio strings with formatted header
-    string build_ratio_string(string_view prefix, const vector<gas_ref>& gases, 
-                            const vector<float>& fractions, float temp, float pressure) const {
-        string out;
-        out += format("{}:   [ ", prefix);
-        for (size_t i = 0; i < gases.size(); ++i) {
-            out += format("{}% {} | ", fractions[i] * 100.f, gases[i].name());
-        }
-        if (pressure > 0.0f) {
-            out += format("{}K | {}kPa ]{}\n", temp, pressure, prefix == "MIX" ? "\n" : "");
-        } else {
-            out += format("{}K ]{}\n", temp, prefix == "MIX" ? "\n" : "");
-        }
-        return out;
-    }
-
-public:
     float fuel_temp, fuel_pressure, thir_temp, mix_to_pressure, mix_to_temp;
     vector<gas_ref> mix_gases, primer_gases;
     gas_tank tank;
-    float radius = 0.0, fin_temp = -1.0, fin_pressure = -1.0, fin_heat_leak = -1.0, optstat = -1.0;
+    float radius = 0.0, pressure = -1.0, optstat = -1.0;
     int ticks = -1;
 
-    bomb_data(vector<float> mix_ratios, vector<float> primer_ratios, float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_pressure, float mix_to_temp, const vector<gas_ref>& mix_gases, const vector<gas_ref>& primer_gases):
-        mix_ratios(mix_ratios), primer_ratios(primer_ratios), fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_pressure(mix_to_pressure), mix_to_temp(mix_to_temp), mix_gases(mix_gases), primer_gases(primer_gases) {};
+    // TODO: make this more sane somehow?
+    bomb_data(vector<float> mix_ratios, vector<float> primer_ratios,
+              float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_pressure, float mix_to_temp,
+              const vector<gas_ref>& mix_gases, const vector<gas_ref>& primer_gases,
+              gas_tank tank, float radius, float pressure, float optstat,
+              int ticks)
+    :
+        mix_ratios(mix_ratios), primer_ratios(primer_ratios),
+        fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_pressure(mix_to_pressure), mix_to_temp(mix_to_temp),
+        mix_gases(mix_gases), primer_gases(primer_gases),
+        tank(tank),
+        radius(radius), pressure(pressure), optstat(optstat),
+        ticks(ticks) {};
 
-    void results(float n_radius, float n_fin_temp, float n_fin_pressure, float n_optstat, int n_ticks, gas_tank n_tank) {
-        radius = n_radius;
-        fin_temp = n_fin_temp;
-        fin_pressure = n_fin_pressure;
-        optstat = n_optstat;
-        ticks = n_ticks;
-        tank = n_tank;
+    string mix_string(const vector<gas_ref>& gases, const vector<float>& fractions) const {
+        string out;
+        for (size_t i = 0; i < gases.size(); ++i) {
+            out += format("{}% {}", fractions[i] * 100.f, gases[i].name());
+            if (i != gases.size() - 1) out += " | ";
+        }
+        return out;
+    }
+
+    string mix_string_simple(const vector<gas_ref>& gases, const vector<float>& fractions) const {
+        string out;
+        for (size_t i = 0; i < gases.size(); ++i) {
+            out += format("{}:{}", gases[i].name(), fractions[i]);
+            if (i != gases.size() - 1) out += ",";
+        }
+        return out;
     }
 
     string print_very_simple() const {
-        // optstat guaranteed to come first in the format `os=<number> `
-        string out = "os=" + to_string(optstat) + " ti=" + to_string(ticks);
-        out += " ft=" + to_string(fuel_temp) + " fp=" + to_string(fuel_pressure);
-        out += " mp=" + to_string(mix_to_pressure) + " mt=" + to_string(mix_to_temp);
-        out += " tt=" + to_string(thir_temp);
-        out += " mi=";
-        float total_mix_ratio = 0;
-        for(float r : mix_ratios) total_mix_ratio += r;
-        for(size_t i = 0; i < mix_gases.size(); ++i) {
-            out += (string)mix_gases[i].name() + ":" + to_string(mix_ratios[i] / total_mix_ratio) + (i == mix_gases.size() - 1 ? "" : ",");
-        }
-        out += " pm=";
-        float total_primer_ratio = 0;
-        for(float r : primer_ratios) total_primer_ratio += r;
-        for(size_t i = 0; i < primer_gases.size(); ++i) {
-            out += (string)primer_gases[i].name() + ":" + to_string(primer_ratios[i] / total_primer_ratio) + (i == primer_gases.size() - 1 ? "" : ",");
-        }
-        return out;
+        string out_str;
+        vector<float> mix_fractions = get_fractions(mix_ratios);
+        vector<float> primer_fractions = get_fractions(primer_ratios);
+        // note: this format is supposed to be script-friendly and backwards-compatible
+        out_str += format("os={} ti={} ft={} fp={} mp={} mt={} tt={} mi={} pm={}", optstat, ticks, fuel_temp, fuel_pressure, mix_to_pressure, mix_to_temp, thir_temp, mix_string_simple(mix_gases, mix_fractions), mix_string_simple(primer_gases, primer_fractions));
+        return out_str;
     }
 
     string print_inline() const {
         string out_str;
 
-        auto [mix_fractions, primer_fractions] = get_ratio_fractions();
-        size_t mix_c = mix_gases.size(), primer_c = primer_gases.size();
+        vector<float> mix_fractions = get_fractions(mix_ratios);
+        vector<float> primer_fractions = get_fractions(primer_ratios);
 
         float required_primer_p = pressure_cap + (pressure_cap - fuel_pressure);
 
-        out_str += format("[ time {:.1f}s | radius {:.2f}til | optstat {} ]; ", ticks * tickrate, radius, optstat);
-
-        out_str += build_ratio_string("M", mix_gases, mix_fractions, fuel_temp, fuel_pressure);
-        out_str += build_ratio_string("C", primer_gases, primer_fractions, thir_temp, 0.0f);
-        out_str += format("{}K | >{}kPa ]", thir_temp, required_primer_p);
+        out_str += format("S: [ time {:.1f}s | radius {:.2f}til | optstat {} ] ", ticks * tickrate, radius, optstat);
+        out_str += format("M: [ {} | {}K | {}kPa ] ", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
+        out_str += format("C: [ {} | {}K | >{}kPa ]", mix_string(primer_gases, primer_fractions), thir_temp, required_primer_p);
 
         return out_str;
     }
@@ -188,7 +84,8 @@ public:
     string print_full() const {
         string out_str;
 
-        auto [mix_fractions, primer_fractions] = get_ratio_fractions();
+        vector<float> mix_fractions = get_fractions(mix_ratios);
+        vector<float> primer_fractions = get_fractions(primer_ratios);
         size_t mix_c = mix_gases.size(), primer_c = primer_gases.size(), total_c = mix_c + primer_gases.size();
 
         vector<pair<float, string>> min_amounts(mix_gases.size() + primer_gases.size());
@@ -201,36 +98,31 @@ public:
         for (size_t i = 0; i < primer_c; ++i) {
             min_amounts[i + mix_c] = {to_mols(primer_fractions[i] * required_primer_p, required_volume, thir_temp), (string)primer_gases[i].name()};
         }
+        string req_str;
+        for (size_t i = 0; i < total_c; ++i) {
+            req_str += format("{:.2f}mol {}", min_amounts[i].first, min_amounts[i].second);
+            if (i + 1 != total_c) req_str += " | ";
+        }
 
         out_str += format("STATS: [ time {:.1f}s | radius {:.2f}til | optstat {} ]\n", ticks * tickrate, radius, optstat);
-
-        out_str += build_ratio_string("MIX", mix_gases, mix_fractions, fuel_temp, fuel_pressure);
-        out_str += build_ratio_string("CAN", primer_gases, primer_fractions, thir_temp, 0.0f);
-        out_str += format("{}K | >{}kPa ]\n", thir_temp, required_primer_p);
-
-        out_str += "REQ:   [ ";
-        for (size_t i = 0; i < total_c; ++i) {
-            out_str += format("{:.2f}mol {}", min_amounts[i].first, min_amounts[i].second);
-            if (i + 1 != total_c) out_str += " | ";
-        }
-        out_str += " ]";
+        out_str += format("MIX:   [ {} | {}K | {}kPa ]\n", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
+        out_str += format("CAN:   [ {} | {}K | >{}kPa ]\n", mix_string(primer_gases, primer_fractions), thir_temp, required_primer_p);
+        out_str += format("REQ:   [ {} ]", req_str);
 
         return out_str;
     }
 };
 
-void print_bomb(const bomb_data& bomb, const string& what, bool extensive = false, bool simple = false) {
-    cout << what << (simple ? bomb.print_very_simple() : (extensive ? bomb.print_full() : bomb.print_inline())) << endl;
-}
-
+// wrapper for bomb_data for use by the optimiser
 struct opt_val_wrap {
-    float stat;
-    float pressure;
-    bool valid_v;
+    shared_ptr<bomb_data> data = nullptr;
+    bool valid_v = true;
 
-    static opt_val_wrap worst(bool maximise) {
-        float w = numeric_limits<float>::max() * (maximise ? -1.f : 1.f);
-        return {w, w, false};
+    opt_val_wrap(): valid_v(false) {}
+    opt_val_wrap(shared_ptr<bomb_data>& d): data(d), valid_v(d != nullptr) {}
+
+    static const opt_val_wrap worst(bool) {
+        return {};
     }
 
     bool valid() const {
@@ -238,93 +130,90 @@ struct opt_val_wrap {
     }
 
     bool operator>(const opt_val_wrap& rhs) const {
-        return stat == rhs.stat ? pressure > rhs.pressure : stat > rhs.stat;
+        if (!valid_v) return false;
+        if (!rhs.valid_v) return valid_v;
+        return data->optstat == rhs.data->optstat ? data->pressure > rhs.data->pressure : data->optstat > rhs.data->optstat;
     }
 
     bool operator>=(const opt_val_wrap& rhs) const {
-        return stat >= rhs.stat;
+        if (!valid_v) return !rhs.valid_v;
+        if (!rhs.valid_v) return true;
+        return data->optstat >= rhs.data->optstat;
     }
 
     bool operator==(const opt_val_wrap& rhs) const {
-        return stat == rhs.stat;
+        if (!valid_v) return !rhs.valid_v;
+        if (!rhs.valid_v) return !valid_v;
+        return data->optstat == rhs.data->optstat;
     }
 };
 
 // args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
 opt_val_wrap do_sim(const vector<float>& in_args, tuple<const vector<gas_ref>&, const vector<gas_ref>&, bool, size_t> args) {
+    // read input parameters
     float target_temp = in_args[0];
     float fuel_temp = in_args[1];
     float thir_temp = in_args[2];
+    // invalid mix, abort early
+    if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
+        return {};
+    }
     const vector<gas_ref>& mix_gases = get<0>(args);
     const vector<gas_ref>& primer_gases = get<1>(args);
     bool measure_before = get<2>(args);
     size_t tick_cap = get<3>(args);
 
-    float fuel_pressure;
-    gas_tank tank;
-    if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
-        return {0.f, 0.f, false};
-    }
+    // read gas ratios
     vector<float> mix_ratios(mix_gases.size(), 1.f);
-    for (size_t i = 0; i < mix_gases.size() - 1; ++i) {
-        mix_ratios[i + 1] = in_args[3 + i];
-    }
     vector<float> primer_ratios(primer_gases.size(), 1.f);
     size_t mg_s = mix_gases.size() - 1;
-    for (size_t i = 0; i < primer_gases.size() - 1; ++i) {
+    size_t pg_s = primer_gases.size() - 1;
+    for (size_t i = 0; i < mg_s; ++i) {
+        mix_ratios[i + 1] = in_args[3 + i];
+    }
+    for (size_t i = 0; i < pg_s; ++i) {
         primer_ratios[i + 1] = in_args[3 + mg_s + i];
     }
-    fuel_pressure = mix_input_setup(tank, mix_gases, mix_ratios, primer_gases, primer_ratios, fuel_temp, thir_temp, target_temp);
+
+    vector<float> mix_fractions = get_fractions(mix_ratios);
+    vector<float> primer_fractions = get_fractions(primer_ratios);
+
+    // set up the tank
+    gas_tank tank;
+
+    // specific heat is heat capacity of 1mol and fractions sum up to 1mol
+    float fuel_specheat = get_mix_heat_capacity(mix_gases, mix_fractions);
+    float primer_specheat = get_mix_heat_capacity(primer_gases, primer_fractions);
+    // to how much we want to fill the tank
+    float fuel_pressure = (target_temp / thir_temp - 1.f) * pressure_cap / (fuel_specheat / primer_specheat - 1.f + target_temp * (1.f / thir_temp - fuel_specheat / primer_specheat / fuel_temp));
+    tank.mix.canister_fill_to(mix_gases, mix_fractions, fuel_temp, fuel_pressure);
+    tank.mix.canister_fill_to(primer_gases, primer_fractions, thir_temp, pressure_cap);
+    float mix_pressure = tank.mix.pressure();
+
+    // invalid mix, abort
     if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
-        return {0.f, 0.f, false};
+        return {};
     }
-    tank.tick_n(tick_cap);
+    size_t tick = tank.tick_n(tick_cap);
     // TODO critical
     /*
     bool pre_met = restrictions_met(pre_restrictions);
     if (measure_before) {
         stat = optimise_stat();
     }
-    loop();
     if (!measure_before) {
         stat = optimise_stat();
     }
     if (!pre_met || !restrictions_met(post_restrictions)) {
         return {0.f, get_pressure(), false};
     } */
-    return {tank.radius_cache, tank.mix.pressure(), true};
-}
-
-// args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
-bomb_data get_data(const vector<float>& in_args, tuple<const vector<gas_ref>&, const vector<gas_ref>&, bool, size_t> args) {
-    float target_temp = in_args[0];
-    float fuel_temp = in_args[1];
-    float thir_temp = in_args[2];
-    const vector<gas_ref>& mix_gases = get<0>(args);
-    const vector<gas_ref>& primer_gases = get<1>(args);
-    bool measure_before = get<2>(args);
-    size_t tick_cap = get<3>(args);
-
-    float fuel_pressure;
-    gas_tank tank;
-    vector<float> mix_ratios(mix_gases.size(), 1.f);
-    for (size_t i = 0; i < mix_gases.size() - 1; ++i) {
-        mix_ratios[i + 1] = in_args[3 + i];
-    }
-    vector<float> primer_ratios(primer_gases.size(), 1.f);
-    size_t mg_s = mix_gases.size() - 1;
-    for (size_t i = 0; i < primer_gases.size() - 1; ++i) {
-        primer_ratios[i + 1] = in_args[3 + mg_s + i];
-    }
-    fuel_pressure = mix_input_setup(tank, mix_gases, mix_ratios, primer_gases, primer_ratios, fuel_temp, thir_temp, target_temp);
-    float mix_pressure = tank.mix.pressure();
-    size_t tick = tank.tick_n(tick_cap);
-    /*if (!measure_before) {
-        stat = optimise_stat();
-    }*/
-    bomb_data bomb(mix_ratios, primer_ratios, fuel_temp, fuel_pressure, thir_temp, mix_pressure, target_temp, mix_gases, primer_gases);
-    bomb.results(tank.radius_cache, tank.mix.temperature, tank.mix.pressure(), tank.radius_cache, tick, tank);
-    return bomb;
+    float stat = tank.radius_cache;
+    shared_ptr<bomb_data> bomb = make_shared<bomb_data>(mix_ratios, primer_ratios,
+                   fuel_temp, fuel_pressure, thir_temp, mix_pressure, target_temp,
+                   mix_gases, primer_gases,
+                   tank, tank.radius_cache, tank.mix.pressure(), stat,
+                   tick);
+    return opt_val_wrap(bomb);
 }
 
 int main(int argc, char* argv[]) {
@@ -413,17 +302,6 @@ int main(int argc, char* argv[]) {
     bool optimise_measure_before = false;
     bool optimise_maximise = true;
 
-    if (mixing_mode) {
-        float t1, t2, ratio, capratio;
-        t1 = get_input<float>("temp1: ");
-        t2 = get_input<float>("temp2: ");
-        ratio = get_input<float>("molar ratio (first%): ");
-        capratio = get_input<float>("second:first heat capacity ratio (omit if end temperature does not matter): ");
-
-        ratio = 100.0 / ratio - 1.0;
-        cout << "pressure ratio: " << 100.0 / (1.0 + ratio * t2 / t1) << "% first | temp " << (t1 + t2 * capratio * ratio) / (1.0 + capratio * ratio) << "K";
-        return 0;
-    }
     if (silent) {
         // stop talking, be quiet for several days
         cout.setstate(ios::failbit);
@@ -478,10 +356,10 @@ int main(int argc, char* argv[]) {
     optim.find_best();
 
     vector<float> in_args = optim.best_arg;
-    bomb_data best_bomb = get_data(in_args, make_tuple(ref(mix_gases), ref(primer_gases), optimise_measure_before, tick_cap));
+    const opt_val_wrap& best_res = optim.best_result;
 
     cout.clear();
-    cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_bomb.print_very_simple() : best_bomb.print_full()) << endl;
+    cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_res.data->print_very_simple() : best_res.data->print_full()) << endl;
     if (silent) {
         cout.setstate(ios::failbit);
     }

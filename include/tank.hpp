@@ -3,6 +3,8 @@
 #include "constants.hpp"
 #include "gas.hpp"
 
+namespace asim {
+
 struct gas_tank {
     enum tank_state {
         st_intact = 0,
@@ -21,11 +23,10 @@ struct gas_tank {
     // returns: how many ticks we went forward
     size_t tick_n(size_t ticks_limit);
 
-    void fill_with(gas_ref gas, float temperature);
-    void fill_with(gas_ref gas);
-
     float radius_cache = 0.f;
     static float calc_radius(float pressure);
 
     std::string get_status();
 };
+
+}

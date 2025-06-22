@@ -1,9 +1,15 @@
-#include <random>
+#include <vector>
 
-inline float frand() {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_real_distribution<float> distribution;
+#ifdef ASIM_NOEXCEPT
+#define CHECKEXCEPT if constexpr (false)
+#else
+#define CHECKEXCEPT if constexpr (true)
+#endif
 
-    return distribution(gen);
+namespace asim {
+
+float frand();
+
+std::vector<float> get_fractions(const std::vector<float>& ratios);
+
 }
