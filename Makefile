@@ -29,6 +29,8 @@ test_sources := $(shell find $(TESTSRC) -type f -name "*.cpp")
 test_objects := $(filter-out $(OBJ)/main.o, $(objects)) $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.o)
 test_depends := $(test_sources:tests/%.cpp=$(OBJ)/$(TESTSRC)/%.d)
 
+.PHONY: all build clean strip test deploy
+
 build: $(BUILD)/$(BINARY)
 
 all: build test
@@ -41,6 +43,8 @@ strip: all
 
 test: $(BUILD)/$(TESTBINARY)
 	@$(BUILD)/$(TESTBINARY)
+
+deploy: build
 
 $(OBJ)/%.o: $(SRC)/%.cpp $(submodules)
 	@printf "CC\t%s\n" $@
@@ -67,5 +71,3 @@ $(BUILD)/$(TESTBINARY): $(test_objects)
 	@printf "LD\t%s\n" $@
 	@mkdir -p $(BUILD)
 	@$(CXX) $^ -o $@ $(TESTLDFLAGS)
-
-.PHONY: all build clean strip test
