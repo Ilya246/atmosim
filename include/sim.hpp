@@ -16,7 +16,7 @@ struct field_ref {
     size_t offset = -1;
     field_type type = invalid_f;
 
-    float get(T& from) const {
+    float get(const T& from) const {
         CHECKEXCEPT {
             if (offset == (size_t)-1) throw std::runtime_error("tried getting value of unset field reference");
         }
@@ -33,7 +33,7 @@ struct field_restriction {
     field_ref<T> field;
     float min_v, max_v;
 
-    bool OK(T& what) const {
+    bool OK(const T& what) const {
         float val = field.get(what);
         return val >= min_v && val <= max_v;
     }
@@ -108,13 +108,13 @@ struct opt_val_wrap {
     opt_val_wrap(): valid_v(false) {}
     opt_val_wrap(std::shared_ptr<bomb_data>& d): data(d), valid_v(d != nullptr) {}
     opt_val_wrap(std::shared_ptr<bomb_data>& d, bool val): data(d), valid_v(val) {}
-
-    static const opt_val_wrap worst(bool) {
-        return {};
-    }
     // methods below required for optimiser
     bool valid() const {
         return valid_v;
+    }
+    std::string rating() const {
+        if (!data) return "";
+        return data->print_inline();
     }
     bool operator>(const opt_val_wrap& rhs) const {
         return data->optstat == rhs.data->optstat ? data->fin_pressure > rhs.data->fin_pressure : data->optstat > rhs.data->optstat;

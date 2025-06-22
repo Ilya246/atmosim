@@ -81,8 +81,6 @@ struct optimiser {
 
     void reset() {
         current = lower_bounds;
-        best_arg = std::vector<float>(current.size(), 0.f);
-        best_result = worst_res();
         any_valid = false;
         step_scale = 1.f;
 
@@ -145,7 +143,7 @@ struct optimiser {
 
                     // found local minimum
                     if (best_movedirs.empty()) {
-                        log("Local minimum found", LOG_DEBUG);
+                        log(std::format("Local minimum found with rating {}", c_result.rating()), LOG_DEBUG);
                         break;
                     }
 
@@ -188,7 +186,7 @@ struct optimiser {
                     }
                     // we failed to find any non-zero movement, break to avoid random walk
                     if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
-                        log("Local minimum found", LOG_DEBUG);
+                        log(std::format("Local minimum found with rating {}", c_result.rating()), LOG_DEBUG);
                         break;
                     }
                     // perform the movement
@@ -203,7 +201,7 @@ struct optimiser {
                 continue;
             }
             if (samp_idx + 1 != sample_rounds) {
-                log(std::format("Sampling round {} complete", samp_idx + 1), LOG_BASIC);
+                log(std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating()), LOG_BASIC);
                 force_log = true;
 
                 // sampling round done, halve sampling area and go again
@@ -250,9 +248,8 @@ struct optimiser {
                 force_log = false;
             }
         }
-        R tres = apply(funct, args);
-        bool valid = tres.valid();
-        R res = valid ? tres : worst_res();
+        R res = apply(funct, args);
+        bool valid = res.valid();
         any_valid |= valid;
 
         if (better_than(res, best_result)) {
@@ -279,10 +276,6 @@ struct optimiser {
         if (!than.valid()) return !what.valid();
         if (!what.valid()) return !than.valid();
         return what == than;
-    }
-
-    const R worst_res() {
-        return R::worst(maximise);
     }
 
     float get_step(int i, float scale = 1.f) {

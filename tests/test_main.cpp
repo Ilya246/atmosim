@@ -212,22 +212,18 @@ struct float_wrap {
     float_wrap(): valid_v(false) {}
     float_wrap(float f): data(f) {}
 
-    static const float_wrap worst(bool) {
-        return {};
+    float rating() const {
+        return data;
     }
-
     bool valid() const {
         return valid_v;
     }
-
     bool operator>(const float_wrap& rhs) const {
         return data > rhs.data;
     }
-
     bool operator>=(const float_wrap& rhs) const {
         return data >= rhs.data;
     }
-
     bool operator==(const float_wrap& rhs) const {
         return data == rhs.data;
     }
