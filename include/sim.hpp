@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string>
 #include <vector>
 
@@ -43,21 +45,35 @@ struct field_restriction {
 template<typename T>
 inline std::istream& operator>>(std::istream& stream, field_restriction<T>& re) {
     std::string all;
-    stream >> all;
+    std::getline(stream, all, '\0');
     std::string_view view(all);
+
     size_t cpos = view.find(',');
-    size_t cpos2 = view.find(',', cpos + 1);
-    if (cpos == std::string::npos || cpos2 == std::string::npos) {
+    size_t end_pos = view.find(argp::collection_close);
+    if (cpos == std::string::npos || end_pos == std::string::npos) {
         stream.setstate(std::ios_base::failbit);
         return stream;
     }
+    size_t cpos2 = view.find(',', cpos + 1);
+    bool has_restr_b = cpos2 != std::string::npos;
+
     std::string_view param_s = view.substr(1, cpos - 1);
     re.field = argp::parse_value<field_ref<T>>(param_s);
 
-    float restrA = argp::parse_value<float>(view.substr(cpos + 1, cpos2 - cpos - 1));
-    float restrB = argp::parse_value<float>(view.substr(cpos2 + 1, view.size() - cpos2 - 2));
-    re.min_v = restrA;
-    re.max_v = restrB;
+    size_t restr_a_end = has_restr_b ? cpos2 : end_pos;
+    std::string_view restr_a_str = view.substr(cpos + 1, restr_a_end - cpos - 1);
+    // allow - as a shorthand for infinity
+    float restr_a = restr_a_str == "-" ? -std::numeric_limits<float>::max() : argp::parse_value<float>(restr_a_str);
+
+    float restr_b = std::numeric_limits<float>::max();
+    if (has_restr_b) {
+        std::string_view restr_b_str = view.substr(cpos2 + 1, view.size() - cpos2 - 2);
+        restr_b = restr_b_str == "-" ? restr_b : argp::parse_value<float>(restr_b_str);
+    }
+
+    re.min_v = restr_a;
+    re.max_v = restr_b;
+
     return stream;
 }
 
@@ -113,7 +129,7 @@ struct opt_val_wrap {
         return valid_v;
     }
     std::string rating() const {
-        if (!data) return "";
+        if (!data) return "[INVALID BOMB]";
         return data->print_inline();
     }
     bool operator>(const opt_val_wrap& rhs) const {
@@ -140,4 +156,4 @@ template<typename K>
 struct argp::is_container<asim::field_restriction<K>> : std::true_type {};
 
 template<typename K>
-inline const std::string argp::type_sig<asim::field_restriction<K>> = argp::collection_open + argp::type_sig<K> + ",float,float" + argp::collection_close;
+inline const std::string argp::type_sig<asim::field_restriction<K>> = argp::collection_open + argp::type_sig<asim::field_ref<K>> + ",float,float" + argp::collection_close;

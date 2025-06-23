@@ -1,3 +1,5 @@
+#pragma once
+
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -23,6 +25,7 @@ struct optimiser {
 
     size_t log_level;
     size_t sample_count = 0, last_sample_count = 0;
+    size_t init_sample_count = 0, last_init_sample_count = 0;
     std::chrono::duration<float> log_spacing = std::chrono::duration<float>(0.5f);
     std::chrono::time_point<__typeof__ main_clock> last_log_time;
     bool force_log = false;
@@ -88,13 +91,6 @@ struct optimiser {
         last_log_time = main_clock.now();
     }
 
-    void log(std::string_view str, size_t level, bool endl = true, bool clear = true) {
-        if (log_level < level) return;
-        if (clear) std::cout << "\33[2K\r";
-        std::cout << str;
-        if (endl) std::cout << std::endl;
-    }
-
     void find_best() {
         size_t paramc = current.size();
         std::vector<float> cur_lower_bounds = lower_bounds;
@@ -109,19 +105,24 @@ struct optimiser {
                 }
                 // do gradient descent until we find a local minimum
                 R c_result = sample();
+                ++init_sample_count;
+                log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating()); }, log_level, LOG_TRACE);
                 while (true) {
                     // movement directions yielding best result
                     std::vector<std::pair<size_t, bool>> best_movedirs = {};
                     R best_move_res = c_result;
+                    bool is_initial = true;
                     std::vector<float> old_current = current;
                     // sample each possible movement direction in the parameter space
                     for (size_t i = 0; i < paramc; ++i) {
+                        log([&](){ return std::format("Trying to move in direction {}", i); }, log_level, LOG_TRACE);
                         auto do_update = [&](const R& with, bool sign) {
-                            if (eq_to(with, best_move_res)) {
+                            if (!is_initial && eq_to(with, best_move_res)) {
                                 best_movedirs.push_back({i, sign});
                             } else if (better_than(with, best_move_res)) {
                                 best_movedirs = {{i, sign}};
                                 best_move_res = with;
+                                is_initial = false;
                             }
                         };
                         // step forward in this dimension
@@ -143,13 +144,14 @@ struct optimiser {
 
                     // found local minimum
                     if (best_movedirs.empty()) {
-                        log(std::format("Local minimum found with rating {}", c_result.rating()), LOG_DEBUG);
+                        log([&]() { return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
                         break;
                     }
 
                     auto do_skipmove = [&](size_t dir, float sign) {
                         size_t chosen_scl = 0;
                         for (size_t move_scl = 2; true; move_scl *= 2) {
+                            log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, move_scl); }, log_level, LOG_TRACE);
                             // step forward in chosen direction with scaling
                             current[dir] += sign * get_step(dir, move_scl);
                             // don't try to sample beyond bounds
@@ -158,9 +160,9 @@ struct optimiser {
                                 current[dir] = old_current[dir];
                                 break;
                             }
-                            // sample and check if scaling the movement produced better or same results
+                            // sample and check if scaling the movement produced better results
                             R res = sample();
-                            if (better_eq_than(res, best_move_res)) {
+                            if (better_than(res, best_move_res)) {
                                 chosen_scl = move_scl;
                                 best_move_res = res;
                             } else {
@@ -186,22 +188,23 @@ struct optimiser {
                     }
                     // we failed to find any non-zero movement, break to avoid random walk
                     if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
-                        log(std::format("Local minimum found with rating {}", c_result.rating()), LOG_DEBUG);
+                        log([&](){ return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
                         break;
                     }
                     // perform the movement
                     current[chosen.first] += chosen.second * get_step(chosen.first, chosen_scl);
+                    log([&](){ return std::format("Moving from {} -> {}", c_result.rating(), best_move_res.rating()); }, log_level, LOG_TRACE);
                     c_result = best_move_res;
                 }
             }
             if (!any_valid) {
-                log("Failed to find any viable result, retrying sample 1...", LOG_BASIC);
+                log([&](){ return "Failed to find any viable result, retrying sample 1..."; }, log_level, LOG_BASIC);
                 --samp_idx;
                 s_time = main_clock.now();
                 continue;
             }
             if (samp_idx + 1 != sample_rounds) {
-                log(std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating()), LOG_BASIC);
+                log([&]() { return std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating()); }, log_level, LOG_BASIC);
                 force_log = true;
 
                 // sampling round done, halve sampling area and go again
@@ -215,35 +218,26 @@ struct optimiser {
                     // scale stepping less
                     step_scale *= stepping_scale;
                 }
-                if (log_level >= LOG_BASIC) {
-                    log("New bounds: ", LOG_BASIC, false);
-                    for (size_t i = 0; i < current.size(); ++i) {
-                        log(std::format("[{},{}]", cur_lower_bounds[i], cur_upper_bounds[i]), LOG_BASIC, false, false);
-                    }
-                    log("", true, false);
-                }
+                log([&](){ return std::format("New bounds: [{}] to [{}]", vec_to_str(cur_lower_bounds), vec_to_str(cur_upper_bounds)); }, log_level, LOG_INFO);
             }
         }
     }
 
     // returns pair of sign-adjusted result and whether this updated our maximum
     R sample() {
-        if (log_level >= LOG_DEBUG) {
-            log("Sampling: ", LOG_DEBUG, false);
-            for (float f : current) {
-                log(std::format("{} ", f), LOG_DEBUG, false, false);
-            }
-            log("", false, true);
-        }
         ++sample_count;
         if (log_level >= LOG_INFO) {
             auto now = main_clock.now();
             std::chrono::duration<float> tdiff = now - last_log_time;
             if (tdiff > log_spacing || force_log) {
                 float sec = tdiff.count();
-                log(std::format("{:<7} Samples ({:<7.0f} samples/s)", sample_count, (sample_count - last_sample_count) / sec), LOG_INFO, false);
+                log([&](){ return std::format("{} ({} init) Samples ({:.0f} ({:.0f}) samples/s)",
+                                              sample_count, init_sample_count,
+                                              (sample_count - last_sample_count) / sec, (init_sample_count - last_init_sample_count) / sec);
+                }, log_level, LOG_INFO, false);
                 std::flush(std::cout);
                 last_sample_count = sample_count;
+                last_init_sample_count = init_sample_count;
                 last_log_time = now;
                 force_log = false;
             }
@@ -256,6 +250,8 @@ struct optimiser {
             best_result = res;
             best_arg = current;
         }
+
+        log([&](){ return std::format("Sampled {}, result {}", vec_to_str(current), res.rating()); }, log_level, LOG_TRACE);
 
         return res;
     }

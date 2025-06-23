@@ -1,3 +1,5 @@
+#include <functional>
+#include <iostream>
 #include <random>
 #include <vector>
 
@@ -21,6 +23,13 @@ std::vector<float> get_fractions(const std::vector<float>& ratios) {
     }
 
     return fractions;
+}
+
+void log(std::function<std::string()>&& str, size_t log_level, size_t level, bool endl, bool clear) {
+    if (log_level < level) return;
+    if (clear) std::cout << "\33[2K\r";
+    std::cout << str();
+    if (endl) std::cout << std::endl;
 }
 
 }
