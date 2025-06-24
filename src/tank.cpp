@@ -17,33 +17,33 @@ bool gas_tank::tick() {
     mix.reaction_tick();
 
     float pressure = mix.pressure();
-    if (pressure > tank_leak_pressure) {
-        if (pressure > tank_rupture_pressure) {
-            if (pressure > tank_fragment_pressure) {
-                for (int i = 0; i < 3; ++i) {
-                    mix.reaction_tick();
-                }
-                state = st_exploded;
-                return false;
-            }
-            if (integrity <= 0) {
-                state = st_ruptured;
-                return false;
-            }
-            integrity--;
-            return true;
+    if (pressure > tank_fragment_pressure) {
+        for (int i = 0; i < 3; ++i) {
+            mix.reaction_tick();
         }
+        state = st_exploded;
+        return false;
+    }
+    if (pressure > tank_rupture_pressure) {
+        if (integrity <= 0) {
+            state = st_ruptured;
+            return false;
+        }
+        --integrity;
+        return true;
+    }
+    if (pressure > tank_leak_pressure) {
         if (integrity <= 0) {
             for (float& amt : mix.amounts) {
                 amt *= 0.75;
             }
         } else {
-            integrity--;
+            --integrity;
         }
         return true;
     }
     if (integrity < 3) {
-        integrity++;
+        ++integrity;
     }
     return true;
 }

@@ -221,6 +221,8 @@ struct optimiser {
                 log([&](){ return std::format("New bounds: [{}] to [{}]", vec_to_str(cur_lower_bounds), vec_to_str(cur_upper_bounds)); }, log_level, LOG_INFO);
             }
         }
+
+        log([&]() { return std::format("Finished with {} ({}) samples", sample_count, init_sample_count); }, log_level, LOG_BASIC);
     }
 
     // returns pair of sign-adjusted result and whether this updated our maximum
