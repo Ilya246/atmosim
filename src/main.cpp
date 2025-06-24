@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
     float temperature_step = 1.001f, temperature_step_min = 0.05f;
     float lower_target_temp = fire_temp + 0.1f;
     bool step_target_temp = false;
-    size_t tick_cap = 60;
+    size_t tick_cap = 10 * 60 / tickrate; // 10 minutes
 
     tuple<field_ref<bomb_data>, bool, bool> opt_params{bomb_data::radius_field, true, false};
 

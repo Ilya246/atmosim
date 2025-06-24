@@ -19,7 +19,7 @@ struct gas_tank {
     // go forward in time one tick
     // returns: whether we're still intact
     bool tick();
-    // go forward up to ticks_limit ticks
+    // simulate until the tank is no longer intact, up to ticks_limit ticks
     // returns: how many ticks we went forward
     size_t tick_n(size_t ticks_limit);
 
@@ -27,6 +27,9 @@ struct gas_tank {
     static float calc_radius(float pressure);
 
     std::string get_status();
+
+private:
+    std::pair<bool, float> _tick();
 };
 
 }

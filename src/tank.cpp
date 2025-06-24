@@ -13,7 +13,8 @@ float gas_tank::calc_radius(float pressure) {
     return std::sqrt((pressure - tank_fragment_pressure) / tank_fragment_scale);
 }
 
-bool gas_tank::tick() {
+// do one reaction tick and check state
+std::pair<bool, float> gas_tank::_tick() {
     mix.reaction_tick();
 
     float pressure = mix.pressure();
@@ -22,17 +23,17 @@ bool gas_tank::tick() {
             mix.reaction_tick();
         }
         state = st_exploded;
-        return false;
+        return {false, pressure};
     }
-    if (pressure > tank_rupture_pressure) {
+    else if (pressure > tank_rupture_pressure) {
         if (integrity <= 0) {
             state = st_ruptured;
-            return false;
+            return {false, pressure};
         }
         --integrity;
-        return true;
+        return {true, pressure};
     }
-    if (pressure > tank_leak_pressure) {
+    else if (pressure > tank_leak_pressure) {
         if (integrity <= 0) {
             for (float& amt : mix.amounts) {
                 amt *= 0.75;
@@ -40,17 +41,25 @@ bool gas_tank::tick() {
         } else {
             --integrity;
         }
-        return true;
+        return {true, pressure};
     }
-    if (integrity < 3) {
+    else if (integrity < 3) {
         ++integrity;
     }
-    return true;
+    return {true, pressure};
+}
+
+bool gas_tank::tick() {
+    return _tick().first;
 }
 
 size_t gas_tank::tick_n(size_t ticks_limit) {
+    float pre_pressure = mix.pressure();
     for (size_t i = 0; i < ticks_limit; ++i) {
-        if (!tick()) return i + 1;
+        std::pair<bool, float> res = _tick();
+        // early exit if we ruptured or if we're inert
+        if (!res.first || pre_pressure == res.second) return i + 1;
+        pre_pressure = res.second;
     }
     return ticks_limit;
 }
