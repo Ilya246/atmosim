@@ -16,12 +16,24 @@ using namespace std;
 using namespace asim;
 
 template<typename T>
+T get_input() {
+    while (true) {
+        while (cin.peek() == '\n') cin.get();
+        T val;
+        cin >> val;
+        bool bad = !cin;
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        if (bad) cout << "Invalid input. Try again: ";
+        else return val;
+    }
+}
+
+template<typename T>
 T input_or_default(const T& default_value) {
     if (cin.get() == '\n') return default_value;
     cin.unget();
-    T val;
-    cin >> val;
-    cin.ignore();
+    T val = get_input<T>();
     return val;
 }
 
@@ -29,18 +41,8 @@ template<typename T>
 bool try_input(T& into) {
     if (cin.get() == '\n') return false;
     cin.unget();
-    cin >> into;
-    cin.ignore();
+    into = get_input<T>();
     return true;
-}
-
-template<typename T>
-T get_input() {
-    while (cin.peek() == '\n') cin.get();
-    T val;
-    cin >> val;
-    cin.ignore();
-    return val;
 }
 
 #ifdef __EMSCRIPTEN__
