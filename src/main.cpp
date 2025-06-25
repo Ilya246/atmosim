@@ -264,8 +264,8 @@ int main(int argc, char* argv[]) {
           bounds_scale,
           stepping_scale,
           log_level);
-
     optim.thread_count = nthreads;
+
     optim.find_best();
 
     vector<float> in_args = optim.best_arg;

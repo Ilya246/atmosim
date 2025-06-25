@@ -112,7 +112,7 @@ struct optimiser {
                     // do gradient descent until we find a local minimum
                     R c_result = sample();
                     ++init_sample_count;
-                    log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating()); }, log_level, LOG_TRACE);
+                    log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating_str()); }, log_level, LOG_TRACE);
                     while (true) {
                         // movement directions yielding best result
                         std::vector<std::pair<size_t, bool>> best_movedirs = {};
@@ -150,7 +150,7 @@ struct optimiser {
 
                         // found local minimum
                         if (best_movedirs.empty()) {
-                            log([&]() { return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
+                            log([&]() { return std::format("Local minimum found: ", c_result.rating_str()); }, log_level, LOG_DEBUG);
                             break;
                         }
 
@@ -191,12 +191,12 @@ struct optimiser {
                         }
                         // we failed to find any non-zero movement, break to avoid random walk
                         if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
-                            log([&](){ return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
+                            log([&](){ return std::format("Local minimum found with rating {}", c_result.rating_str()); }, log_level, LOG_DEBUG);
                             break;
                         }
                         // perform the movement
                         current[chosen.first] += chosen.second * get_step(chosen.first, chosen_scl);
-                        log([&](){ return std::format("Moving from {} -> {}", c_result.rating(), best_move_res.rating()); }, log_level, LOG_TRACE);
+                        log([&](){ return std::format("Moving from {} -> {}", c_result.rating_str(), best_move_res.rating_str()); }, log_level, LOG_TRACE);
                         c_result = best_move_res;
                     }
                 }
@@ -218,7 +218,7 @@ struct optimiser {
                 continue;
             }
             if (samp_idx + 1 != sample_rounds) {
-                log([&]() { return std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating()); }, log_level, LOG_BASIC);
+                log([&]() { return std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating_str()); }, log_level, LOG_BASIC);
                 force_log = true;
 
                 // sampling round done, halve sampling area and go again
@@ -271,7 +271,7 @@ struct optimiser {
 
         write_best_mutex.unlock();
 
-        log([&](){ return std::format("Sampled {}, result {}", vec_to_str(current), res.rating()); }, log_level, LOG_TRACE);
+        log([&](){ return std::format("Sampled {}, result {}", vec_to_str(current), res.rating_str()); }, log_level, LOG_TRACE);
 
         return res;
     }

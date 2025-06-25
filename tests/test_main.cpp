@@ -215,6 +215,9 @@ struct float_wrap {
     float rating() const {
         return data;
     }
+    std::string rating_str() const {
+        return std::format("{}", data);
+    }
     bool valid() const {
         return valid_v;
     }
@@ -233,6 +236,15 @@ float_wrap opt_sine(std::vector<float> in_args, std::tuple<>) {
     return {std::sin(in_args[0])};
 }
 
+float_wrap opt_fun(std::vector<float> in_args, std::tuple<>) {
+    float x = in_args[0];
+    float y = in_args[1];
+    float val = std::sin(x*2.0f) * std::cos(y*1.5f) +
+                0.5f * std::sin(x*5.0f) * std::cos(y*3.0f) +
+                0.2f * std::sin(x*10.0f) * std::cos(y*6.0f);
+    return {val};
+}
+
 TEST_CASE("Optimiser validation") {
     SECTION("Sine wave optimisation") {
         optimiser<std::tuple<>, float_wrap>
@@ -243,7 +255,7 @@ TEST_CASE("Optimiser validation") {
             {1.001f},
             true,
             std::make_tuple(),
-            std::chrono::duration<float>(0.01f),
+            std::chrono::duration<float>(0.001f),
             5,
             0.5f,
             0.75f);
@@ -252,22 +264,46 @@ TEST_CASE("Optimiser validation") {
             optim.maximise = false;
 
             optim.find_best();
-            std::vector<float> in_args = optim.best_arg;
+            std::vector<float> best_args = optim.best_arg;
             const float_wrap& best_res = optim.best_result;
 
             REQUIRE(best_res.valid());
-            REQUIRE(in_args[0] == Approx(-M_PI * 0.5f).epsilon(0.001f));
+            REQUIRE(best_args[0] == Approx(-M_PI * 0.5f).epsilon(0.001f));
             REQUIRE(best_res.data == Approx(-1.f).epsilon(0.001f));
         }
 
         SECTION("Maximisation") {
             optim.find_best();
-            std::vector<float> in_args = optim.best_arg;
+            std::vector<float> best_args = optim.best_arg;
             const float_wrap& best_res = optim.best_result;
 
             REQUIRE(best_res.valid());
-            REQUIRE(in_args[0] == Approx(M_PI * 0.5f).epsilon(0.001f));
+            REQUIRE(best_args[0] == Approx(M_PI * 0.5f).epsilon(0.001f));
             REQUIRE(best_res.data == Approx(1.f).epsilon(0.001f));
         }
+    }
+
+    SECTION("Complex maximisation") {
+        optimiser<std::tuple<>, float_wrap>
+        c_optim(opt_fun,
+            {0.f, -1.f},
+            {1.f, 1.f},
+            {0.01f, 0.01f},
+            {1.001f, 1.001f},
+            true,
+            std::make_tuple(),
+            std::chrono::duration<float>(0.001f),
+            5,
+            0.5f,
+            0.75f);
+
+        c_optim.find_best();
+        std::vector<float> best_args = c_optim.best_arg;
+        const float_wrap& best_res = c_optim.best_result;
+
+        REQUIRE(best_res.valid());
+        REQUIRE(best_args[0] == Approx(0.292f).epsilon(0.01f));
+        REQUIRE(best_args[1] == Approx(0.f).margin(0.01f));
+        REQUIRE(best_res.data == Approx(1.092f).epsilon(0.01f));
     }
 }

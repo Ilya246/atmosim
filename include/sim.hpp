@@ -128,7 +128,10 @@ struct opt_val_wrap {
     bool valid() const {
         return valid_v;
     }
-    std::string rating() const {
+    float rating() const {
+        return valid() ? data->optstat : 0.f;
+    }
+    std::string rating_str() const {
         if (!data) return "[INVALID BOMB]";
         return data->print_inline();
     }
