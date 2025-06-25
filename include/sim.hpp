@@ -81,7 +81,7 @@ extern std::string params_supported_str;
 
 struct bomb_data {
     std::vector<float> mix_ratios, primer_ratios;
-    float fuel_temp, fuel_pressure, thir_temp, mix_to_pressure, mix_to_temp;
+    float to_pressure, fuel_temp, fuel_pressure, thir_temp, mix_to_temp;
     std::vector<gas_ref> mix_gases, primer_gases;
     gas_tank tank;
     float optstat;
@@ -89,14 +89,14 @@ struct bomb_data {
     int ticks;
 
     // TODO: make this more sane somehow?
-    bomb_data(std::vector<float> mix_ratios, std::vector<float> primer_ratios,
-              float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_pressure, float mix_to_temp,
+    bomb_data(std::vector<float> mix_ratios, std::vector<float> primer_ratios, float to_pressure,
+              float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_temp,
               const std::vector<gas_ref>& mix_gases, const std::vector<gas_ref>& primer_gases,
               gas_tank tank, float optstat = -1.f,
               int ticks = 0)
     :
-        mix_ratios(mix_ratios), primer_ratios(primer_ratios),
-        fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_pressure(mix_to_pressure), mix_to_temp(mix_to_temp),
+        mix_ratios(mix_ratios), primer_ratios(primer_ratios), to_pressure(to_pressure),
+        fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_temp(mix_to_temp),
         mix_gases(mix_gases), primer_gases(primer_gases),
         tank(tank), optstat(optstat),
         ticks(ticks) {};

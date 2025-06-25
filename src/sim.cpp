@@ -45,7 +45,7 @@ std::string bomb_data::print_very_simple() const {
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
     std::vector<float> primer_fractions = get_fractions(primer_ratios);
     // note: this format is supposed to be script-friendly and backwards-compatible
-    out_str += std::format("os={} ti={} ft={} fp={} mp={} mt={} tt={} mi={} pm={}", optstat, ticks, fuel_temp, fuel_pressure, mix_to_pressure, mix_to_temp, thir_temp, mix_string_simple(mix_gases, mix_fractions), mix_string_simple(primer_gases, primer_fractions));
+    out_str += std::format("os={} ti={} ft={} fp={} tp={} mt={} tt={} mi={} pm={}", optstat, ticks, fuel_temp, fuel_pressure, to_pressure, mix_to_temp, thir_temp, mix_string_simple(mix_gases, mix_fractions), mix_string_simple(primer_gases, primer_fractions));
     return out_str;
 }
 
@@ -55,7 +55,7 @@ std::string bomb_data::print_inline() const {
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
     std::vector<float> primer_fractions = get_fractions(primer_ratios);
 
-    float required_primer_p = pressure_cap + (pressure_cap - fuel_pressure);
+    float required_primer_p = to_pressure + (to_pressure - fuel_pressure);
 
     out_str += std::format("S: [ time {:.1f}s | radius {:.2f}til | optstat {} ] ", ticks * tickrate, fin_radius, optstat);
     out_str += std::format("M: [ {} | {}K | {}kPa ] ", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
@@ -76,7 +76,7 @@ std::string bomb_data::print_full() const {
     for (size_t i = 0; i < mix_c; ++i) {
         min_amounts[i] = {to_mols(mix_fractions[i] * fuel_pressure, required_volume, fuel_temp), (std::string)mix_gases[i].name()};
     }
-    float required_primer_p = pressure_cap + (pressure_cap - fuel_pressure);
+    float required_primer_p = to_pressure + (to_pressure - fuel_pressure);
     required_primer_p *= required_volume / required_transfer_volume;
     for (size_t i = 0; i < primer_c; ++i) {
         min_amounts[i + mix_c] = {to_mols(primer_fractions[i] * required_primer_p, required_volume, thir_temp), (std::string)primer_gases[i].name()};
@@ -116,6 +116,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const st
     float target_temp = in_args[0];
     float fuel_temp = in_args[1];
     float thir_temp = in_args[2];
+    float to_pressure = in_args[3];
     // invalid mix, abort early
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
         return {};
@@ -134,10 +135,10 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const st
     size_t mg_s = mix_gases.size() - 1;
     size_t pg_s = primer_gases.size() - 1;
     for (size_t i = 0; i < mg_s; ++i) {
-        mix_ratios[i + 1] = in_args[3 + i];
+        mix_ratios[i + 1] = in_args[4 + i];
     }
     for (size_t i = 0; i < pg_s; ++i) {
-        primer_ratios[i + 1] = in_args[3 + mg_s + i];
+        primer_ratios[i + 1] = in_args[4 + mg_s + i];
     }
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
@@ -150,18 +151,17 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const st
     float fuel_specheat = get_mix_heat_capacity(mix_gases, mix_fractions);
     float primer_specheat = get_mix_heat_capacity(primer_gases, primer_fractions);
     // to how much we want to fill the tank
-    float fuel_pressure = (target_temp / thir_temp - 1.f) * pressure_cap / (fuel_specheat / primer_specheat - 1.f + target_temp * (1.f / thir_temp - fuel_specheat / primer_specheat / fuel_temp));
+    float fuel_pressure = (target_temp / thir_temp - 1.f) * to_pressure / (fuel_specheat / primer_specheat - 1.f + target_temp * (1.f / thir_temp - fuel_specheat / primer_specheat / fuel_temp));
     mix_tank.mix.canister_fill_to(mix_gases, mix_fractions, fuel_temp, fuel_pressure);
-    mix_tank.mix.canister_fill_to(primer_gases, primer_fractions, thir_temp, pressure_cap);
-    float mix_pressure = mix_tank.mix.pressure();
+    mix_tank.mix.canister_fill_to(primer_gases, primer_fractions, thir_temp, to_pressure);
 
     // invalid mix, abort
-    if (fuel_pressure > pressure_cap || fuel_pressure < 0.0) {
+    if (fuel_pressure > to_pressure || fuel_pressure < 0.0) {
         return {};
     }
 
-    std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_ratios, primer_ratios,
-                   fuel_temp, fuel_pressure, thir_temp, mix_pressure, target_temp,
+    std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_ratios, primer_ratios, to_pressure,
+                   fuel_temp, fuel_pressure, thir_temp, target_temp,
                    mix_gases, primer_gases,
                    std::move(mix_tank));
 

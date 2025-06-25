@@ -77,6 +77,7 @@ int main(int argc, char* argv[]) {
     float ratio_step = 1.005f;
     float temperature_step = 1.001f, temperature_step_min = 0.05f;
     float lower_target_temp = fire_temp + 0.1f;
+    float lower_pressure = pressure_cap;
     bool step_target_temp = false;
     size_t tick_cap = 10 * 60 / tickrate; // 10 minutes
 
@@ -102,6 +103,7 @@ int main(int argc, char* argv[]) {
         argp::make_argument("mixt2", "m2", "maximum fuel mix temperature to check, Kelvin", mixt2),
         argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
         argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
+        argp::make_argument("lowerp", "p1", "lower mix-to pressure to check, kPa, default is pressure cap", lower_pressure),
         argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
         argp::make_argument("tstep", "", "set temperature iteration multiplier (default " + to_string(temperature_step) + ")", temperature_step),
         argp::make_argument("tstepm", "", "set minimum temperature iteration step (default " + to_string(temperature_step_min) + ")", temperature_step_min),
@@ -225,28 +227,34 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    size_t num_temps = 3;
+    size_t pressure_offset = num_temps;
+    size_t num_pressure = 1;
+    size_t ratio_offset = num_temps + num_pressure;
     size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
     size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
-    size_t num_params = 3 + num_mix_ratios + num_primer_ratios;
+    size_t num_params = ratio_offset + num_mix_ratios + num_primer_ratios;
 
-    vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1};
+    vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1, lower_pressure};
     lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
-    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2};
+    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2, pressure_cap};
     if (!step_target_temp) {
         upper_bounds[0] = lower_bounds[0];
     }
-    for (size_t i = 0; i < num_params - 3; ++i) {
+    for (size_t i = 0; i < num_params - ratio_offset; ++i) {
         lower_bounds.push_back(1.f / ratio_bounds);
         upper_bounds.push_back(ratio_bounds);
     }
 
     vector<float> min_l_step(lower_bounds.size(), 0.f);
     vector<float> min_e_step(lower_bounds.size(), 0.f);
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < num_temps; ++i) {
         min_l_step[i] = temperature_step_min;
         min_e_step[i] = temperature_step;
     }
-    for (size_t i = 3; i < num_params; ++i) {
+    min_l_step[pressure_offset] = pressure_cap * 0.01f;
+    min_e_step[pressure_offset] = 1.01f;
+    for (size_t i = ratio_offset; i < num_params; ++i) {
         min_l_step[i] = 0.f;
         min_e_step[i] = ratio_step;
     }

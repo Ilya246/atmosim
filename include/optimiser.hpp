@@ -238,7 +238,7 @@ struct optimiser {
     }
 
     // returns pair of sign-adjusted result and whether this updated our maximum
-    R sample(std::vector<float> at) {
+    R sample(const std::vector<float>& at) {
         if (log_level >= LOG_INFO) {
             auto now = main_clock.now();
             std::chrono::duration<float> tdiff = now - last_log_time;
