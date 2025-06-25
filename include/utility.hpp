@@ -16,6 +16,8 @@
 namespace asim {
 
 float frand();
+float frand(float to);
+float frand(float from, float to);
 
 std::vector<float> get_fractions(const std::vector<float>& ratios);
 

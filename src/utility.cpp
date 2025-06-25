@@ -15,6 +15,14 @@ float frand() {
     return distribution(gen);
 }
 
+float frand(float to) {
+    return frand() * to;
+}
+
+float frand(float from, float to) {
+    return from + frand(to - from);
+}
+
 std::vector<float> get_fractions(const std::vector<float>& ratios) {
     std::vector<float> fractions(ratios.size());
     float total = std::accumulate(ratios.begin(), ratios.end(), 0.f);
