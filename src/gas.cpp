@@ -106,6 +106,22 @@ void gas_mixture::canister_fill_to(const std::vector<gas_ref>& gases, const std:
     canister_fill_to(gases, fractions, temperature, to_pressure);
 }
 
+void gas_mixture::canister_fill_to(const std::vector<std::pair<gas_ref, float>>& gases, float temperature, float to_pressure) {
+    gas_mixture fill_mix(volume);
+    fill_mix.temperature = temperature;
+    float delta_p = to_pressure - pressure();
+    size_t gasc = gases.size();
+    for (size_t i = 0; i < gasc; ++i) {
+        fill_mix.adjust_pressure_of(gases[i].first, delta_p * gases[i].second);
+    }
+
+    *this += fill_mix;
+}
+
+void gas_mixture::canister_fill_to(const std::vector<std::pair<gas_ref, float>>& gases, float to_pressure) {
+    canister_fill_to(gases, temperature, to_pressure);
+}
+
 gas_mixture& gas_mixture::operator+=(const gas_mixture& rhs) {
     float energy = heat_energy();
     for (size_t i = 0; i < gas_count; ++i) {
@@ -116,13 +132,13 @@ gas_mixture& gas_mixture::operator+=(const gas_mixture& rhs) {
     return *this;
 }
 
-std::string gas_mixture::to_string() const {
+std::string gas_mixture::to_string(char sep) const {
     std::string out_str;
     for (size_t i = 0; i < gas_count; ++i) {
         gas_ref gas = {i};
         float amt = amount_of(gas);
         if (amt > 0.f) {
-            if (!out_str.empty()) out_str += ' ';
+            if (!out_str.empty()) out_str += sep;
             out_str += std::string(gas.name()) + " " + std::to_string(amt) + "mol";
         }
     }

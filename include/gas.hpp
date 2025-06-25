@@ -109,10 +109,12 @@ struct gas_mixture {
     // if you want to use those with ratios, call get_fractions first
     void canister_fill_to(const std::vector<gas_ref>& gases, const std::vector<float>& fractions, float temperature, float to_pressure);
     void canister_fill_to(const std::vector<gas_ref>& gases, const std::vector<float>& fractions, float to_pressure);
+    void canister_fill_to(const std::vector<std::pair<gas_ref, float>>& gases, float temperature, float to_pressure);
+    void canister_fill_to(const std::vector<std::pair<gas_ref, float>>& gases, float to_pressure);
 
     gas_mixture& operator+=(const gas_mixture& rhs);
 
-    std::string to_string() const;
+    std::string to_string(char sep = ' ') const;
 
     // do gas reactions
     void reaction_tick();

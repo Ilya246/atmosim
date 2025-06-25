@@ -15,6 +15,34 @@
 using namespace std;
 using namespace asim;
 
+template<typename T>
+T input_or_default(const T& default_value) {
+    if (cin.get() == '\n') return default_value;
+    cin.unget();
+    T val;
+    cin >> val;
+    cin.ignore();
+    return val;
+}
+
+template<typename T>
+bool try_input(T& into) {
+    if (cin.get() == '\n') return false;
+    cin.unget();
+    cin >> into;
+    cin.ignore();
+    return true;
+}
+
+template<typename T>
+T get_input() {
+    while (cin.peek() == '\n') cin.get();
+    T val;
+    cin >> val;
+    cin.ignore();
+    return val;
+}
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 
@@ -34,7 +62,10 @@ int main(int argc, char* argv[]) {
 #endif
     size_t log_level = 2;
 
-    bool mixing_mode = false, do_retest = false;
+    enum _mode {normal, mixing, full_input};
+    _mode mode = normal;
+
+    bool mixing_mode = false, full_input_mode = false;
     bool simple_output = false, silent = false;
 
     vector<gas_ref> mix_gases;
@@ -61,13 +92,13 @@ int main(int argc, char* argv[]) {
         argp::make_argument("ratiobounds", "", "set gas ratio iteration bounds", ratio_bounds),
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
         argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
+        argp::make_argument("fullinput", "f", "UTILITY TOOL: simulate and print every tick of a bomb with chosen gases", full_input_mode),
         argp::make_argument("mixg", "mg", "list of fuel gases (usually, in tank)", mix_gases),
         argp::make_argument("primerg", "pg", "list of primer gases (usually, in canister)", primer_gases),
         argp::make_argument("mixt1", "m1", "minimum fuel mix temperature to check, Kelvin", mixt1),
         argp::make_argument("mixt2", "m2", "maximum fuel mix temperature to check, Kelvin", mixt2),
         argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
         argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
-        argp::make_argument("doretest", "", "after calculating the bomb, test it again and print every tick as it reacts", do_retest),
         argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
         argp::make_argument("tstep", "", "set temperature iteration multiplier (default " + to_string(temperature_step) + ")", temperature_step),
         argp::make_argument("tstepm", "", "set minimum temperature iteration step (default " + to_string(temperature_step_min) + ")", temperature_step_min),
@@ -115,6 +146,69 @@ int main(int argc, char* argv[]) {
         "\n"
         "  Brought to you by Ilya246 and friends"
     );
+
+    // check if we chose an alternate mode
+    if (mixing_mode) mode = mixing;
+    if (full_input_mode) mode = full_input;
+
+    switch (mode) {
+        case (mixing): {
+            cout << "Input desired % of first gas: ";
+            float perc = get_input<float>();
+            cout << "Input temperature of first gas: ";
+            float T1 = get_input<float>();
+            cout << "Input temperature of second gas: ";
+            float T2 = get_input<float>();
+            float portion = perc * 0.01f;
+            float n_ratio = portion / (1.f - portion) * T1 / T2;
+            float n_perc = 100.f * n_ratio / (1.f + n_ratio);
+            cout << format("Desired percentage: {}% first {}% second", n_perc, 100.f - n_perc) << endl;
+            break;
+        }
+        case (full_input): {
+            gas_tank tank;
+
+            auto add_mix = [](gas_mixture& to, int num) {
+                cout << format("Inputting mix {}\n", num);
+                cout << format("Input pressure to fill to (omit for {}): ", pressure_cap);
+                float pressure_to = input_or_default(pressure_cap);
+                cout << "Input temperature: ";
+                float temperature = get_input<float>();
+                vector<pair<gas_ref, float>> gases;
+                while (true) {
+                    gas_ref g;
+                    cout << "Input gas (omit to end): ";
+                    if (!try_input(g)) break;
+                    cout << "Input ratio (%, portion): ";
+                    float ratio = get_input<float>();
+                    gases.push_back({g, ratio});
+                }
+                to.canister_fill_to(get_fractions(gases), temperature, pressure_to);
+            };
+
+            cout << "Input number of mixes (omit for 2): ";
+            int mix_c = input_or_default(2);
+            for (int i = 0; i < mix_c; ++i) {
+                add_mix(tank.mix, i + 1);
+            }
+
+            size_t tick = 1;
+            do {
+                cout << format("[Tick {:<2}] Tank status: {}", tick, tank.get_status());
+                cout << endl;
+                ++tick;
+            } while (tank.tick());
+
+            cout << format("Result: status: {}, state {}, range {}", tank.get_status(), (int)tank.state, tank.calc_radius());
+            cout << endl;
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+
+    if (mode != normal) return 0;
 
     field_ref<bomb_data> opt_param = get<0>(opt_params);
     bool optimise_maximise = get<1>(opt_params);
