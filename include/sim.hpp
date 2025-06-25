@@ -133,7 +133,7 @@ struct opt_val_wrap {
         return data->print_inline();
     }
     bool operator>(const opt_val_wrap& rhs) const {
-        return data->optstat == rhs.data->optstat ? data->fin_pressure > rhs.data->fin_pressure : data->optstat > rhs.data->optstat;
+        return data->optstat == rhs.data->optstat ? data->fin_radius > rhs.data->fin_radius : data->optstat > rhs.data->optstat;
     }
     bool operator>=(const opt_val_wrap& rhs) const {
         return data->optstat >= rhs.data->optstat;

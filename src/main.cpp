@@ -170,8 +170,10 @@ int main(int argc, char* argv[]) {
         case (full_input): {
             gas_tank tank;
 
-            auto add_mix = [](gas_mixture& to, int num) {
-                cout << format("Inputting mix {}\n", num);
+            cout << "Input number of mixes (omit for 2): ";
+            int mix_c = input_or_default(2);
+            for (int i = 0; i < mix_c; ++i) {
+                cout << format("Inputting mix {}\n", i + 1);
                 cout << format("Input pressure to fill to (omit for {}): ", pressure_cap);
                 float pressure_to = input_or_default(pressure_cap);
                 cout << "Input temperature: ";
@@ -185,13 +187,7 @@ int main(int argc, char* argv[]) {
                     float ratio = get_input<float>();
                     gases.push_back({g, ratio});
                 }
-                to.canister_fill_to(get_fractions(gases), temperature, pressure_to);
-            };
-
-            cout << "Input number of mixes (omit for 2): ";
-            int mix_c = input_or_default(2);
-            for (int i = 0; i < mix_c; ++i) {
-                add_mix(tank.mix, i + 1);
+                tank.mix.canister_fill_to(get_fractions(gases), temperature, pressure_to);
             }
 
             size_t tick = 1;

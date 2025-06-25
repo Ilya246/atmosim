@@ -148,10 +148,17 @@ struct optimiser {
                         break;
                     }
 
-                    auto do_skipmove = [&](size_t dir, float sign) {
-                        size_t chosen_scl = 0;
+                    std::pair<size_t, float> chosen;
+                    size_t chosen_scl = 0;
+                    // try skip-move in each prospective movement direction
+                    for (const std::pair<size_t, bool>& p : best_movedirs) {
+                        float sign = p.second ? +1.f : -1.f;
+                        // check if we can skip-move in this direction
+                        // the function handles checking whether that'd actually be profitable
+                        size_t dir = p.first;
+                        size_t scl = 0;
                         for (size_t move_scl = 2; true; move_scl *= 2) {
-                            log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, move_scl); }, log_level, LOG_TRACE);
+                            log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, sign * move_scl); }, log_level, LOG_TRACE);
                             // step forward in chosen direction with scaling
                             current[dir] += sign * get_step(dir, move_scl);
                             // don't try to sample beyond bounds
@@ -171,16 +178,6 @@ struct optimiser {
                             }
                             current[dir] = old_current[dir];
                         }
-                        return chosen_scl;
-                    };
-                    std::pair<size_t, float> chosen;
-                    size_t chosen_scl = 0;
-                    // try skip-move in each prospective movement direction
-                    for (const std::pair<size_t, bool>& p : best_movedirs) {
-                        float sign = p.second ? +1.f : -1.f;
-                        // check if we can skip-move in this direction
-                        // the function handles checking whether that'd actually be profitable
-                        size_t scl = do_skipmove(p.first, sign);
                         if (scl != 0) {
                             chosen = {p.first, sign};
                             chosen_scl = scl;
