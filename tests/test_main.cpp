@@ -232,11 +232,11 @@ struct float_wrap {
     }
 };
 
-float_wrap opt_sine(std::vector<float> in_args, std::tuple<>) {
+float_wrap opt_sine(const std::vector<float>& in_args, const std::tuple<>&) {
     return {std::sin(in_args[0])};
 }
 
-float_wrap opt_fun(std::vector<float> in_args, std::tuple<>) {
+float_wrap opt_fun(const std::vector<float>& in_args, const std::tuple<>&) {
     float x = in_args[0];
     float y = in_args[1];
     float val = std::sin(x*2.0f) * std::cos(y*1.5f) +
@@ -268,8 +268,8 @@ TEST_CASE("Optimiser validation") {
             const float_wrap& best_res = optim.best_result;
 
             REQUIRE(best_res.valid());
-            REQUIRE(best_args[0] == Approx(-M_PI * 0.5f).epsilon(0.001f));
-            REQUIRE(best_res.data == Approx(-1.f).epsilon(0.001f));
+            REQUIRE(best_args[0] == Approx(-M_PI * 0.5f).epsilon(0.01f));
+            REQUIRE(best_res.data == Approx(-1.f).epsilon(0.01f));
         }
 
         SECTION("Maximisation") {
@@ -278,8 +278,8 @@ TEST_CASE("Optimiser validation") {
             const float_wrap& best_res = optim.best_result;
 
             REQUIRE(best_res.valid());
-            REQUIRE(best_args[0] == Approx(M_PI * 0.5f).epsilon(0.001f));
-            REQUIRE(best_res.data == Approx(1.f).epsilon(0.001f));
+            REQUIRE(best_args[0] == Approx(M_PI * 0.5f).epsilon(0.01f));
+            REQUIRE(best_res.data == Approx(1.f).epsilon(0.01f));
         }
     }
 

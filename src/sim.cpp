@@ -111,7 +111,7 @@ std::istream& operator>>(std::istream& stream, field_ref<bomb_data>& re) {
     return stream;
 }
 
-opt_val_wrap do_sim(const std::vector<float>& in_args, std::tuple<const std::vector<gas_ref>&, const std::vector<gas_ref>&, bool, size_t, field_ref<bomb_data>, const std::vector<field_restriction<bomb_data>>&, const std::vector<field_restriction<bomb_data>>&> args) {
+opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const std::vector<gas_ref>&, const std::vector<gas_ref>&, bool, size_t, field_ref<bomb_data>, const std::vector<field_restriction<bomb_data>>&, const std::vector<field_restriction<bomb_data>>&>& args) {
     // read input parameters
     float target_temp = in_args[0];
     float fuel_temp = in_args[1];

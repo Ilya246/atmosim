@@ -5,7 +5,6 @@
 #include <functional>
 #include <iostream>
 #include <thread>
-#include <tuple>
 #include <vector>
 
 #include "utility.hpp"
@@ -15,8 +14,8 @@ namespace asim {
 
 template<typename T, typename R>
 struct optimiser {
-    std::function<R(const std::vector<float>&, T)> funct;
-    std::tuple<const std::vector<float>&, T> args;
+    std::function<R(const std::vector<float>&, const T&)> funct;
+    T args;
     std::vector<float> lower_bounds;
     std::vector<float> upper_bounds;
     std::vector<float> min_lin_step;
@@ -35,7 +34,6 @@ struct optimiser {
     std::mutex sample_print_mutex;
     std::mutex write_best_mutex;
 
-    std::vector<float> current;
     std::vector<float> best_arg;
     R best_result;
     bool any_valid = false;
@@ -60,7 +58,7 @@ struct optimiser {
               size_t log_level = LOG_NONE)
     :
               funct(func),
-              args(current, i_args),
+              args(i_args),
               lower_bounds(lowerb),
               upper_bounds(upperb),
               min_lin_step(i_lin_step),
@@ -88,7 +86,6 @@ struct optimiser {
     }
 
     void reset() {
-        current = lower_bounds;
         any_valid = false;
         step_scale = 1.f;
 
@@ -97,7 +94,7 @@ struct optimiser {
     }
 
     void find_best() {
-        size_t paramc = current.size();
+        size_t paramc = lower_bounds.size();
         std::vector<float> cur_lower_bounds = lower_bounds;
         std::vector<float> cur_upper_bounds = upper_bounds;
         step_scale = 1.f;
@@ -105,12 +102,13 @@ struct optimiser {
             auto do_sampling = [cur_lower_bounds, cur_upper_bounds, paramc, this]() {
                 std::chrono::time_point s_time = main_clock.now();
                 while (main_clock.now() - s_time < max_duration) {
+                    std::vector<float> current(lower_bounds.size());
                     // start off a random point in the dimension space
                     for (size_t i = 0; i < paramc; ++i) {
                         current[i] = cur_lower_bounds[i] + (cur_upper_bounds[i] - cur_lower_bounds[i]) * frand();
                     }
                     // do gradient descent until we find a local minimum
-                    R c_result = sample();
+                    R c_result = sample(current);
                     ++init_sample_count;
                     log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating_str()); }, log_level, LOG_TRACE);
                     while (true) {
@@ -132,16 +130,16 @@ struct optimiser {
                                 }
                             };
                             // step forward in this dimension
-                            current[i] += get_step(i);
+                            current[i] += get_step(current, i);
                             if (current[i] <= cur_upper_bounds[i]) {
-                                R res = sample();
+                                R res = sample(current);
                                 do_update(res, true);
                             }
                             // reset and step backwards
                             current[i] = old_current[i];
-                            current[i] -= get_step(i);
+                            current[i] -= get_step(current, i);
                             if (current[i] >= cur_lower_bounds[i]) {
-                                R res = sample();
+                                R res = sample(current);
                                 do_update(res, false);
                             }
                             // reset
@@ -166,7 +164,7 @@ struct optimiser {
                             for (size_t move_scl = 2; true; move_scl *= 2) {
                                 log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, sign * move_scl); }, log_level, LOG_TRACE);
                                 // step forward in chosen direction with scaling
-                                current[dir] += sign * get_step(dir, move_scl);
+                                current[dir] += sign * get_step(current, dir, move_scl);
                                 // don't try to sample beyond bounds
                                 if (current[dir] < cur_lower_bounds[dir] || current[dir] > cur_upper_bounds[dir]) {
                                     // reset
@@ -174,7 +172,7 @@ struct optimiser {
                                     break;
                                 }
                                 // sample and check if scaling the movement produced better results
-                                R res = sample();
+                                R res = sample(current);
                                 if (better_than(res, best_move_res)) {
                                     chosen_scl = move_scl;
                                     best_move_res = res;
@@ -195,7 +193,7 @@ struct optimiser {
                             break;
                         }
                         // perform the movement
-                        current[chosen.first] += chosen.second * get_step(chosen.first, chosen_scl);
+                        current[chosen.first] += chosen.second * get_step(current, chosen.first, chosen_scl);
                         log([&](){ return std::format("Moving from {} -> {}", c_result.rating_str(), best_move_res.rating_str()); }, log_level, LOG_TRACE);
                         c_result = best_move_res;
                     }
@@ -222,7 +220,7 @@ struct optimiser {
                 force_log = true;
 
                 // sampling round done, halve sampling area and go again
-                for (size_t i = 0; i < current.size(); ++i) {
+                for (size_t i = 0; i < lower_bounds.size(); ++i) {
                     float& lowerb = cur_lower_bounds[i];
                     float& upperb = cur_upper_bounds[i];
                     const float& best_at = best_arg[i];
@@ -240,7 +238,7 @@ struct optimiser {
     }
 
     // returns pair of sign-adjusted result and whether this updated our maximum
-    R sample() {
+    R sample(std::vector<float> at) {
         if (log_level >= LOG_INFO) {
             auto now = main_clock.now();
             std::chrono::duration<float> tdiff = now - last_log_time;
@@ -258,7 +256,7 @@ struct optimiser {
                 force_log = false;
             }
         }
-        R res = apply(funct, args);
+        R res = apply(funct, std::tie(at, args));
 
         write_best_mutex.lock();
 
@@ -266,12 +264,12 @@ struct optimiser {
         ++sample_count; // i bought the whole mutex i will use the whole mutex
         if (better_than(res, best_result)) {
             best_result = res;
-            best_arg = current;
+            best_arg = at;
         }
 
         write_best_mutex.unlock();
 
-        log([&](){ return std::format("Sampled {}, result {}", vec_to_str(current), res.rating_str()); }, log_level, LOG_TRACE);
+        log([&](){ return std::format("Sampled {}, result {}", vec_to_str(at), res.rating_str()); }, log_level, LOG_TRACE);
 
         return res;
     }
@@ -294,17 +292,13 @@ struct optimiser {
         return what == than;
     }
 
-    float get_step(int i, float scale = 1.f) {
+    float get_step(const std::vector<float>& from, int i, float scale = 1.f) {
         scale *= step_scale;
-        const float& c_param = current[i];
+        const float& c_param = from[i];
         const float& min_l_step = min_lin_step[i];
         const float& min_e_step = min_exp_step[i];
         float step = std::max(c_param * (1.f + (min_e_step - 1.f) * scale), c_param + min_l_step * scale) - c_param;
         return step;
-    }
-
-    void step(int i) {
-        current[i] += get_step(i);
     }
 };
 

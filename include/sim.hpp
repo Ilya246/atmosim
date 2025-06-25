@@ -147,7 +147,7 @@ struct opt_val_wrap {
 };
 
 // args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
-opt_val_wrap do_sim(const std::vector<float>& in_args, std::tuple<const std::vector<gas_ref>&, const std::vector<gas_ref>&, bool, size_t, field_ref<bomb_data>, const std::vector<field_restriction<bomb_data>>&, const std::vector<field_restriction<bomb_data>>&> args);
+opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const std::vector<gas_ref>&, const std::vector<gas_ref>&, bool, size_t, field_ref<bomb_data>, const std::vector<field_restriction<bomb_data>>&, const std::vector<field_restriction<bomb_data>>&>& args);
 
 }
 
