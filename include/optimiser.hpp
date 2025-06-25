@@ -4,6 +4,7 @@
 #include <cmath>
 #include <functional>
 #include <iostream>
+#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -29,6 +30,10 @@ struct optimiser {
     std::chrono::duration<float> log_spacing = std::chrono::duration<float>(0.5f);
     std::chrono::time_point<__typeof__ main_clock> last_log_time;
     bool force_log = false;
+
+    size_t thread_count = 1;
+    std::mutex sample_print_mutex;
+    std::mutex write_best_mutex;
 
     std::vector<float> current;
     std::vector<float> best_arg;
@@ -97,107 +102,119 @@ struct optimiser {
         std::vector<float> cur_upper_bounds = upper_bounds;
         step_scale = 1.f;
         for (size_t samp_idx = 0; samp_idx < sample_rounds; ++samp_idx) {
-            std::chrono::time_point s_time = main_clock.now();
-            while (main_clock.now() - s_time < max_duration) {
-                // start off a random point in the dimension space
-                for (size_t i = 0; i < paramc; ++i) {
-                    current[i] = cur_lower_bounds[i] + (cur_upper_bounds[i] - cur_lower_bounds[i]) * frand();
-                }
-                // do gradient descent until we find a local minimum
-                R c_result = sample();
-                ++init_sample_count;
-                log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating()); }, log_level, LOG_TRACE);
-                while (true) {
-                    // movement directions yielding best result
-                    std::vector<std::pair<size_t, bool>> best_movedirs = {};
-                    R best_move_res = c_result;
-                    bool is_initial = true;
-                    std::vector<float> old_current = current;
-                    // sample each possible movement direction in the parameter space
+            auto do_sampling = [cur_lower_bounds, cur_upper_bounds, paramc, this]() {
+                std::chrono::time_point s_time = main_clock.now();
+                while (main_clock.now() - s_time < max_duration) {
+                    // start off a random point in the dimension space
                     for (size_t i = 0; i < paramc; ++i) {
-                        log([&](){ return std::format("Trying to move in direction {}", i); }, log_level, LOG_TRACE);
-                        auto do_update = [&](const R& with, bool sign) {
-                            if (!is_initial && eq_to(with, best_move_res)) {
-                                best_movedirs.push_back({i, sign});
-                            } else if (better_than(with, best_move_res)) {
-                                best_movedirs = {{i, sign}};
-                                best_move_res = with;
-                                is_initial = false;
-                            }
-                        };
-                        // step forward in this dimension
-                        current[i] += get_step(i);
-                        if (current[i] <= cur_upper_bounds[i]) {
-                            R res = sample();
-                            do_update(res, true);
-                        }
-                        // reset and step backwards
-                        current[i] = old_current[i];
-                        current[i] -= get_step(i);
-                        if (current[i] >= cur_lower_bounds[i]) {
-                            R res = sample();
-                            do_update(res, false);
-                        }
-                        // reset
-                        current[i] = old_current[i];
+                        current[i] = cur_lower_bounds[i] + (cur_upper_bounds[i] - cur_lower_bounds[i]) * frand();
                     }
+                    // do gradient descent until we find a local minimum
+                    R c_result = sample();
+                    ++init_sample_count;
+                    log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating()); }, log_level, LOG_TRACE);
+                    while (true) {
+                        // movement directions yielding best result
+                        std::vector<std::pair<size_t, bool>> best_movedirs = {};
+                        R best_move_res = c_result;
+                        bool is_initial = true;
+                        std::vector<float> old_current = current;
+                        // sample each possible movement direction in the parameter space
+                        for (size_t i = 0; i < paramc; ++i) {
+                            log([&](){ return std::format("Trying to move in direction {}", i); }, log_level, LOG_TRACE);
+                            auto do_update = [&](const R& with, bool sign) {
+                                if (!is_initial && eq_to(with, best_move_res)) {
+                                    best_movedirs.push_back({i, sign});
+                                } else if (better_than(with, best_move_res)) {
+                                    best_movedirs = {{i, sign}};
+                                    best_move_res = with;
+                                    is_initial = false;
+                                }
+                            };
+                            // step forward in this dimension
+                            current[i] += get_step(i);
+                            if (current[i] <= cur_upper_bounds[i]) {
+                                R res = sample();
+                                do_update(res, true);
+                            }
+                            // reset and step backwards
+                            current[i] = old_current[i];
+                            current[i] -= get_step(i);
+                            if (current[i] >= cur_lower_bounds[i]) {
+                                R res = sample();
+                                do_update(res, false);
+                            }
+                            // reset
+                            current[i] = old_current[i];
+                        }
 
-                    // found local minimum
-                    if (best_movedirs.empty()) {
-                        log([&]() { return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
-                        break;
-                    }
+                        // found local minimum
+                        if (best_movedirs.empty()) {
+                            log([&]() { return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
+                            break;
+                        }
 
-                    std::pair<size_t, float> chosen;
-                    size_t chosen_scl = 0;
-                    // try skip-move in each prospective movement direction
-                    for (const std::pair<size_t, bool>& p : best_movedirs) {
-                        float sign = p.second ? +1.f : -1.f;
-                        // check if we can skip-move in this direction
-                        // the function handles checking whether that'd actually be profitable
-                        size_t dir = p.first;
-                        size_t scl = 0;
-                        for (size_t move_scl = 2; true; move_scl *= 2) {
-                            log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, sign * move_scl); }, log_level, LOG_TRACE);
-                            // step forward in chosen direction with scaling
-                            current[dir] += sign * get_step(dir, move_scl);
-                            // don't try to sample beyond bounds
-                            if (current[dir] < cur_lower_bounds[dir] || current[dir] > cur_upper_bounds[dir]) {
-                                // reset
+                        std::pair<size_t, float> chosen;
+                        size_t chosen_scl = 0;
+                        // try skip-move in each prospective movement direction
+                        for (const std::pair<size_t, bool>& p : best_movedirs) {
+                            float sign = p.second ? +1.f : -1.f;
+                            // check if we can skip-move in this direction
+                            // the function handles checking whether that'd actually be profitable
+                            size_t dir = p.first;
+                            size_t scl = 0;
+                            for (size_t move_scl = 2; true; move_scl *= 2) {
+                                log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, sign * move_scl); }, log_level, LOG_TRACE);
+                                // step forward in chosen direction with scaling
+                                current[dir] += sign * get_step(dir, move_scl);
+                                // don't try to sample beyond bounds
+                                if (current[dir] < cur_lower_bounds[dir] || current[dir] > cur_upper_bounds[dir]) {
+                                    // reset
+                                    current[dir] = old_current[dir];
+                                    break;
+                                }
+                                // sample and check if scaling the movement produced better results
+                                R res = sample();
+                                if (better_than(res, best_move_res)) {
+                                    chosen_scl = move_scl;
+                                    best_move_res = res;
+                                } else {
+                                    current[dir] = old_current[dir];
+                                    break;
+                                }
                                 current[dir] = old_current[dir];
-                                break;
                             }
-                            // sample and check if scaling the movement produced better results
-                            R res = sample();
-                            if (better_than(res, best_move_res)) {
-                                chosen_scl = move_scl;
-                                best_move_res = res;
-                            } else {
-                                current[dir] = old_current[dir];
-                                break;
+                            if (scl != 0) {
+                                chosen = {p.first, sign};
+                                chosen_scl = scl;
                             }
-                            current[dir] = old_current[dir];
                         }
-                        if (scl != 0) {
-                            chosen = {p.first, sign};
-                            chosen_scl = scl;
+                        // we failed to find any non-zero movement, break to avoid random walk
+                        if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
+                            log([&](){ return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
+                            break;
                         }
+                        // perform the movement
+                        current[chosen.first] += chosen.second * get_step(chosen.first, chosen_scl);
+                        log([&](){ return std::format("Moving from {} -> {}", c_result.rating(), best_move_res.rating()); }, log_level, LOG_TRACE);
+                        c_result = best_move_res;
                     }
-                    // we failed to find any non-zero movement, break to avoid random walk
-                    if (chosen_scl == 0 || eq_to(best_move_res, c_result)) {
-                        log([&](){ return std::format("Local minimum found with rating {}", c_result.rating()); }, log_level, LOG_DEBUG);
-                        break;
-                    }
-                    // perform the movement
-                    current[chosen.first] += chosen.second * get_step(chosen.first, chosen_scl);
-                    log([&](){ return std::format("Moving from {} -> {}", c_result.rating(), best_move_res.rating()); }, log_level, LOG_TRACE);
-                    c_result = best_move_res;
+                }
+            };
+            if (thread_count == 1) {
+                do_sampling();
+            } else {
+                std::vector<std::thread> threads;
+                for (size_t i = 0; i < thread_count; ++i) {
+                    threads.push_back(std::thread(do_sampling));
+                }
+                for (std::thread& t : threads) {
+                    t.join();
                 }
             }
             if (!any_valid) {
                 log([&](){ return "Failed to find any viable result, retrying sample 1..."; }, log_level, LOG_BASIC);
                 --samp_idx;
-                s_time = main_clock.now();
                 continue;
             }
             if (samp_idx + 1 != sample_rounds) {
@@ -224,17 +241,17 @@ struct optimiser {
 
     // returns pair of sign-adjusted result and whether this updated our maximum
     R sample() {
-        ++sample_count;
         if (log_level >= LOG_INFO) {
             auto now = main_clock.now();
             std::chrono::duration<float> tdiff = now - last_log_time;
-            if (tdiff > log_spacing || force_log) {
+            if ((tdiff > log_spacing || force_log) && sample_print_mutex.try_lock()) {
                 float sec = tdiff.count();
                 log([&](){ return std::format("{} ({} init) Samples ({:.0f} ({:.0f}) samples/s)",
                                               sample_count, init_sample_count,
                                               (sample_count - last_sample_count) / sec, (init_sample_count - last_init_sample_count) / sec);
                 }, log_level, LOG_INFO, false);
                 std::flush(std::cout);
+                sample_print_mutex.unlock();
                 last_sample_count = sample_count;
                 last_init_sample_count = init_sample_count;
                 last_log_time = now;
@@ -242,13 +259,17 @@ struct optimiser {
             }
         }
         R res = apply(funct, args);
-        bool valid = res.valid();
-        any_valid |= valid;
 
+        write_best_mutex.lock();
+
+        any_valid |= res.valid();
+        ++sample_count; // i bought the whole mutex i will use the whole mutex
         if (better_than(res, best_result)) {
             best_result = res;
             best_arg = current;
         }
+
+        write_best_mutex.unlock();
 
         log([&](){ return std::format("Sampled {}, result {}", vec_to_str(current), res.rating()); }, log_level, LOG_TRACE);
 

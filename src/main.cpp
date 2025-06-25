@@ -89,6 +89,7 @@ int main(int argc, char* argv[]) {
     size_t sample_rounds = 5;
     float bounds_scale = 0.5f;
     float stepping_scale = 0.75f;
+    size_t nthreads = 1;
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
         argp::make_argument("ratiobounds", "", "set gas ratio iteration bounds", ratio_bounds),
@@ -114,7 +115,8 @@ int main(int argc, char* argv[]) {
         argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
         argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds),
         argp::make_argument("boundsscale", "", "how much to scale bounds each sample round (default " + to_string(bounds_scale) + ")", bounds_scale),
-        argp::make_argument("steppingscale", "", "how much to scale minimum step each sample round (default " + to_string(stepping_scale) + ")", stepping_scale)
+        argp::make_argument("steppingscale", "", "how much to scale minimum step each sample round (default " + to_string(stepping_scale) + ")", stepping_scale),
+        argp::make_argument("nthreads", "j", "number of threads for the optimiser to use", nthreads)
     };
 
     argp::parse_arguments(args, argc, argv,
@@ -263,6 +265,7 @@ int main(int argc, char* argv[]) {
           stepping_scale,
           log_level);
 
+    optim.thread_count = nthreads;
     optim.find_best();
 
     vector<float> in_args = optim.best_arg;
