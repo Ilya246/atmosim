@@ -59,7 +59,7 @@ std::string bomb_data::print_inline() const {
 
     out_str += std::format("S: [ time {:.1f}s | radius {:.2f}til | optstat {} ] ", ticks * tickrate, fin_radius, optstat);
     out_str += std::format("M: [ {} | {}K | {}kPa ] ", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
-    out_str += std::format("C: [ {} | {}K | >{}kPa ]", mix_string(primer_gases, primer_fractions), thir_temp, required_primer_p);
+    out_str += std::format("C: [ {} | {}K | {}kPa | >{}kPa ]", mix_string(primer_gases, primer_fractions), thir_temp, to_pressure, required_primer_p);
 
     return out_str;
 }
@@ -89,7 +89,7 @@ std::string bomb_data::print_full() const {
 
     out_str += std::format("STATS: [ time {:.1f}s | radius {:.2f}til | optstat {} ]\n", ticks * tickrate, fin_radius, optstat);
     out_str += std::format("MIX:   [ {} | {}K | {}kPa ]\n", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
-    out_str += std::format("CAN:   [ {} | {}K | >{}kPa ]\n", mix_string(primer_gases, primer_fractions), thir_temp, required_primer_p);
+    out_str += std::format("CAN:   [ {} | {}K | release {}kPa | >{}kPa ]\n", mix_string(primer_gases, primer_fractions), thir_temp, to_pressure, required_primer_p);
     out_str += std::format("REQ:   [ {} ]", req_str);
 
     return out_str;

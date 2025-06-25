@@ -73,13 +73,14 @@ int main(int argc, char* argv[]) {
     vector<gas_ref> mix_gases;
     vector<gas_ref> primer_gases;
     float mixt1 = 0.f, mixt2 = 0.f, thirt1 = 0.f, thirt2 = 0.f;
-    float ratio_bounds = 10.f;
+    float ratio_bound = 10.f;
+    tuple<vector<float>, vector<float>> ratio_bounds;
     float ratio_step = 1.005f;
     float temperature_step = 1.001f, temperature_step_min = 0.05f;
     float lower_target_temp = fire_temp + 0.1f;
     float lower_pressure = pressure_cap;
     bool step_target_temp = false;
-    size_t tick_cap = 10 * 60 / tickrate; // 10 minutes
+    size_t tick_cap = numeric_limits<size_t>::max(); // 10 minutes
 
     tuple<field_ref<bomb_data>, bool, bool> opt_params{bomb_data::radius_field, true, false};
 
@@ -93,7 +94,8 @@ int main(int argc, char* argv[]) {
     size_t nthreads = 1;
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
-        argp::make_argument("ratiobounds", "", "set gas ratio iteration bounds", ratio_bounds),
+        argp::make_argument("ratiob", "", "set gas ratio iteration bound", ratio_bound),
+        argp::make_argument("ratiobounds", "rbs", "set gas ratio iteration bounds: exact setup", ratio_bounds),
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
         argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
         argp::make_argument("fullinput", "f", "UTILITY TOOL: simulate and print every tick of a bomb with chosen gases", full_input_mode),
@@ -233,7 +235,8 @@ int main(int argc, char* argv[]) {
     size_t ratio_offset = num_temps + num_pressure;
     size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
     size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
-    size_t num_params = ratio_offset + num_mix_ratios + num_primer_ratios;
+    size_t num_ratios = num_mix_ratios + num_primer_ratios;
+    size_t num_params = ratio_offset + num_ratios;
 
     vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1, lower_pressure};
     lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
@@ -241,9 +244,23 @@ int main(int argc, char* argv[]) {
     if (!step_target_temp) {
         upper_bounds[0] = lower_bounds[0];
     }
-    for (size_t i = 0; i < num_params - ratio_offset; ++i) {
-        lower_bounds.push_back(1.f / ratio_bounds);
-        upper_bounds.push_back(ratio_bounds);
+
+    vector<float> ratio_b_low = get<0>(ratio_bounds);
+    vector<float> ratio_b_high = get<1>(ratio_bounds);
+    if (!ratio_b_low.empty() || !ratio_b_high.empty()) {
+        if (ratio_b_low.size() != ratio_b_high.size() || ratio_b_low.size() != num_ratios) {
+            cout << "Invalid number of custom ratio bounds provided. Provide ratio bounds for the last count - 1 gases in each mix." << endl;
+            return 1;
+        }
+        for (size_t i = 0; i < num_ratios; ++i) {
+            lower_bounds.push_back(ratio_b_low[i]);
+            upper_bounds.push_back(ratio_b_high[i]);
+        }
+    } else {
+        for (size_t i = 0; i < num_ratios; ++i) {
+            lower_bounds.push_back(1.f / ratio_bound);
+            upper_bounds.push_back(ratio_bound);
+        }
     }
 
     vector<float> min_l_step(lower_bounds.size(), 0.f);

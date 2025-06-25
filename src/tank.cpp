@@ -66,7 +66,7 @@ size_t gas_tank::tick_n(size_t ticks_limit) {
 
 std::string gas_tank::get_status() {
     return std::format("pressure {}  temperature {} integ {} gases [{}]",
-                        mix.pressure(), mix.temperature, mix.to_string(), integrity);
+                        mix.pressure(), mix.temperature, integrity, mix.to_string());
 }
 
 }
