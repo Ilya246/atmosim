@@ -25,9 +25,12 @@ struct optimiser {
 
     size_t log_level;
     size_t sample_count = 0, last_sample_count = 0;
-    size_t init_sample_count = 0, last_init_sample_count = 0;
-    std::chrono::duration<float> log_spacing = std::chrono::duration<float>(0.5f);
+    size_t valid_sample_count = 0, last_valid_sample_count = 0;
+    std::chrono::duration<float> log_spacing = std::chrono::duration<float>(0.05f);
     std::chrono::time_point<__typeof__ main_clock> last_log_time;
+    float speed_iters, speed_valid_iters;
+    std::chrono::duration<float> speed_log_spacing = std::chrono::duration<float>(0.5f);
+    std::chrono::time_point<__typeof__ main_clock> last_speed_update_time;
     bool force_log = false;
 
     size_t thread_count = 1;
@@ -99,9 +102,13 @@ struct optimiser {
         std::vector<float> cur_upper_bounds = upper_bounds;
         step_scale = 1.f;
         for (size_t samp_idx = 0; samp_idx < sample_rounds; ++samp_idx) {
+            if (status_SIGINT) break;
+
             auto do_sampling = [cur_lower_bounds, cur_upper_bounds, paramc, this]() {
                 std::chrono::time_point s_time = main_clock.now();
                 while (main_clock.now() - s_time < max_duration) {
+                    if (status_SIGINT) break;
+
                     std::vector<float> current(lower_bounds.size());
                     // start off a random point in the dimension space
                     for (size_t i = 0; i < paramc; ++i) {
@@ -109,7 +116,6 @@ struct optimiser {
                     }
                     // do gradient descent until we find a local minimum
                     R c_result = sample(current);
-                    ++init_sample_count;
                     log([&](){ return std::format("Doing starting sample on [{}], result {}", vec_to_str(current), c_result.rating_str()); }, log_level, LOG_TRACE);
                     while (true) {
                         // movement directions yielding best result
@@ -161,7 +167,7 @@ struct optimiser {
                             // the function handles checking whether that'd actually be profitable
                             size_t dir = p.first;
                             size_t scl = 0;
-                            for (size_t move_scl = 2; true; move_scl *= 2) {
+                            for (float move_scl = 2.f; true; move_scl *= 2.f) {
                                 log([&](){ return std::format("Trying to move in direction {} with scale {}", dir, sign * move_scl); }, log_level, LOG_TRACE);
                                 // step forward in chosen direction with scaling
                                 current[dir] += sign * get_step(current, dir, move_scl);
@@ -234,7 +240,7 @@ struct optimiser {
             }
         }
 
-        log([&]() { return std::format("Finished with {} ({}) samples", sample_count, init_sample_count); }, log_level, LOG_BASIC);
+        log([&]() { return std::format("Finished with {} ({}) samples", sample_count, valid_sample_count); }, log_level, LOG_BASIC);
     }
 
     R sample(const std::vector<float>& at) {
@@ -242,17 +248,24 @@ struct optimiser {
             auto now = main_clock.now();
             std::chrono::duration<float> tdiff = now - last_log_time;
             if ((tdiff > log_spacing || force_log) && sample_print_mutex.try_lock()) {
-                float sec = tdiff.count();
-                log([&](){ return std::format("{} ({} init) Samples ({:.0f} ({:.0f}) samples/s)",
-                                              sample_count, init_sample_count,
-                                              (sample_count - last_sample_count) / sec, (init_sample_count - last_init_sample_count) / sec);
+                std::chrono::duration<float> speed_tdiff = now - last_speed_update_time;
+                if (speed_tdiff > speed_log_spacing) {
+                    float sec = speed_tdiff.count();
+                    speed_iters = (sample_count - last_sample_count) / sec;
+                    speed_valid_iters = (valid_sample_count - last_valid_sample_count) / sec,
+                    last_sample_count = sample_count;
+                    last_valid_sample_count = valid_sample_count;
+                    last_speed_update_time = now;
+                }
+                last_log_time = now;
+                log([&](){ return std::format("{} ({} valid) Samples ({:.0f} ({:.0f}) samples/s), best: {}",
+                                              sample_count, valid_sample_count,
+                                              speed_iters, speed_valid_iters,
+                                              best_result.rating());
                 }, log_level, LOG_INFO, false);
                 std::flush(std::cout);
-                sample_print_mutex.unlock();
-                last_sample_count = sample_count;
-                last_init_sample_count = init_sample_count;
-                last_log_time = now;
                 force_log = false;
+                sample_print_mutex.unlock();
             }
         }
         R res = apply(funct, std::tie(at, args));
@@ -261,6 +274,7 @@ struct optimiser {
 
         any_valid |= res.valid();
         ++sample_count; // i bought the whole mutex i will use the whole mutex
+        valid_sample_count += res.valid();
         if (better_than(res, best_result)) {
             best_result = res;
             best_arg = at;

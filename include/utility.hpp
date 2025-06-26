@@ -1,5 +1,6 @@
 #pragma once
 
+#include <csignal>
 #include <format>
 #include <functional>
 #include <numeric>
@@ -43,6 +44,22 @@ inline std::string vec_to_str(const std::vector<T>& vec) {
         out_str += std::format(", {}", vec[i]);
     }
     return out_str;
+}
+
+inline volatile sig_atomic_t status_SIGINT = 0;
+
+inline void sigint_hander(int signum) {
+    if (signum == SIGINT) {
+        status_SIGINT = 1;
+    }
+}
+
+inline void handle_sigint() {
+    struct sigaction sa;
+    sa.sa_handler = sigint_hander;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
 }
 
 

@@ -11,6 +11,7 @@
 #include "optimiser.hpp"
 #include "gas.hpp"
 #include "sim.hpp"
+#include "utility.hpp"
 
 using namespace std;
 using namespace asim;
@@ -62,6 +63,8 @@ int main(int argc, char* argv[]) {
 #else
 int main(int argc, char* argv[]) {
 #endif
+    handle_sigint();
+
     size_t log_level = 2;
 
     enum _mode {normal, mixing, full_input};
