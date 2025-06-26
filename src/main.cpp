@@ -25,6 +25,7 @@ T get_input() {
         bool bad = !cin;
         cin.clear();
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        if (status_SIGINT) return val;
         if (bad) cout << "Invalid input. Try again: ";
         else return val;
     }
@@ -189,23 +190,36 @@ int main(int argc, char* argv[]) {
                 cout << "Input temperature: ";
                 float temperature = get_input<float>();
                 vector<pair<gas_ref, float>> gases;
-                while (true) {
+                float ratio_sum = 0.f;
+                bool end = false;
+                while (!end) {
                     gas_ref g;
                     cout << "Input gas (omit to end): ";
                     if (!try_input(g)) break;
-                    cout << "Input ratio (%, portion): ";
-                    float ratio = get_input<float>();
+                    cout << "Input ratio (%, portion; omit for remainder from 100%): ";
+                    float ratio;
+                    if (!try_input(ratio)) {
+                        ratio = 100.f - ratio_sum;
+                        end = true;
+                    }
+                    ratio_sum += ratio;
                     gases.push_back({g, ratio});
                 }
                 tank.mix.canister_fill_to(get_fractions(gases), temperature, pressure_to);
             }
 
             size_t tick = 1;
-            do {
+            float last_p = tank.mix.pressure();
+            while (true) {
                 cout << format("[Tick {:<2}] Tank status: {}", tick, tank.get_status());
                 cout << endl;
+                float p = tank.mix.pressure();
+                cout << "p " << p << " last " << last_p << endl;
+                if (!tank.tick() || last_p == p || status_SIGINT)
+                    break;
+                last_p = p;
                 ++tick;
-            } while (tank.tick());
+            }
 
             cout << format("Result: status: {}, state {}, range {}", tank.get_status(), (int)tank.state, tank.calc_radius());
             cout << endl;
