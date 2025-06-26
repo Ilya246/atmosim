@@ -20,7 +20,32 @@ float frand();
 float frand(float to);
 float frand(float from, float to);
 
+
+// vec-vec operators
+std::vector<float>& operator+=(std::vector<float>& lhs, const std::vector<float>& rhs);
+std::vector<float>& operator-=(std::vector<float>& lhs, const std::vector<float>& rhs);
+std::vector<float> operator-(const std::vector<float>& lhs, const std::vector<float>& rhs);
+
+// vec-num operators
+std::vector<float>& operator*=(std::vector<float>& lhs, float rhs);
+std::vector<float> operator*(const std::vector<float>& lhs, float rhs);
+std::vector<float> operator*(float lhs, const std::vector<float>& rhs);
+
+// ->vector non-modifying operations
+std::vector<float> lerp(const std::vector<float>& vec, const std::vector<float>& to, float by);
 std::vector<float> get_fractions(const std::vector<float>& ratios);
+
+// modifying operations
+std::vector<float>& normalize(std::vector<float>& vec);
+std::vector<float>& orthogonalise(std::vector<float>& vec, const std::vector<float>& to);
+std::vector<float>& lerp_in_place(std::vector<float>& vec, const std::vector<float>& to, float by);
+
+// ->vec non-modifying operations
+std::vector<float> orthogonal_noise(const std::vector<float>& dir, float strength);
+
+// ->num non-modifying operations
+float length(const std::vector<float>& vec);
+float dot(const std::vector<float>& a, const std::vector<float>& b);
 
 template<typename T>
 std::vector<std::pair<T, float>> get_fractions(const std::vector<std::pair<T, float>>& ratios) {

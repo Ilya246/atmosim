@@ -294,7 +294,7 @@ int main(int argc, char* argv[]) {
         min_e_step[i] = ratio_step;
     }
 
-    optimiser<tuple<vector<gas_ref>, vector<gas_ref>, bool, size_t, field_ref<bomb_data>, vector<field_restriction<bomb_data>>, vector<field_restriction<bomb_data>>>, opt_val_wrap>
+    adaptive_optimiser<tuple<vector<gas_ref>, vector<gas_ref>, bool, size_t, field_ref<bomb_data>, vector<field_restriction<bomb_data>>, vector<field_restriction<bomb_data>>>, opt_val_wrap>
     optim(do_sim,
           lower_bounds,
           upper_bounds,
@@ -307,7 +307,7 @@ int main(int argc, char* argv[]) {
           bounds_scale,
           stepping_scale,
           log_level);
-    optim.thread_count = nthreads;
+    // optim.thread_count = nthreads;
 
     optim.find_best();
 

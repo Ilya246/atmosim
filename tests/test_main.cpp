@@ -8,6 +8,7 @@
 #include "gas.hpp"
 #include "tank.hpp"
 #include "optimiser.hpp"
+#include "utility.hpp"
 
 using Catch::Approx;
 using namespace asim;
@@ -41,6 +42,66 @@ TEST_CASE("Gas system fundamentals") {
         // Test temperature mixing with known ratios
         const float mix_temp = to_mix_temp(2.0f, 1.0f, 300.0f, 1.0f, 1.0f, 400.0f);
         REQUIRE(mix_temp == Approx((2.0f*1.0f*300.0f + 1.0f*1.0f*400.0f) / (2.0f*1.0f + 1.0f*1.0f)));
+    }
+}
+
+TEST_CASE("Vector math operations") {
+    SECTION("Vector-vector operations") {
+        std::vector<float> a {1.0f, 2.0f, 3.0f};
+        std::vector<float> b {4.0f, 5.0f, 6.0f};
+
+        SECTION("Addition") {
+            a += b;
+            REQUIRE(a == std::vector<float>{5.0f, 7.0f, 9.0f});
+            REQUIRE(a - b == std::vector<float>{1.0f, 2.0f, 3.0f});
+        }
+
+        SECTION("Subtraction") {
+            a -= b;
+            REQUIRE(a == std::vector<float>{-3.0f, -3.0f, -3.0f});
+            REQUIRE(b - a == std::vector<float>{7.0f, 8.0f, 9.0f});
+        }
+    }
+
+    SECTION("Vector-scalar operations") {
+        std::vector<float> v {2.0f, 4.0f, 6.0f};
+
+        SECTION("Multiplication") {
+            REQUIRE(v * 2.0f == std::vector<float>{4.0f, 8.0f, 12.0f});
+            REQUIRE(3.0f * v == std::vector<float>{6.0f, 12.0f, 18.0f});
+        }
+    }
+
+    SECTION("Vector operations") {
+        std::vector<float> vec {3.0f, 4.0f, 0.0f};
+
+        SECTION("Normalization") {
+            normalize(vec);
+            REQUIRE(length(vec) == Approx(1.0f));
+            REQUIRE(vec == std::vector<float>{0.6f, 0.8f, 0.0f});
+        }
+
+        SECTION("Lerp") {
+            std::vector<float> target {5.0f, 6.0f, 7.0f};
+            std::vector<float> result = lerp(vec, target, 0.5f);
+            REQUIRE(result == std::vector<float>{4.0f, 5.0f, 3.5f});
+        }
+
+        SECTION("Length and dot product") {
+            REQUIRE(length(vec) == Approx(5.0f));
+            REQUIRE(dot(vec, vec) == Approx(25.0f));
+
+            std::vector<float> ortho {4.0f, -3.0f, 0.0f};
+            REQUIRE(dot(vec, ortho) == Approx(0.0f).margin(0.001f));
+        }
+    }
+
+    SECTION("Orthogonal noise") {
+        std::vector<float> vec {3.0f, 4.0f, 0.0f};
+
+        std::vector<float> noise = orthogonal_noise(vec, 1.f);
+        REQUIRE(length(noise) == Approx(1.f).epsilon(0.001f));
+        REQUIRE(dot(vec, noise) == Approx(0.0f).margin(0.001f));
     }
 }
 
@@ -246,48 +307,89 @@ float_wrap opt_fun(const std::vector<float>& in_args, const std::tuple<>&) {
 }
 
 TEST_CASE("Optimiser validation") {
-    SECTION("Sine wave optimisation") {
-        optimiser<std::tuple<>, float_wrap>
-        optim(opt_sine,
-            {-M_PI * 0.5f},
-            {M_PI * 0.5f},
-            {0.01f},
-            {1.001f},
-            true,
-            std::make_tuple(),
-            std::chrono::duration<float>(0.001f),
-            5,
-            0.5f,
-            0.75f);
+    SECTION("Coordinate descent") {
+        SECTION("Sine wave optimisation") {
+            optimiser<std::tuple<>, float_wrap>
+            optim(opt_sine,
+                {-M_PI * 0.5f},
+                {M_PI * 0.5f},
+                {0.01f},
+                {1.001f},
+                true,
+                std::make_tuple(),
+                std::chrono::duration<float>(0.001f),
+                5,
+                0.5f,
+                0.75f);
 
-        SECTION("Minimisation") {
-            optim.maximise = false;
+            SECTION("Minimisation") {
+                optim.maximise = false;
 
-            optim.find_best();
-            std::vector<float> best_args = optim.best_arg;
-            const float_wrap& best_res = optim.best_result;
+                optim.find_best();
+                std::vector<float> best_args = optim.best_arg;
+                const float_wrap& best_res = optim.best_result;
 
-            REQUIRE(best_res.valid());
-            REQUIRE(best_args[0] == Approx(-M_PI * 0.5f).epsilon(0.01f));
-            REQUIRE(best_res.data == Approx(-1.f).epsilon(0.01f));
+                REQUIRE(best_res.valid());
+                REQUIRE(best_args[0] == Approx(-M_PI * 0.5f).epsilon(0.01f));
+                REQUIRE(best_res.data == Approx(-1.f).epsilon(0.01f));
+            }
+
+            SECTION("Maximisation") {
+                optim.find_best();
+                std::vector<float> best_args = optim.best_arg;
+                const float_wrap& best_res = optim.best_result;
+
+                REQUIRE(best_res.valid());
+                REQUIRE(best_args[0] == Approx(M_PI * 0.5f).epsilon(0.01f));
+                REQUIRE(best_res.data == Approx(1.f).epsilon(0.01f));
+            }
         }
 
-        SECTION("Maximisation") {
-            optim.find_best();
-            std::vector<float> best_args = optim.best_arg;
-            const float_wrap& best_res = optim.best_result;
+        SECTION("2-variable optimisation") {
+            optimiser<std::tuple<>, float_wrap>
+            c_optim(opt_fun,
+                {0.f, -0.5f},
+                {1.f, 1.5f},
+                {0.01f, 0.01f},
+                {1.001f, 1.001f},
+                true,
+                std::make_tuple(),
+                std::chrono::duration<float>(0.001f),
+                5,
+                0.5f,
+                0.75f);
 
-            REQUIRE(best_res.valid());
-            REQUIRE(best_args[0] == Approx(M_PI * 0.5f).epsilon(0.01f));
-            REQUIRE(best_res.data == Approx(1.f).epsilon(0.01f));
+            SECTION("Maximisation") {
+                c_optim.find_best();
+                std::vector<float> best_args = c_optim.best_arg;
+                const float_wrap& best_res = c_optim.best_result;
+
+                REQUIRE(best_res.valid());
+                REQUIRE(best_args[0] == Approx(0.292f).epsilon(0.01f));
+                REQUIRE(best_args[1] == Approx(0.f).margin(0.01f));
+                REQUIRE(best_res.data == Approx(1.092f).epsilon(0.01f));
+            }
+
+            SECTION("Minimisation") {
+                c_optim.maximise = false;
+                c_optim.find_best();
+                std::vector<float> best_args = c_optim.best_arg;
+                const float_wrap& best_res = c_optim.best_result;
+
+                REQUIRE(best_res.valid());
+                REQUIRE(best_args[0] == Approx(0.76f).epsilon(0.05f));
+                REQUIRE(best_args[1] == Approx(1.5f).margin(0.05f));
+                REQUIRE(best_res.data == Approx(-0.74f).epsilon(0.05f));
+            }
         }
     }
 
-    SECTION("Complex maximisation") {
-        optimiser<std::tuple<>, float_wrap>
+    SECTION("Adaptive coordinate descent") {
+        // not supposed to be used for 1-input functions
+        adaptive_optimiser<std::tuple<>, float_wrap>
         c_optim(opt_fun,
-            {0.f, -1.f},
-            {1.f, 1.f},
+            {0.f, -0.5f},
+            {1.f, 1.5f},
             {0.01f, 0.01f},
             {1.001f, 1.001f},
             true,
@@ -297,13 +399,27 @@ TEST_CASE("Optimiser validation") {
             0.5f,
             0.75f);
 
-        c_optim.find_best();
-        std::vector<float> best_args = c_optim.best_arg;
-        const float_wrap& best_res = c_optim.best_result;
+        SECTION("2-variable maximisation") {
+            c_optim.find_best();
+            std::vector<float> best_args = c_optim.best_arg;
+            const float_wrap& best_res = c_optim.best_result;
 
-        REQUIRE(best_res.valid());
-        REQUIRE(best_args[0] == Approx(0.292f).epsilon(0.01f));
-        REQUIRE(best_args[1] == Approx(0.f).margin(0.01f));
-        REQUIRE(best_res.data == Approx(1.092f).epsilon(0.01f));
+            REQUIRE(best_res.valid());
+            REQUIRE(best_args[0] == Approx(0.292f).epsilon(0.01f));
+            REQUIRE(best_args[1] == Approx(0.f).margin(0.01f));
+            REQUIRE(best_res.data == Approx(1.092f).epsilon(0.01f));
+        }
+
+        SECTION("2-variable minimisation") {
+            c_optim.maximise = false;
+            c_optim.find_best();
+            std::vector<float> best_args = c_optim.best_arg;
+            const float_wrap& best_res = c_optim.best_result;
+
+            REQUIRE(best_res.valid());
+            REQUIRE(best_args[0] == Approx(0.76f).epsilon(0.05f));
+            REQUIRE(best_args[1] == Approx(1.5f).margin(0.05f));
+            REQUIRE(best_res.data == Approx(-0.74f).epsilon(0.05f));
+        }
     }
 }
