@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
     float ratio_step = 1.005f;
     float temperature_step = 1.001f, temperature_step_min = 0.05f;
     float lower_target_temp = fire_temp + 0.1f;
-    float lower_pressure = pressure_cap;
+    float lower_pressure = pressure_cap, upper_pressure = pressure_cap;
     bool step_target_temp = false;
     size_t tick_cap = numeric_limits<size_t>::max(); // 10 minutes
 
@@ -106,6 +106,7 @@ int main(int argc, char* argv[]) {
         argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
         argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
         argp::make_argument("lowerp", "p1", "lower mix-to pressure to check, kPa, default is pressure cap", lower_pressure),
+        argp::make_argument("upperp", "p2", "upper mix-to pressure to check, kPa, default is pressure cap", upper_pressure),
         argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
         argp::make_argument("tstep", "", "set temperature iteration multiplier (default " + to_string(temperature_step) + ")", temperature_step),
         argp::make_argument("tstepm", "", "set minimum temperature iteration step (default " + to_string(temperature_step_min) + ")", temperature_step_min),
@@ -240,7 +241,7 @@ int main(int argc, char* argv[]) {
 
     vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1, lower_pressure};
     lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
-    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2, pressure_cap};
+    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2, upper_pressure};
     if (!step_target_temp) {
         upper_bounds[0] = lower_bounds[0];
     }

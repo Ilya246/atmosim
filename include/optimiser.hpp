@@ -237,7 +237,6 @@ struct optimiser {
         log([&]() { return std::format("Finished with {} ({}) samples", sample_count, init_sample_count); }, log_level, LOG_BASIC);
     }
 
-    // returns pair of sign-adjusted result and whether this updated our maximum
     R sample(const std::vector<float>& at) {
         if (log_level >= LOG_INFO) {
             auto now = main_clock.now();
