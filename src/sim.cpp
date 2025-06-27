@@ -1,8 +1,9 @@
 #include <algorithm>
-#include <tuple>
 #include <memory>
 
 #include "sim.hpp"
+#include "constants.hpp"
+#include "utility.hpp"
 
 namespace asim {
 
@@ -50,6 +51,8 @@ std::string bomb_data::print_very_simple() const {
 }
 
 std::string bomb_data::print_inline() const {
+    size_t pressure_round_digs = do_rounding ? round_pressure_dig : 6;
+    size_t temp_round_digs = do_rounding ? round_temp_dig : 6;
     std::string out_str;
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
@@ -57,15 +60,20 @@ std::string bomb_data::print_inline() const {
 
     float required_primer_p = to_pressure + (to_pressure - fuel_pressure);
 
-    out_str += std::format("S: [ time {:.1f}s | radius {:.2f}til | optstat {} ] ", ticks * tickrate, fin_radius, optstat);
-    out_str += std::format("M: [ {} | {}K | {}kPa ] ", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
-    out_str += std::format("C: [ {} | {}K | {}kPa | >{}kPa ]", mix_string(primer_gases, primer_fractions), thir_temp, to_pressure, required_primer_p);
+    out_str += std::format("S: [ time {:.1f}s | radius {:.2f}til | optstat {} ] ",
+                           ticks * tickrate, fin_radius, optstat);
+    out_str += std::format("M: [ {} | {:.{}f}K | {:.{}f}kPa ] ",
+                           mix_string(mix_gases, mix_fractions), fuel_temp, temp_round_digs, fuel_pressure, pressure_round_digs);
+    out_str += std::format("C: [ {} | {:.{}f}K | {:.{}f}kPa | >{}kPa ]",
+                           mix_string(primer_gases, primer_fractions), thir_temp, temp_round_digs, to_pressure, pressure_round_digs, required_primer_p);
 
     return out_str;
 }
 
 std::string bomb_data::print_full() const {
     std::string out_str;
+    size_t pressure_round_digs = do_rounding ? round_pressure_dig : 6;
+    size_t temp_round_digs = do_rounding ? round_temp_dig : 6;
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
     std::vector<float> primer_fractions = get_fractions(primer_ratios);
@@ -87,9 +95,12 @@ std::string bomb_data::print_full() const {
         if (i + 1 != total_c) req_str += " | ";
     }
 
-    out_str += std::format("STATS: [ time {:.1f}s | radius {:.2f}til | optstat {} ]\n", ticks * tickrate, fin_radius, optstat);
-    out_str += std::format("MIX:   [ {} | {}K | {}kPa ]\n", mix_string(mix_gases, mix_fractions), fuel_temp, fuel_pressure);
-    out_str += std::format("CAN:   [ {} | {}K | release {}kPa | >{}kPa ]\n", mix_string(primer_gases, primer_fractions), thir_temp, to_pressure, required_primer_p);
+    out_str += std::format("STATS: [ time {:.1f}s | radius {:.2f}til | optstat {} ]\n",
+                           ticks * tickrate, fin_radius, optstat);
+    out_str += std::format("MIX:   [ {} | {:.{}f}K | {:.{}f}kPa ]\n",
+                           mix_string(mix_gases, mix_fractions), fuel_temp, temp_round_digs, fuel_pressure, pressure_round_digs);
+    out_str += std::format("CAN:   [ {} | {:.{}f}K | release {:.{}f}kPa | >{:.0f}kPa ]\n",
+                           mix_string(primer_gases, primer_fractions), thir_temp, temp_round_digs, to_pressure, pressure_round_digs, required_primer_p);
     out_str += std::format("REQ:   [ {} ]", req_str);
 
     return out_str;
@@ -98,36 +109,45 @@ std::string bomb_data::print_full() const {
 field_ref<bomb_data> bomb_data::radius_field(offsetof(bomb_data, fin_radius), field_ref<bomb_data>::float_f);
 field_ref<bomb_data> bomb_data::ticks_field(offsetof(bomb_data, ticks), field_ref<bomb_data>::int_f);
 field_ref<bomb_data> bomb_data::temperature_field(offsetof(bomb_data, tank.mix.temperature), field_ref<bomb_data>::float_f);
+field_ref<bomb_data> bomb_data::integrity_field(offsetof(bomb_data, tank.integrity), field_ref<bomb_data>::int_f);
 
-std::string params_supported_str = "radius, ticks, temperature";
-
+// TODO: make this more sane somehow
+std::string params_supported_str = "radius, ticks, temperature, integrity";
 std::istream& operator>>(std::istream& stream, field_ref<bomb_data>& re) {
     std::string val;
     stream >> val;
     if (val == "radius") re = bomb_data::radius_field;
     else if (val == "ticks") re = bomb_data::ticks_field;
     else if (val == "temperature") re = bomb_data::temperature_field;
+    else if (val == "integrity") re = bomb_data::integrity_field;
     else stream.setstate(std::ios_base::failbit);
     return stream;
 }
 
-opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const std::vector<gas_ref>&, const std::vector<gas_ref>&, bool, size_t, field_ref<bomb_data>, const std::vector<field_restriction<bomb_data>>&, const std::vector<field_restriction<bomb_data>>&>& args) {
+opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     // read input parameters
     float target_temp = in_args[0];
     float fuel_temp = in_args[1];
     float thir_temp = in_args[2];
-    float to_pressure = in_args[3];
+    float fill_pressure = in_args[3];
+    bool do_rounding = args.do_rounding;
+    if (do_rounding) {
+        target_temp = round_to(target_temp, round_temp_to);
+        fuel_temp = round_to(fuel_temp, round_temp_to);
+        thir_temp = round_to(thir_temp, round_temp_to);
+        fill_pressure = round_to(fill_pressure, round_pressure_to);
+    }
     // invalid mix, abort early
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
         return {};
     }
-    const std::vector<gas_ref>& mix_gases = std::get<0>(args);
-    const std::vector<gas_ref>& primer_gases = std::get<1>(args);
-    bool measure_before = std::get<2>(args);
-    size_t tick_cap = std::get<3>(args);
-    field_ref<bomb_data> optstat_ref = std::get<4>(args);
-    const std::vector<field_restriction<bomb_data>>& pre_restrictions = std::get<5>(args);
-    const std::vector<field_restriction<bomb_data>>& post_restrictions = std::get<6>(args);
+    const std::vector<gas_ref>& mix_gases = args.mix_gases;
+    const std::vector<gas_ref>& primer_gases = args.primer_gases;
+    bool measure_before = args.measure_before;
+    size_t tick_cap = args.tick_cap;
+    field_ref<bomb_data> optstat_ref = args.opt_param;
+    const std::vector<field_restriction<bomb_data>>& pre_restrictions = args.pre_restrictions;
+    const std::vector<field_restriction<bomb_data>>& post_restrictions = args.post_restrictions;
 
     // read gas ratios
     std::vector<float> mix_ratios(mix_gases.size(), 1.f);
@@ -151,19 +171,23 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const st
     float fuel_specheat = get_mix_heat_capacity(mix_gases, mix_fractions);
     float primer_specheat = get_mix_heat_capacity(primer_gases, primer_fractions);
     // to how much we want to fill the tank
-    float fuel_pressure = (target_temp / thir_temp - 1.f) * to_pressure / (fuel_specheat / primer_specheat - 1.f + target_temp * (1.f / thir_temp - fuel_specheat / primer_specheat / fuel_temp));
+    float fuel_pressure = (target_temp / thir_temp - 1.f) * fill_pressure / (fuel_specheat / primer_specheat - 1.f + target_temp * (1.f / thir_temp - fuel_specheat / primer_specheat / fuel_temp));
+    if (do_rounding) {
+        fuel_pressure = round_to(fuel_pressure, round_pressure_to);
+    }
     mix_tank.mix.canister_fill_to(mix_gases, mix_fractions, fuel_temp, fuel_pressure);
-    mix_tank.mix.canister_fill_to(primer_gases, primer_fractions, thir_temp, to_pressure);
+    mix_tank.mix.canister_fill_to(primer_gases, primer_fractions, thir_temp, fill_pressure);
 
     // invalid mix, abort
-    if (fuel_pressure > to_pressure || fuel_pressure < 0.0) {
+    if (fuel_pressure > fill_pressure || fuel_pressure < 0.0) {
         return {};
     }
 
-    std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_ratios, primer_ratios, to_pressure,
+    std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_ratios, primer_ratios, fill_pressure,
                    fuel_temp, fuel_pressure, thir_temp, target_temp,
                    mix_gases, primer_gases,
                    std::move(mix_tank));
+    bomb->do_rounding = do_rounding;
 
     bool pre_met = std::none_of(pre_restrictions.begin(), pre_restrictions.end(), [&bomb](const auto& r){ return !r.OK(*bomb); });
 

@@ -79,12 +79,11 @@ int main(int argc, char* argv[]) {
     float mixt1 = 0.f, mixt2 = 0.f, thirt1 = 0.f, thirt2 = 0.f;
     float ratio_bound = 10.f;
     tuple<vector<float>, vector<float>> ratio_bounds;
-    float ratio_step = 1.005f;
-    float temperature_step = 1.001f, temperature_step_min = 0.05f;
     float lower_target_temp = fire_temp + 0.1f;
     float lower_pressure = pressure_cap, upper_pressure = pressure_cap;
     bool step_target_temp = false;
     size_t tick_cap = numeric_limits<size_t>::max(); // 10 minutes
+    bool do_round = true;
 
     tuple<field_ref<bomb_data>, bool, bool> opt_params{bomb_data::radius_field, true, false};
 
@@ -94,7 +93,6 @@ int main(int argc, char* argv[]) {
     float max_runtime = 3.f;
     size_t sample_rounds = 5;
     float bounds_scale = 0.5f;
-    float stepping_scale = 0.75f;
     size_t nthreads = 1;
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
@@ -109,11 +107,10 @@ int main(int argc, char* argv[]) {
         argp::make_argument("mixt2", "m2", "maximum fuel mix temperature to check, Kelvin", mixt2),
         argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
         argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
+        argp::make_argument("round", "r", "whether to round pressures and temperatures to settable values", do_round),
         argp::make_argument("lowerp", "p1", "lower mix-to pressure to check, kPa, default is pressure cap", lower_pressure),
         argp::make_argument("upperp", "p2", "upper mix-to pressure to check, kPa, default is pressure cap", upper_pressure),
         argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
-        argp::make_argument("tstep", "", "set temperature iteration multiplier (default " + to_string(temperature_step) + ")", temperature_step),
-        argp::make_argument("tstepm", "", "set minimum temperature iteration step (default " + to_string(temperature_step_min) + ")", temperature_step_min),
         argp::make_argument("lowertargettemp", "o", "only consider bombs which mix to above this temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(lower_target_temp) + ")", lower_target_temp),
         argp::make_argument("loglevel", "l", "how much to log (default " + to_string(log_level) + ")", log_level),
         argp::make_argument("param", "p", "(param, maximise, measure_before_sim): lets you configure what parameter and how to optimise", opt_params),
@@ -124,7 +121,6 @@ int main(int argc, char* argv[]) {
         argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
         argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds),
         argp::make_argument("boundsscale", "", "how much to scale bounds each sample round (default " + to_string(bounds_scale) + ")", bounds_scale),
-        argp::make_argument("steppingscale", "", "how much to scale minimum step each sample round (default " + to_string(stepping_scale) + ")", stepping_scale),
         argp::make_argument("nthreads", "j", "number of threads for the optimiser to use", nthreads)
     };
 
@@ -247,14 +243,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    size_t num_temps = 3;
-    size_t pressure_offset = num_temps;
-    size_t num_pressure = 1;
-    size_t ratio_offset = num_temps + num_pressure;
     size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
     size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
     size_t num_ratios = num_mix_ratios + num_primer_ratios;
-    size_t num_params = ratio_offset + num_ratios;
 
     vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1, lower_pressure};
     lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
@@ -281,39 +272,21 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    vector<float> min_l_step(lower_bounds.size(), 0.f);
-    vector<float> min_e_step(lower_bounds.size(), 0.f);
-    for (size_t i = 0; i < num_temps; ++i) {
-        min_l_step[i] = temperature_step_min;
-        min_e_step[i] = temperature_step;
-    }
-    min_l_step[pressure_offset] = pressure_cap * 0.01f;
-    min_e_step[pressure_offset] = 1.01f;
-    for (size_t i = ratio_offset; i < num_params; ++i) {
-        min_l_step[i] = 0.f;
-        min_e_step[i] = ratio_step;
-    }
-
-    adaptive_optimiser<tuple<vector<gas_ref>, vector<gas_ref>, bool, size_t, field_ref<bomb_data>, vector<field_restriction<bomb_data>>, vector<field_restriction<bomb_data>>>, opt_val_wrap>
+    optimiser<bomb_args, opt_val_wrap>
     optim(do_sim,
           lower_bounds,
           upper_bounds,
-          min_l_step,
-          min_e_step,
           optimise_maximise,
-          make_tuple(mix_gases, primer_gases, optimise_measure_before, tick_cap, opt_param, pre_restrictions, post_restrictions),
+          {mix_gases, primer_gases, optimise_measure_before, do_round, tick_cap, opt_param, pre_restrictions, post_restrictions},
           chrono::duration<float>(max_runtime),
           sample_rounds,
           bounds_scale,
-          stepping_scale,
           log_level);
     // optim.thread_count = nthreads;
 
     optim.find_best();
 
-    vector<float> in_args = optim.best_arg;
     const opt_val_wrap& best_res = optim.best_result;
-
     cout.clear();
     cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_res.data->print_very_simple() : best_res.data->print_full()) << endl;
     if (silent) {

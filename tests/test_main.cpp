@@ -5,6 +5,7 @@
 #include <catch2/catch_approx.hpp>
 #include <argparse/args.hpp>
 
+#include "constants.hpp"
 #include "gas.hpp"
 #include "tank.hpp"
 #include "optimiser.hpp"
@@ -313,14 +314,11 @@ TEST_CASE("Optimiser validation") {
             optim(opt_sine,
                 {-M_PI * 0.5f},
                 {M_PI * 0.5f},
-                {0.01f},
-                {1.001f},
                 true,
                 std::make_tuple(),
                 std::chrono::duration<float>(0.001f),
                 5,
-                0.5f,
-                0.75f);
+                0.5f);
 
             SECTION("Minimisation") {
                 optim.maximise = false;
@@ -350,14 +348,11 @@ TEST_CASE("Optimiser validation") {
             c_optim(opt_fun,
                 {0.f, -0.5f},
                 {1.f, 1.5f},
-                {0.01f, 0.01f},
-                {1.001f, 1.001f},
                 true,
                 std::make_tuple(),
-                std::chrono::duration<float>(0.001f),
+                std::chrono::duration<float>(0.01f),
                 5,
-                0.5f,
-                0.75f);
+                0.5f);
 
             SECTION("Maximisation") {
                 c_optim.find_best();
@@ -377,49 +372,10 @@ TEST_CASE("Optimiser validation") {
                 const float_wrap& best_res = c_optim.best_result;
 
                 REQUIRE(best_res.valid());
-                REQUIRE(best_args[0] == Approx(0.76f).epsilon(0.05f));
-                REQUIRE(best_args[1] == Approx(1.5f).margin(0.05f));
-                REQUIRE(best_res.data == Approx(-0.74f).epsilon(0.05f));
+                REQUIRE(best_args[0] == Approx(0.76f).epsilon(0.01f));
+                REQUIRE(best_args[1] == Approx(1.5f).margin(0.01f));
+                REQUIRE(best_res.data == Approx(-0.74f).epsilon(0.01f));
             }
-        }
-    }
-
-    SECTION("Adaptive coordinate descent") {
-        // not supposed to be used for 1-input functions
-        adaptive_optimiser<std::tuple<>, float_wrap>
-        c_optim(opt_fun,
-            {0.f, -0.5f},
-            {1.f, 1.5f},
-            {0.01f, 0.01f},
-            {1.001f, 1.001f},
-            true,
-            std::make_tuple(),
-            std::chrono::duration<float>(0.001f),
-            5,
-            0.5f,
-            0.75f);
-
-        SECTION("2-variable maximisation") {
-            c_optim.find_best();
-            std::vector<float> best_args = c_optim.best_arg;
-            const float_wrap& best_res = c_optim.best_result;
-
-            REQUIRE(best_res.valid());
-            REQUIRE(best_args[0] == Approx(0.292f).epsilon(0.01f));
-            REQUIRE(best_args[1] == Approx(0.f).margin(0.01f));
-            REQUIRE(best_res.data == Approx(1.092f).epsilon(0.01f));
-        }
-
-        SECTION("2-variable minimisation") {
-            c_optim.maximise = false;
-            c_optim.find_best();
-            std::vector<float> best_args = c_optim.best_arg;
-            const float_wrap& best_res = c_optim.best_result;
-
-            REQUIRE(best_res.valid());
-            REQUIRE(best_args[0] == Approx(0.76f).epsilon(0.05f));
-            REQUIRE(best_args[1] == Approx(1.5f).margin(0.05f));
-            REQUIRE(best_res.data == Approx(-0.74f).epsilon(0.05f));
         }
     }
 }

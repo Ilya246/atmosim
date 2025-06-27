@@ -56,7 +56,11 @@ frezon_cool_energy_released = -600000.f * heat_scale,
 nitrium_decomp_temp = T0C + 70.f,
 nitrium_decomposition_energy = 30000.f,
 
-tickrate = 0.5;
+tickrate = 0.5f,
+
+round_temp_to = 0.01f, round_pressure_to = 0.1f;
+
+inline const size_t round_temp_dig = 2, round_pressure_dig = 1;
 
 inline std::chrono::high_resolution_clock main_clock;
 

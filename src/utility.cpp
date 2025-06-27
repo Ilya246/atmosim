@@ -23,6 +23,10 @@ float frand(float from, float to) {
     return from + frand(to - from);
 }
 
+float round_to(float what, float to) {
+    return std::round(what / to) * to;
+}
+
 std::vector<float>& operator+=(std::vector<float>& lhs, const std::vector<float>& rhs) {
     size_t dims = lhs.size();
     for (size_t i = 0; i < dims; ++i) {
@@ -37,6 +41,15 @@ std::vector<float>& operator-=(std::vector<float>& lhs, const std::vector<float>
         lhs[i] -= rhs[i];
     }
     return lhs;
+}
+
+std::vector<float> operator+(const std::vector<float>& lhs, const std::vector<float>& rhs) {
+    std::vector<float> vec(lhs);
+    size_t dims = lhs.size();
+    for (size_t i = 0; i < dims; ++i) {
+        vec[i] += rhs[i];
+    }
+    return vec;
 }
 
 std::vector<float> operator-(const std::vector<float>& lhs, const std::vector<float>& rhs) {
@@ -97,6 +110,14 @@ std::vector<float>& normalize(std::vector<float>& vec) {
     return vec;
 }
 
+std::vector<float>& vec_zero_if(std::vector<float>& vec, const std::vector<bool>& if_vec) {
+    size_t dims = vec.size();
+    for (size_t i = 0; i < dims; ++i) {
+        vec[i] *= if_vec[i] ? 0.f : 1.f;
+    }
+    return vec;
+}
+
 std::vector<float>& orthogonalise(std::vector<float>& vec, const std::vector<float>& to) {
     return vec -= to * (dot(vec, to) / dot(to, to));
 }
@@ -109,6 +130,29 @@ std::vector<float>& lerp_in_place(std::vector<float>& vec, const std::vector<flo
         vec[i] += to[i] * by;
     }
     return vec;
+}
+
+std::vector<float> normalized(const std::vector<float>& vec) {
+    return vec * (1.f / length(vec));
+}
+
+std::vector<float> random_vec(size_t dims, float scale) {
+    std::vector<float> out_vec(dims);
+    for (float& f : out_vec) f = frand(-scale, scale);
+    return out_vec;
+}
+
+std::vector<float> random_vec(size_t dims, float scale, float len) {
+    return normalized(random_vec(dims, scale)) * len;
+}
+
+std::vector<float> random_vec(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds) {
+    size_t dims = lower_bounds.size();
+    std::vector<float> out_vec(dims);
+    for (size_t i = 0; i < dims; ++i) {
+        out_vec[i] = frand(lower_bounds[i], upper_bounds[i]);
+    }
+    return out_vec;
 }
 
 std::vector<float> orthogonal_noise(const std::vector<float>& dir, float strength) {
@@ -132,6 +176,38 @@ float dot(const std::vector<float>& a, const std::vector<float>& b) {
 
 float length(const std::vector<float>& vec) {
     return std::sqrt(dot(vec, vec));
+}
+
+bool vec_in_bounds(const std::vector<float>& vec, const std::vector<float>& lower, const std::vector<float>& upper) {
+    size_t dims = vec.size();
+    for (size_t i = 0; i < dims; ++i) {
+        if (vec[i] < lower[i] || vec[i] > upper[i]) return false;
+    }
+    return true;
+}
+
+void space_vectors(std::vector<std::vector<float>>& vecs, float strength) {
+    size_t vec_n = vecs.size();
+    size_t dims = vecs[0].size();
+    std::vector<float> lengths(vec_n);
+    for (size_t i = 0; i < vec_n; ++i) lengths[i] = length(vecs[i]);
+    std::vector<std::vector<float>> adj_by(vecs.size());
+    for (size_t a_idx = 0; a_idx < vec_n; ++a_idx) {
+        std::vector<float>& vec_a = vecs[a_idx];
+        std::vector<float>& adj_vec = adj_by[a_idx];
+        adj_vec = std::vector<float>(dims, 0.f);
+        for (size_t b_idx = 0; b_idx < vec_n; ++b_idx) {
+            const std::vector<float>& vec_b = vecs[b_idx];
+            if (vec_a == vec_b) continue;
+            std::vector<float> diff = vec_a - vec_b;
+            adj_vec += diff * (strength / dot(diff, diff));
+        }
+    }
+    for (size_t a_idx = 0; a_idx < vec_n; ++a_idx) {
+        std::vector<float>& vec_a = vecs[a_idx];
+        vec_a += adj_by[a_idx];
+        vec_a *= lengths[a_idx] / length(vec_a); // preserve length
+    }
 }
 
 void log(std::function<std::string()>&& str, size_t log_level, size_t level, bool endl, bool clear) {

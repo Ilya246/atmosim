@@ -85,21 +85,24 @@ struct bomb_data {
     std::vector<gas_ref> mix_gases, primer_gases;
     gas_tank tank;
     float optstat;
-    float fin_pressure, fin_radius = 0.f;
+    float fin_pressure = 0.f, fin_radius = 0.f;
     int ticks;
+    bool do_rounding;
 
     // TODO: make this more sane somehow?
     bomb_data(std::vector<float> mix_ratios, std::vector<float> primer_ratios, float to_pressure,
               float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_temp,
               const std::vector<gas_ref>& mix_gases, const std::vector<gas_ref>& primer_gases,
               gas_tank tank, float optstat = -1.f,
-              int ticks = 0)
+              int ticks = 0,
+              bool do_rounding = false)
     :
         mix_ratios(mix_ratios), primer_ratios(primer_ratios), to_pressure(to_pressure),
         fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_temp(mix_to_temp),
         mix_gases(mix_gases), primer_gases(primer_gases),
         tank(tank), optstat(optstat),
-        ticks(ticks) {};
+        ticks(ticks),
+        do_rounding(do_rounding) {};
 
     void sim_ticks(size_t up_to, field_ref<bomb_data> optstat_ref, bool measure_pre);
 
@@ -112,6 +115,7 @@ struct bomb_data {
     static field_ref<bomb_data> radius_field;
     static field_ref<bomb_data> ticks_field;
     static field_ref<bomb_data> temperature_field;
+    static field_ref<bomb_data> integrity_field;
 };
 
 std::istream& operator>>(std::istream& stream, field_ref<bomb_data>& re);
@@ -146,8 +150,19 @@ struct opt_val_wrap {
     }
 };
 
+struct bomb_args {
+    const std::vector<gas_ref>& mix_gases;
+    const std::vector<gas_ref>& primer_gases;
+    bool measure_before;
+    bool do_rounding;
+    size_t tick_cap;
+    field_ref<bomb_data> opt_param;
+    const std::vector<field_restriction<bomb_data>>& pre_restrictions;
+    const std::vector<field_restriction<bomb_data>>& post_restrictions;
+};
+
 // args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...
-opt_val_wrap do_sim(const std::vector<float>& in_args, const std::tuple<const std::vector<gas_ref>&, const std::vector<gas_ref>&, bool, size_t, field_ref<bomb_data>, const std::vector<field_restriction<bomb_data>>&, const std::vector<field_restriction<bomb_data>>&>& args);
+opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args);
 
 }
 
