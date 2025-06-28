@@ -316,7 +316,7 @@ TEST_CASE("Optimiser validation") {
                 {M_PI * 0.5f},
                 true,
                 std::make_tuple(),
-                std::chrono::duration<float>(0.001f),
+                as_seconds(0.001f),
                 5,
                 0.5f);
 
@@ -350,7 +350,7 @@ TEST_CASE("Optimiser validation") {
                 {1.f, 1.5f},
                 true,
                 std::make_tuple(),
-                std::chrono::duration<float>(0.01f),
+                as_seconds(0.01f),
                 5,
                 0.5f);
 

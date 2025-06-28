@@ -125,7 +125,9 @@ struct optimiser {
         size_t sample_count = 0;
         size_t valid_sample_count = 0;
 
-        sampler(const optimiser<T, R>& parent): parent(parent) {}
+        sampler(const optimiser<T, R>& parent): parent(parent) {
+            reset(parent.lower_bounds, parent.upper_bounds);
+        }
 
         void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds) {
             log_level = parent.log_level;

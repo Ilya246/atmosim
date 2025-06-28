@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "constants.hpp"
+
 // define this to omit exception checks in hotcode
 #ifdef ASIM_NOEXCEPT
 #define CHECKEXCEPT if constexpr (false)
@@ -60,6 +62,11 @@ bool vec_in_bounds(const std::vector<float>& vec, const std::vector<float>& lowe
 // tries to rotate input vectors to be spaced apart, expensive
 void space_vectors(std::vector<std::vector<float>>& vecs, float strength);
 
+inline std::mutex log_mutex;
+void log(std::function<std::string()>&& str, size_t log_level, size_t level, bool endl = true, bool clear = true);
+
+duration_t as_seconds(float count);
+
 template<typename T>
 std::vector<std::pair<T, float>> get_fractions(const std::vector<std::pair<T, float>>& ratios) {
     std::vector<std::pair<T, float>> fractions(ratios.size());
@@ -70,9 +77,6 @@ std::vector<std::pair<T, float>> get_fractions(const std::vector<std::pair<T, fl
 
     return fractions;
 }
-
-inline std::mutex log_mutex;
-void log(std::function<std::string()>&& str, size_t log_level, size_t level, bool endl = true, bool clear = true);
 
 template<typename T>
 inline std::string vec_to_str(const std::vector<T>& vec) {

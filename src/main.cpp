@@ -1,4 +1,3 @@
-#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -278,7 +277,7 @@ int main(int argc, char* argv[]) {
           upper_bounds,
           optimise_maximise,
           {mix_gases, primer_gases, optimise_measure_before, do_round, tick_cap, opt_param, pre_restrictions, post_restrictions},
-          chrono::duration_cast<duration_t>(chrono::duration<float>(max_runtime)),
+          as_seconds(max_runtime),
           sample_rounds,
           bounds_scale,
           log_level);

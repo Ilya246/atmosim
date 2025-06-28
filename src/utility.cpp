@@ -219,4 +219,8 @@ void log(std::function<std::string()>&& str, size_t log_level, size_t level, boo
     log_mutex.unlock();
 }
 
+duration_t as_seconds(float count) {
+    return std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(count));
+}
+
 }
