@@ -126,18 +126,21 @@ struct optimiser {
         size_t valid_sample_count = 0;
 
         sampler(const optimiser<T, R>& parent): parent(parent) {
-            reset(parent.lower_bounds, parent.upper_bounds);
+            reset(parent.lower_bounds, parent.upper_bounds, parent.base_search_directions());
         }
 
-        void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds) {
+        void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds, const std::vector<std::vector<float>>& new_directions) {
             log_level = parent.log_level;
             maximise = parent.maximise;
             do_adapt = parent.do_adapt;
             move_scaling = parent.move_scaling;
             base_step = parent.base_step;
             adapt_noise = parent.adapt_noise;
+            best_arg = parent.best_arg;
+            best_result = parent.best_result;
             cur_lower_bounds = lower_bounds;
             cur_upper_bounds = upper_bounds;
+            search_directions = new_directions;
             adapt_counter = 0;
             sample_count = 0;
             valid_sample_count = 0;
@@ -273,7 +276,7 @@ struct optimiser {
         }
     };
 
-    std::vector<std::vector<float>> base_search_directions() {
+    std::vector<std::vector<float>> base_search_directions() const {
         std::vector<std::vector<float>> out_vec;
         // Create initial directions only for free dimensions
         size_t dims = fixed_dims.size();
@@ -307,6 +310,8 @@ struct optimiser {
         std::vector<float> cur_lower_bounds(lower_bounds);
         std::vector<float> cur_upper_bounds(upper_bounds);
 
+        bool is_one = n_threads == 1;
+
         for (size_t samp_idx = 0; samp_idx < sample_rounds; ++samp_idx) {
             if (status_SIGINT) break;
 
@@ -316,15 +321,18 @@ struct optimiser {
 
                 // run samplers
                 auto from = main_clock.now();
-                for (sampler& samp : samplers) {
-                    samp.reset(cur_lower_bounds, cur_upper_bounds);
-                    samp.best_arg = best_arg;
-                    samp.best_result = best_result;
-                    samp.search_directions = search_directions;
-                    samp.sample_until(from + poll_spacing);
-                }
-                for (sampler& t : samplers) {
-                    t.join();
+                // sample on main thread if we only have one requested thread
+                if (is_one) {
+                    samplers[0].reset(cur_lower_bounds, cur_upper_bounds, search_directions);
+                    sampler::__sample_until(&samplers[0], from + poll_spacing);
+                } else {
+                    for (sampler& samp : samplers) {
+                        samp.reset(cur_lower_bounds, cur_upper_bounds, search_directions);
+                        samp.sample_until(from + poll_spacing);
+                    }
+                    for (sampler& t : samplers) {
+                        t.join();
+                    }
                 }
 
                 // aggregate sampler data

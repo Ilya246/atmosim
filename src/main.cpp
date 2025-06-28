@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
     vector<gas_ref> mix_gases;
     vector<gas_ref> primer_gases;
     float mixt1 = 0.f, mixt2 = 0.f, thirt1 = 0.f, thirt2 = 0.f;
-    float ratio_bound = 10.f;
+    float ratio_bound = 3.f;
     tuple<vector<float>, vector<float>> ratio_bounds;
     float lower_target_temp = fire_temp + 0.1f;
     float lower_pressure = pressure_cap, upper_pressure = pressure_cap;
@@ -266,7 +266,7 @@ int main(int argc, char* argv[]) {
         }
     } else {
         for (size_t i = 0; i < num_ratios; ++i) {
-            lower_bounds.push_back(1.f / ratio_bound);
+            lower_bounds.push_back(-ratio_bound);
             upper_bounds.push_back(ratio_bound);
         }
     }

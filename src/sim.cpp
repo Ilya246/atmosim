@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include "sim.hpp"
@@ -155,10 +156,10 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     size_t mg_s = mix_gases.size() - 1;
     size_t pg_s = primer_gases.size() - 1;
     for (size_t i = 0; i < mg_s; ++i) {
-        mix_ratios[i + 1] = in_args[4 + i];
+        mix_ratios[i + 1] = std::exp(in_args[4 + i]);
     }
     for (size_t i = 0; i < pg_s; ++i) {
-        primer_ratios[i + 1] = in_args[4 + mg_s + i];
+        primer_ratios[i + 1] = std::exp(in_args[4 + mg_s + i]);
     }
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
