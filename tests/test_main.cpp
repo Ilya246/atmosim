@@ -229,12 +229,11 @@ TEST_CASE("Tank simulation validation") {
         float radius_expected = 13.02f;
         size_t ticks_expected = 45;
 
-        tank.mix.temperature = mix_temp;
-        tank.mix.adjust_pressure_of(plasma, mix_pressure * plasma_frac);
-        tank.mix.adjust_pressure_of(tritium, mix_pressure * tritium_frac);
+        std::vector<std::pair<gas_ref, float>> mix = {{plasma, plasma_frac}, {tritium, tritium_frac}};
+        tank.mix.canister_fill_to(mix, mix_temp, mix_pressure);
         tank.mix.canister_fill_to(oxygen, T20C, pressure_cap);
 
-        size_t ticks = tank.tick_n(ticks_expected);
+        size_t ticks = tank.tick_n(ticks_expected * 2);
 
         REQUIRE(tank.state == tank.st_exploded);
         REQUIRE(tank.calc_radius() == Catch::Approx(radius_expected).epsilon(0.01f));
@@ -252,13 +251,36 @@ TEST_CASE("Tank simulation validation") {
         float radius_expected = 26.13f;
         size_t ticks_expected = 17;
 
-        tank.mix.temperature = mix_temp;
-        tank.mix.adjust_pressure_of(oxygen, mix_pressure * oxygen_frac);
-        tank.mix.adjust_pressure_of(tritium, mix_pressure * tritium_frac);
-        tank.mix.adjust_pressure_of(nitrous_oxide, mix_pressure * oxide_frac);
+        std::vector<std::pair<gas_ref, float>> mix = {{oxygen, oxygen_frac}, {tritium, tritium_frac}, {nitrous_oxide, oxide_frac}};
+        tank.mix.canister_fill_to(mix, mix_temp, mix_pressure);
         tank.mix.canister_fill_to(frezon, thir_temp, pressure_cap);
 
-        size_t ticks = tank.tick_n(ticks_expected);
+        size_t ticks = tank.tick_n(ticks_expected * 2);
+
+        REQUIRE(tank.state == tank.st_exploded);
+        REQUIRE(tank.calc_radius() == Catch::Approx(radius_expected).epsilon(0.01f));
+        REQUIRE(ticks == ticks_expected);
+    }
+
+    // UP TO DATE AS OF: 28.06.2025
+    SECTION("ticks-17r-1921s-N2/T+O/F") {
+        float mix_pressure = 476.4f;
+        float mix_temp = 159.82f;
+        float thir_temp = 528.35f;
+        float release_p = 788.9f;
+        float oxide_frac = 0.4931195f;
+        float tritium_frac = 0.50688046f;
+        float oxygen_frac = 0.028119187f;
+        float frezon_frac = 0.9718808f;
+        float radius_expected = 17.01f;
+        size_t ticks_expected = 3843;
+
+        std::vector<std::pair<gas_ref, float>> mix = {{nitrous_oxide, oxide_frac}, {tritium, tritium_frac}};
+        tank.mix.canister_fill_to(mix, mix_temp, mix_pressure);
+        std::vector<std::pair<gas_ref, float>> primer = {{oxygen, oxygen_frac}, {frezon, frezon_frac}};
+        tank.mix.canister_fill_to(primer, thir_temp, release_p);
+
+        size_t ticks = tank.tick_n(ticks_expected * 2);
 
         REQUIRE(tank.state == tank.st_exploded);
         REQUIRE(tank.calc_radius() == Catch::Approx(radius_expected).epsilon(0.01f));
@@ -319,6 +341,8 @@ TEST_CASE("Optimiser validation") {
                 as_seconds(0.001f),
                 5,
                 0.5f);
+            optim.poll_spacing = as_seconds(0.01f);
+            optim.fuzzn = 1000;
 
             SECTION("Minimisation") {
                 optim.maximise = false;
@@ -350,9 +374,11 @@ TEST_CASE("Optimiser validation") {
                 {1.f, 1.5f},
                 true,
                 std::make_tuple(),
-                as_seconds(0.01f),
+                as_seconds(0.05f),
                 5,
                 0.5f);
+            c_optim.poll_spacing = as_seconds(0.05f);
+            c_optim.fuzzn = 10000;
 
             SECTION("Maximisation") {
                 c_optim.find_best();
@@ -372,8 +398,8 @@ TEST_CASE("Optimiser validation") {
                 const float_wrap& best_res = c_optim.best_result;
 
                 REQUIRE(best_res.valid());
-                REQUIRE(best_args[0] == Approx(0.76f).epsilon(0.01f));
-                REQUIRE(best_args[1] == Approx(1.5f).margin(0.01f));
+                REQUIRE(best_args[0] == Approx(0.768f).epsilon(0.01f));
+                REQUIRE(best_args[1] == Approx(1.5f).epsilon(0.01f));
                 REQUIRE(best_res.data == Approx(-0.74f).epsilon(0.01f));
             }
         }
