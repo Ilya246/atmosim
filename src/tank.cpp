@@ -25,7 +25,7 @@ std::pair<bool, float> gas_tank::_tick() {
         state = st_exploded;
         return {false, pressure};
     }
-    else if (pressure > tank_rupture_pressure) {
+    if (pressure > tank_rupture_pressure) {
         if (integrity <= 0) {
             state = st_ruptured;
             return {false, pressure};
@@ -33,7 +33,7 @@ std::pair<bool, float> gas_tank::_tick() {
         --integrity;
         return {true, pressure};
     }
-    else if (pressure > tank_leak_pressure) {
+    if (pressure > tank_leak_pressure) {
         if (integrity <= 0) {
             for (float& amt : mix.amounts) {
                 amt *= 0.75;
@@ -43,7 +43,7 @@ std::pair<bool, float> gas_tank::_tick() {
         }
         return {true, pressure};
     }
-    else if (integrity < 3) {
+    if (integrity < 3) {
         ++integrity;
     }
     return {true, pressure};
@@ -65,7 +65,7 @@ size_t gas_tank::tick_n(size_t ticks_limit) {
 }
 
 std::string gas_tank::get_status() {
-    return std::format("pressure {}  temperature {} integ {} gases [{}]",
+    return std::format("pressure {} temperature {} integ {} gases [{}]",
                         mix.pressure(), mix.temperature, integrity, mix.to_string());
 }
 

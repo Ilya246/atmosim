@@ -4,6 +4,7 @@
 #include <string>
 
 #include "gas.hpp"
+#include "constants.hpp"
 #include "utility.hpp"
 
 namespace asim {
@@ -149,16 +150,17 @@ std::string gas_mixture::to_string(char sep) const {
 void gas_mixture::reaction_tick() {
     // calculating heat capacity is somewhat expensive, so cache it
     float heat_capacity_cache = heat_capacity();
-    if (temperature < nitrium_decomp_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrium) >= reaction_min_gas) {
+    float temp = temperature; // original code caches temperature for some reason
+    if (temp < nitrium_decomp_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrium) >= reaction_min_gas) {
         react_nitrium_decomposition(heat_capacity_cache);
     }
-    if (temperature >= frezon_cool_temp && amount_of(nitrogen) >= reaction_min_gas && amount_of(frezon) >= reaction_min_gas) {
+    if (temp >= frezon_cool_temp && amount_of(nitrogen) >= reaction_min_gas && amount_of(frezon) >= reaction_min_gas) {
         react_frezon_coolant(heat_capacity_cache);
     }
-    if (temperature >= n2o_decomp_temp && amount_of(nitrous_oxide) >= reaction_min_gas) {
+    if (temp >= n2o_decomp_temp && amount_of(nitrous_oxide) >= reaction_min_gas) {
         react_N2O_decomposition(heat_capacity_cache);
     }
-    if (amount_of(oxygen) >= reaction_min_gas && temperature >= fire_temp) {
+    if (amount_of(oxygen) >= reaction_min_gas && temp >= fire_temp) {
         if (amount_of(tritium) >= reaction_min_gas) {
             react_tritium_fire(heat_capacity_cache);
         }
@@ -181,7 +183,7 @@ void gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
     if (temperature > plasma_upper_temperature) {
         temperature_scale = 1.f;
     } else {
-        temperature_scale = (temperature - fire_temp) / (plasma_upper_temperature - fire_temp);
+        temperature_scale = (temperature - plasma_minimum_burn_temperature) / (plasma_upper_temperature - plasma_minimum_burn_temperature);
     }
     if (temperature_scale > 0.f) {
         float oxygen_burn_rate = oxygen_burn_rate_base - temperature_scale;
@@ -238,13 +240,12 @@ void gas_mixture::react_tritium_fire(float& heat_capacity_cache) {
 
 // UP TO DATE AS OF: 21.06.2025
 void gas_mixture::react_N2O_decomposition(float& heat_capacity_cache) {
-    float old_heat_capacity = heat_capacity_cache;
     float n2o = amount_of(nitrous_oxide);
     float burned_fuel = n2o * N2Odecomposition_rate;
     adjust_amount_of(nitrous_oxide, -burned_fuel, heat_capacity_cache);
     adjust_amount_of(nitrogen, burned_fuel, heat_capacity_cache);
     adjust_amount_of(oxygen, burned_fuel * 0.5f, heat_capacity_cache);
-    temperature *= old_heat_capacity / heat_capacity_cache;
+    // does not update temperature - this is accurate to the source
 }
 
 // UP TO DATE AS OF: 21.06.2025
