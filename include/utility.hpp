@@ -109,11 +109,15 @@ inline void sigint_hander(int signum) {
 }
 
 inline void handle_sigint() {
+#ifdef _WIN32
+    // TODO: make it work on windows
+#else
     struct sigaction sa;
     sa.sa_handler = sigint_hander;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, nullptr);
+#endif
 }
 
 }

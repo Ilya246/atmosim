@@ -56,13 +56,12 @@ test: $(BUILD)/$(TESTBINARY)
 
 web: $(WEB_BINARY)
 
-deploy: $(BUILD)/$(BINARY) $(BUILD)/$(WIN_BINARY) web
+deploy: $(BUILD)/$(BINARY) $(BUILD)/$(WIN_BINARY)
 	@mkdir -p $(DEPLOY)
 	$(STRIP) $(BUILD)/$(BINARY) -o deploy/$(BINARY)
 	$(WIN_STRIP) $(BUILD)/$(WIN_BINARY) -o deploy/$(WIN_BINARY)
 	@tar -czvf $(DEPLOY)/$(BINARY)-linux-amd64.tar.gz -C $(DEPLOY) $(BINARY)
 	@zip -j $(DEPLOY)/$(BINARY)-windows-amd64.zip $(DEPLOY)/$(WIN_BINARY)
-	@cp web/* $(DEPLOY)/
 	@echo "Created deployment archives in ./deploy/"
 
 submodule:
