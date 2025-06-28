@@ -87,7 +87,10 @@ std::string list_gases(std::string_view sep = ", ");
 struct gas_mixture {
     float amounts[gas_count] {0.f};
     float temperature = T20C;
-    float volume;
+    const float volume;
+
+    // pressure() is enough of a hotspot for this to be worth it performance-wise
+    const float rvol = R / volume;
 
     gas_mixture(float volume): volume(volume) {};
 
@@ -117,17 +120,18 @@ struct gas_mixture {
     std::string to_string(char sep = ' ') const;
 
     // do gas reactions
-    void reaction_tick();
+    // returns: whether anything happened
+    bool reaction_tick();
 
 private:
     void adjust_amount_of(gas_ref gas, float by, float&);
 
     // all supported reactions - if it's not here, it's not supported
-    void react_plasma_fire(float&);
-    void react_tritium_fire(float&);
-    void react_N2O_decomposition(float&);
-    void react_frezon_coolant(float&);
-    void react_nitrium_decomposition(float&);
+    bool react_plasma_fire(float&);
+    bool react_tritium_fire(float&);
+    bool react_N2O_decomposition(float&);
+    bool react_frezon_coolant(float&);
+    bool react_nitrium_decomposition(float&);
 };
 
 /// </gas_mixture>

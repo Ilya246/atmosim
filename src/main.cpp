@@ -278,11 +278,11 @@ int main(int argc, char* argv[]) {
           upper_bounds,
           optimise_maximise,
           {mix_gases, primer_gases, optimise_measure_before, do_round, tick_cap, opt_param, pre_restrictions, post_restrictions},
-          chrono::duration<float>(max_runtime),
+          chrono::duration_cast<duration_t>(chrono::duration<float>(max_runtime)),
           sample_rounds,
           bounds_scale,
           log_level);
-    // optim.thread_count = nthreads;
+    optim.n_threads = nthreads;
 
     optim.find_best();
 

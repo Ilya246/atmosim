@@ -63,6 +63,8 @@ round_temp_to = 0.01f, round_pressure_to = 0.1f;
 
 inline const size_t round_temp_dig = 2, round_pressure_dig = 1;
 
-inline std::chrono::high_resolution_clock main_clock;
+inline std::chrono::system_clock main_clock;
+using duration_t = std::chrono::nanoseconds;
+using time_point_t = std::chrono::time_point<std::chrono::system_clock, duration_t>;
 
 }

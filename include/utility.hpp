@@ -3,6 +3,7 @@
 #include <csignal>
 #include <format>
 #include <functional>
+#include <mutex>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -70,6 +71,7 @@ std::vector<std::pair<T, float>> get_fractions(const std::vector<std::pair<T, fl
     return fractions;
 }
 
+inline std::mutex log_mutex;
 void log(std::function<std::string()>&& str, size_t log_level, size_t level, bool endl = true, bool clear = true);
 
 template<typename T>

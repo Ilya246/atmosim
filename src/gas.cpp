@@ -43,7 +43,9 @@ float gas_mixture::amount_of(gas_ref gas) const {
 }
 
 float gas_mixture::total_gas() const {
-    return std::accumulate(std::begin(amounts), std::end(amounts), 0.f);
+    float amt = 0.f;
+    for (size_t i = 0; i < gas_count; ++i) amt += amounts[i];
+    return amt;
 }
 
 float gas_mixture::heat_capacity() const {
@@ -60,7 +62,7 @@ float gas_mixture::heat_energy() const {
 }
 
 float gas_mixture::pressure() const {
-    return total_gas() * R * temperature / volume;
+    return total_gas() * temperature * rvol;
 }
 
 void gas_mixture::set_amount_of(gas_ref gas, float to) {
@@ -147,27 +149,29 @@ std::string gas_mixture::to_string(char sep) const {
 }
 
 // UP TO DATE AS OF: 21.06.2025
-void gas_mixture::reaction_tick() {
+bool gas_mixture::reaction_tick() {
     // calculating heat capacity is somewhat expensive, so cache it
     float heat_capacity_cache = heat_capacity();
     float temp = temperature; // original code caches temperature for some reason
+    bool reacted = false;
     if (temp < nitrium_decomp_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrium) >= reaction_min_gas) {
-        react_nitrium_decomposition(heat_capacity_cache);
+        reacted |= react_nitrium_decomposition(heat_capacity_cache);
     }
     if (temp >= frezon_cool_temp && amount_of(nitrogen) >= reaction_min_gas && amount_of(frezon) >= reaction_min_gas) {
-        react_frezon_coolant(heat_capacity_cache);
+        reacted |= react_frezon_coolant(heat_capacity_cache);
     }
     if (temp >= n2o_decomp_temp && amount_of(nitrous_oxide) >= reaction_min_gas) {
-        react_N2O_decomposition(heat_capacity_cache);
+        reacted |= react_N2O_decomposition(heat_capacity_cache);
     }
     if (amount_of(oxygen) >= reaction_min_gas && temp >= fire_temp) {
         if (amount_of(tritium) >= reaction_min_gas) {
-            react_tritium_fire(heat_capacity_cache);
+            reacted |= react_tritium_fire(heat_capacity_cache);
         }
         if (amount_of(plasma) >= reaction_min_gas) {
-            react_plasma_fire(heat_capacity_cache);
+            reacted |= react_plasma_fire(heat_capacity_cache);
         }
     }
+    return reacted;
 }
 
 void gas_mixture::adjust_amount_of(gas_ref gas, float by, float& heat_capacity_cache) {
@@ -176,7 +180,7 @@ void gas_mixture::adjust_amount_of(gas_ref gas, float by, float& heat_capacity_c
 }
 
 // UP TO DATE AS OF: 21.06.2025
-void gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
+bool gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_released = 0.f;
     float temperature_scale = 0.f;
@@ -208,10 +212,11 @@ void gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
     if (heat_capacity_cache > minimum_heat_capacity) {
         temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
     }
+    return energy_released > 0.f;
 }
 
 // UP TO DATE AS OF: 21.06.2025
-void gas_mixture::react_tritium_fire(float& heat_capacity_cache) {
+bool gas_mixture::react_tritium_fire(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_released = 0.f;
     float burned_fuel = 0.f;
@@ -236,20 +241,22 @@ void gas_mixture::react_tritium_fire(float& heat_capacity_cache) {
     if (heat_capacity_cache > minimum_heat_capacity) {
         temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
     }
+    return burned_fuel > 0.f;
 }
 
 // UP TO DATE AS OF: 21.06.2025
-void gas_mixture::react_N2O_decomposition(float& heat_capacity_cache) {
+bool gas_mixture::react_N2O_decomposition(float& heat_capacity_cache) {
     float n2o = amount_of(nitrous_oxide);
     float burned_fuel = n2o * N2Odecomposition_rate;
     adjust_amount_of(nitrous_oxide, -burned_fuel, heat_capacity_cache);
     adjust_amount_of(nitrogen, burned_fuel, heat_capacity_cache);
     adjust_amount_of(oxygen, burned_fuel * 0.5f, heat_capacity_cache);
     // does not update temperature - this is accurate to the source
+    return burned_fuel > 0.f;
 }
 
 // UP TO DATE AS OF: 21.06.2025
-void gas_mixture::react_frezon_coolant(float& heat_capacity_cache) {
+bool gas_mixture::react_frezon_coolant(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_modifier = 1.f;
     float scale = (temperature - frezon_cool_lower_temperature) / (frezon_cool_mid_temperature - frezon_cool_lower_temperature);
@@ -272,23 +279,25 @@ void gas_mixture::react_frezon_coolant(float& heat_capacity_cache) {
     if (heat_capacity_cache > minimum_heat_capacity) {
         temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
     }
+    return energy_released > 0.f;
 }
 
 // UP TO DATE AS OF: 21.06.2025
-void gas_mixture::react_nitrium_decomposition(float& heat_capacity_cache) {
-        float efficiency = std::min(temperature / 2984.f, amount_of(nitrium));
+bool gas_mixture::react_nitrium_decomposition(float& heat_capacity_cache) {
+    float efficiency = std::min(temperature / 2984.f, amount_of(nitrium));
 
-        if (amount_of(nitrium) - efficiency < 0.f)
-            return;
+    if (amount_of(nitrium) - efficiency < 0.f)
+        return false;
 
-        adjust_amount_of(nitrium, -efficiency, heat_capacity_cache);
-        adjust_amount_of(water_vapour, efficiency, heat_capacity_cache);
-        adjust_amount_of(nitrogen, efficiency, heat_capacity_cache);
+    adjust_amount_of(nitrium, -efficiency, heat_capacity_cache);
+    adjust_amount_of(water_vapour, efficiency, heat_capacity_cache);
+    adjust_amount_of(nitrogen, efficiency, heat_capacity_cache);
 
-        float energy_released = efficiency * nitrium_decomposition_energy;
-        if (heat_capacity_cache > minimum_heat_capacity) {
-            temperature = (temperature * heat_capacity_cache + energy_released) / heat_capacity_cache;
-        }
+    float energy_released = efficiency * nitrium_decomposition_energy;
+    if (heat_capacity_cache > minimum_heat_capacity) {
+        temperature = (temperature * heat_capacity_cache + energy_released) / heat_capacity_cache;
+    }
+    return energy_released > 0.f;
 }
 
 /// </gas_mixture>
