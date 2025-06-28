@@ -112,6 +112,10 @@ struct bomb_data {
     std::string print_inline() const;
     std::string print_full() const;
 
+    std::string serialize() const;
+    // deserialises us from an input string - note that this gives an unsimulated tank
+    static bomb_data deserialize(std::string_view str);
+
     static field_ref<bomb_data> radius_field;
     static field_ref<bomb_data> ticks_field;
     static field_ref<bomb_data> temperature_field;

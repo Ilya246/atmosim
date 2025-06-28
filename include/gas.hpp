@@ -87,10 +87,10 @@ std::string list_gases(std::string_view sep = ", ");
 struct gas_mixture {
     float amounts[gas_count] {0.f};
     float temperature = T20C;
-    const float volume;
+    float volume;
 
     // pressure() is enough of a hotspot for this to be worth it performance-wise
-    const float rvol = R / volume;
+    float rvol = R / volume;
 
     gas_mixture(float volume): volume(volume) {};
 

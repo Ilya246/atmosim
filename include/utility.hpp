@@ -1,5 +1,7 @@
 #pragma once
 
+#include <argparse/read.hpp>
+
 #include <csignal>
 #include <format>
 #include <functional>
@@ -67,6 +69,15 @@ void log(std::function<std::string()>&& str, size_t log_level, size_t level, boo
 
 duration_t as_seconds(float count);
 
+template<typename L, typename R>
+inline std::istream& operator>>(std::istream& lhs, std::pair<L, R>& rhs) {
+    std::string str;
+    lhs >> str;
+    std::tuple<L, R> tup = argp::parse_value<std::tuple<L, R>>(str);
+    rhs = {std::get<0>(tup), std::get<1>(tup)};
+    return lhs;
+}
+
 template<typename T>
 std::vector<std::pair<T, float>> get_fractions(const std::vector<std::pair<T, float>>& ratios) {
     std::vector<std::pair<T, float>> fractions(ratios.size());
@@ -105,5 +116,7 @@ inline void handle_sigint() {
     sigaction(SIGINT, &sa, nullptr);
 }
 
-
 }
+
+template<typename L, typename R>
+struct argp::is_container<std::pair<L, R>> : std::true_type {};

@@ -19,14 +19,20 @@ template<typename T>
 T get_input() {
     while (true) {
         while (cin.peek() == '\n') cin.get();
-        T val;
-        cin >> val;
-        bool bad = !cin;
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        if (status_SIGINT) return val;
-        if (bad) cout << "Invalid input. Try again: ";
-        else return val;
+        std::string val_str;
+        getline(cin, val_str);
+        if (val_str.back() == '\n') val_str.pop_back();
+        if(!cin) {
+            if (status_SIGINT) throw runtime_error("Got SIGINT");
+            cin.clear();
+            cout << "Invalid input. Try again: ";
+        }
+        try {
+            T val = argp::parse_value<T>(val_str);
+            return val;
+        } catch (const argp::read_error& e) {
+            cout << "Invalid input. Try again: ";
+        }
     }
 }
 
@@ -176,38 +182,51 @@ int main(int argc, char* argv[]) {
         case (full_input): {
             gas_tank tank;
 
-            cout << "Input number of mixes (omit for 2): ";
-            int mix_c = input_or_default(2);
-            for (int i = 0; i < mix_c; ++i) {
-                cout << format("Inputting mix {}\n", i + 1);
-                cout << format("Input pressure to fill to (omit for {}): ", pressure_cap);
-                float pressure_to = input_or_default(pressure_cap);
-                cout << "Input temperature: ";
-                float temperature = get_input<float>();
-                vector<pair<gas_ref, float>> gases;
-                float ratio_sum = 0.f;
-                bool end = false;
-                while (!end) {
-                    gas_ref g;
-                    cout << "Input gas (omit to end): ";
-                    if (!try_input(g)) break;
-                    cout << "Input ratio (%, portion; omit for remainder from 100%): ";
-                    float ratio;
-                    if (!try_input(ratio)) {
-                        ratio = 100.f - ratio_sum;
-                        end = true;
+            cout << "Normal (y) or serialized (n) input [Y/n]: ";
+            bool norm_input;
+            if (!try_input<bool>(norm_input)) {
+                norm_input = true;
+            }
+            if (!norm_input) {
+                cout << "Input serialised string: ";
+                std::string str;
+                getline(cin, str);
+                bomb_data data = bomb_data::deserialize(str);
+                tank = data.tank;
+            } else {
+                cout << "Input number of mixes (omit for 2): ";
+                int mix_c = input_or_default(2);
+                for (int i = 0; i < mix_c; ++i) {
+                    cout << format("Inputting mix {}\n", i + 1);
+                    cout << format("Input pressure to fill to (omit for {}): ", pressure_cap);
+                    float pressure_to = input_or_default(pressure_cap);
+                    cout << "Input temperature: ";
+                    float temperature = get_input<float>();
+                    vector<pair<gas_ref, float>> gases;
+                    float ratio_sum = 0.f;
+                    bool end = false;
+                    while (!end) {
+                        gas_ref g;
+                        cout << "Input gas (omit to end): ";
+                        if (!try_input(g)) break;
+                        cout << "Input ratio (%, portion; omit for remainder from 100%): ";
+                        float ratio;
+                        if (!try_input(ratio)) {
+                            ratio = 100.f - ratio_sum;
+                            end = true;
+                        }
+                        ratio_sum += ratio;
+                        gases.push_back({g, ratio});
                     }
-                    ratio_sum += ratio;
-                    gases.push_back({g, ratio});
+                    tank.mix.canister_fill_to(get_fractions(gases), temperature, pressure_to);
                 }
-                tank.mix.canister_fill_to(get_fractions(gases), temperature, pressure_to);
             }
 
             size_t tick = 1;
             float last_p = tank.mix.pressure();
             while (true) {
                 cout << format("[Tick {:<2}] Tank status: {}", tick, tank.get_status()) << endl;
-                if (!tank.tick() || status_SIGINT)
+                if (!tank.tick() || tank.state != tank.st_intact || status_SIGINT)
                     break;
                 float p = tank.mix.pressure();
                 if (p == last_p)
@@ -288,6 +307,9 @@ int main(int argc, char* argv[]) {
     const opt_val_wrap& best_res = optim.best_result;
     cout.clear();
     cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_res.data->print_very_simple() : best_res.data->print_full()) << endl;
+    if (!simple_output) {
+        cout << "\nSerialized string: " << best_res.data->serialize() << endl;
+    }
     if (silent) {
         cout.setstate(ios::failbit);
     }

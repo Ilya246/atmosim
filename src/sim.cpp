@@ -33,13 +33,14 @@ std::string bomb_data::mix_string(const std::vector<gas_ref>& gases, const std::
     return out;
 }
 
+// [[gas1,frac1],[gas2,frac2],...]
 std::string bomb_data::mix_string_simple(const std::vector<gas_ref>& gases, const std::vector<float>& fractions) const {
-    std::string out;
+    std::string out = "[";
     for (size_t i = 0; i < gases.size(); ++i) {
-        out += std::format("{}:{}", gases[i].name(), fractions[i]);
+        out += std::format("[{},{}]", gases[i].name(), fractions[i]);
         if (i != gases.size() - 1) out += ",";
     }
-    return out;
+    return out + "]";
 }
 
 std::string bomb_data::print_very_simple() const {
@@ -49,6 +50,71 @@ std::string bomb_data::print_very_simple() const {
     // note: this format is supposed to be script-friendly and backwards-compatible
     out_str += std::format("os={} ti={} ft={} fp={} tp={} mt={} tt={} mi={} pm={}", optstat, ticks, fuel_temp, fuel_pressure, to_pressure, mix_to_temp, thir_temp, mix_string_simple(mix_gases, mix_fractions), mix_string_simple(primer_gases, primer_fractions));
     return out_str;
+}
+
+std::string bomb_data::serialize() const {
+    return print_very_simple();
+}
+
+bomb_data bomb_data::deserialize(std::string_view str) {
+    std::map<std::string, std::string> kv_pairs;
+    size_t start = 0;
+    // parse k=v into map
+    while (start < str.size()) {
+        size_t eq_pos = str.find('=', start);
+        if (eq_pos == std::string_view::npos) break;
+        std::string key(str.substr(start, eq_pos - start));
+        size_t space_pos = str.find(' ', eq_pos);
+        if (space_pos == std::string_view::npos) space_pos = str.size();
+        std::string value(str.substr(eq_pos + 1, space_pos - eq_pos - 1));
+        kv_pairs[key] = value;
+        start = space_pos + 1;
+    }
+
+    float optstat = std::stof(kv_pairs["os"]);
+    int ticks = std::stoi(kv_pairs["ti"]);
+    float fuel_temp = std::stof(kv_pairs["ft"]);
+    float fuel_pressure = std::stof(kv_pairs["fp"]);
+    float to_pressure = std::stof(kv_pairs["tp"]);
+    float mix_to_temp = std::stof(kv_pairs["mt"]);
+    float thir_temp = std::stof(kv_pairs["tt"]);
+    auto mix_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["mi"]);
+    auto primer_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["pm"]);
+
+    // try to reconstruct the tank
+    gas_tank tank;
+    tank.mix.canister_fill_to(mix_gases, fuel_temp, fuel_pressure);
+    tank.mix.canister_fill_to(primer_gases, thir_temp, to_pressure);
+
+    std::vector<float> mix_ratios, primer_ratios;
+    std::vector<gas_ref> mix_refs, primer_refs;
+    for (const auto& [k, v] : mix_gases) {
+        mix_ratios.push_back(v);
+        mix_refs.push_back(k);
+    }
+    for (const auto& [k, v] : primer_gases) {
+        primer_ratios.push_back(v);
+        primer_refs.push_back(k);
+    }
+
+    bomb_data data(
+        mix_ratios,
+        primer_ratios,
+        to_pressure,
+        fuel_temp,
+        fuel_pressure,
+        thir_temp,
+        mix_to_temp,
+        mix_refs,
+        primer_refs,
+        std::move(tank),
+        optstat,
+        ticks,
+        false
+    );
+    data.fin_pressure = data.tank.mix.pressure();
+    data.fin_radius = data.tank.calc_radius();
+    return data;
 }
 
 std::string bomb_data::print_inline() const {
