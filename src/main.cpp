@@ -223,15 +223,10 @@ int main(int argc, char* argv[]) {
             }
 
             size_t tick = 1;
-            float last_p = tank.mix.pressure();
             while (true) {
                 cout << format("[Tick {:<2}] Tank status: {}", tick, tank.get_status()) << endl;
                 if (!tank.tick() || tank.state != tank.st_intact || status_SIGINT)
                     break;
-                float p = tank.mix.pressure();
-                if (p == last_p)
-                    break;
-                last_p = p;
                 ++tick;
             }
 
