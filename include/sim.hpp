@@ -116,10 +116,11 @@ struct bomb_data {
     // deserialises us from an input string - note that this gives an unsimulated tank
     static bomb_data deserialize(std::string_view str);
 
-    static field_ref<bomb_data> radius_field;
-    static field_ref<bomb_data> ticks_field;
-    static field_ref<bomb_data> temperature_field;
-    static field_ref<bomb_data> integrity_field;
+    static const field_ref<bomb_data> radius_field;
+    static const field_ref<bomb_data> ticks_field;
+    static const field_ref<bomb_data> temperature_field;
+    static const field_ref<bomb_data> integrity_field;
+    static const std::map<gas_ref, field_ref<bomb_data>> gas_fields;
 };
 
 std::istream& operator>>(std::istream& stream, field_ref<bomb_data>& re);

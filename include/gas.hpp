@@ -51,8 +51,13 @@ struct gas_ref {
         return gases[idx].name;
     }
 
-    bool operator==(const gas_ref& rhs) {
+    bool operator==(const gas_ref& rhs) const {
         return idx == rhs.idx;
+    }
+
+    // needed for std::map
+    bool operator<(const gas_ref& rhs) const {
+        return idx < rhs.idx;
     }
 };
 

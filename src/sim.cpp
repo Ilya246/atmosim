@@ -4,6 +4,7 @@
 
 #include "sim.hpp"
 #include "constants.hpp"
+#include "gas.hpp"
 #include "utility.hpp"
 
 namespace asim {
@@ -173,13 +174,20 @@ std::string bomb_data::print_full() const {
     return out_str;
 }
 
-field_ref<bomb_data> bomb_data::radius_field(offsetof(bomb_data, fin_radius), field_ref<bomb_data>::float_f);
-field_ref<bomb_data> bomb_data::ticks_field(offsetof(bomb_data, ticks), field_ref<bomb_data>::int_f);
-field_ref<bomb_data> bomb_data::temperature_field(offsetof(bomb_data, tank.mix.temperature), field_ref<bomb_data>::float_f);
-field_ref<bomb_data> bomb_data::integrity_field(offsetof(bomb_data, tank.integrity), field_ref<bomb_data>::int_f);
+const field_ref<bomb_data> bomb_data::radius_field(offsetof(bomb_data, fin_radius), field_ref<bomb_data>::float_f);
+const field_ref<bomb_data> bomb_data::ticks_field(offsetof(bomb_data, ticks), field_ref<bomb_data>::int_f);
+const field_ref<bomb_data> bomb_data::temperature_field(offsetof(bomb_data, tank.mix.temperature), field_ref<bomb_data>::float_f);
+const field_ref<bomb_data> bomb_data::integrity_field(offsetof(bomb_data, tank.integrity), field_ref<bomb_data>::int_f);
+const std::map<gas_ref, field_ref<bomb_data>> bomb_data::gas_fields = []() {
+    std::map<gas_ref, field_ref<bomb_data>> map;
+    for (size_t i = 0; i < gas_count; ++i) {
+        map[{i}] = {offsetof(bomb_data, tank.mix.amounts) + i * sizeof(float), field_ref<bomb_data>::float_f};
+    }
+    return map;
+}();
 
 // TODO: make this more sane somehow
-std::string params_supported_str = "radius, ticks, temperature, integrity";
+std::string params_supported_str = "radius, ticks, temperature, integrity, " + list_gases();
 std::istream& operator>>(std::istream& stream, field_ref<bomb_data>& re) {
     std::string val;
     stream >> val;
@@ -187,6 +195,7 @@ std::istream& operator>>(std::istream& stream, field_ref<bomb_data>& re) {
     else if (val == "ticks") re = bomb_data::ticks_field;
     else if (val == "temperature") re = bomb_data::temperature_field;
     else if (val == "integrity") re = bomb_data::integrity_field;
+    else if (is_valid_gas(val)) re = bomb_data::gas_fields.at(string_gas_map.at(val));
     else stream.setstate(std::ios_base::failbit);
     return stream;
 }
