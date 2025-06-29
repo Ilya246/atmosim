@@ -54,6 +54,12 @@ frezon_cool_rate_modifier = 20.f,
 frezon_nitrogen_cool_ratio = 5.f,
 frezon_cool_energy_released = -600000.f * heat_scale,
 
+frezon_production_temp = 73.15f,
+frezon_production_nitrogen_ratio = 10.f,
+frezon_production_max_efficiency_temperature = 73.15f,
+frezon_production_trit_ratio = 50.f,
+frezon_production_conversion_rate = 50.f,
+
 nitrium_decomp_temp = T0C + 70.f,
 nitrium_decomposition_energy = 30000.f,
 

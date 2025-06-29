@@ -154,6 +154,9 @@ bool gas_mixture::reaction_tick() {
     float heat_capacity_cache = heat_capacity();
     float temp = temperature; // original code caches temperature for some reason
     bool reacted = false;
+    if (temp < frezon_production_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrogen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
+        reacted |= react_frezon_production(heat_capacity_cache);
+    }
     if (temp < nitrium_decomp_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrium) >= reaction_min_gas) {
         reacted |= react_nitrium_decomposition(heat_capacity_cache);
     }
@@ -163,11 +166,11 @@ bool gas_mixture::reaction_tick() {
     if (temp >= n2o_decomp_temp && amount_of(nitrous_oxide) >= reaction_min_gas) {
         reacted |= react_N2O_decomposition(heat_capacity_cache);
     }
-    if (amount_of(oxygen) >= reaction_min_gas && temp >= fire_temp) {
-        if (amount_of(tritium) >= reaction_min_gas) {
+    if (temp >= fire_temp) {
+        if (amount_of(oxygen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
             reacted |= react_tritium_fire(heat_capacity_cache);
         }
-        if (amount_of(plasma) >= reaction_min_gas) {
+        if (amount_of(oxygen) >= reaction_min_gas && amount_of(plasma) >= reaction_min_gas) {
             reacted |= react_plasma_fire(heat_capacity_cache);
         }
     }
@@ -253,6 +256,29 @@ bool gas_mixture::react_N2O_decomposition(float& heat_capacity_cache) {
     adjust_amount_of(oxygen, burned_fuel * 0.5f, heat_capacity_cache);
     // does not update temperature - this is accurate to the source
     return burned_fuel > 0.f;
+}
+
+// UP TO DATE AS OF: 29.06.2025
+bool gas_mixture::react_frezon_production(float& heat_capacity_cache) {
+    float efficiency = temperature / frezon_production_max_efficiency_temperature;
+    float loss = 1.f - efficiency;
+
+    float catalyst_limit = amount_of(nitrogen) * (frezon_production_nitrogen_ratio / efficiency);
+    float oxy_limit = std::min(amount_of(oxygen), catalyst_limit) / frezon_production_trit_ratio;
+
+    float trit_burned = std::min(oxy_limit, amount_of(tritium));
+    float oxy_burned = trit_burned * frezon_production_trit_ratio;
+
+    float oxy_conversion = oxy_burned / frezon_production_conversion_rate;
+    float trit_conversion = trit_burned / frezon_production_conversion_rate;
+    float total = oxy_conversion + trit_conversion;
+
+    adjust_amount_of(oxygen, -oxy_conversion, heat_capacity_cache);
+    adjust_amount_of(tritium, -trit_conversion, heat_capacity_cache);
+    adjust_amount_of(frezon, total * efficiency, heat_capacity_cache);
+    adjust_amount_of(nitrogen, total * loss, heat_capacity_cache);
+
+    return true;
 }
 
 // UP TO DATE AS OF: 21.06.2025

@@ -135,6 +135,7 @@ private:
     bool react_plasma_fire(float&);
     bool react_tritium_fire(float&);
     bool react_N2O_decomposition(float&);
+    bool react_frezon_production(float&);
     bool react_frezon_coolant(float&);
     bool react_nitrium_decomposition(float&);
 };
