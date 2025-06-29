@@ -207,7 +207,7 @@ int main(int argc, char* argv[]) {
                     bool end = false;
                     while (!end) {
                         gas_ref g;
-                        cout << "Input gas (omit to end): ";
+                        cout << format("Input gas (omit to end): ", list_gases());
                         if (!try_input(g)) break;
                         cout << "Input ratio (%, portion; omit for remainder from 100%): ";
                         float ratio;
@@ -230,8 +230,14 @@ int main(int argc, char* argv[]) {
                 ++tick;
             }
 
-            cout << format("Result: status: {}, state {}, range {}", tank.get_status(), (int)tank.state, tank.calc_radius());
-            cout << endl;
+            const char* state_name = "unknown";
+            switch (tank.state) {
+                case gas_tank::st_intact: state_name = "intact"; break;
+                case gas_tank::st_ruptured: state_name = "ruptured"; break;
+                case gas_tank::st_exploded: state_name = "exploded"; break;
+            }
+            cout << format("Result:\n  Status: {}\n  State: {}\n  Radius: {:.2f}",
+                            tank.get_status(), state_name, tank.calc_radius()) << endl;
             break;
         }
         default: {

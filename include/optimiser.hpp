@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <functional>
 #include <iostream>
 #include <thread>
@@ -35,7 +36,7 @@ struct optimiser {
     // each how many vector adjustments should we try to space them apart
     size_t orth_interval = 100;
     size_t fuzzn = 10000;
-    duration_t poll_spacing = std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(0.1f));
+    duration_t poll_spacing = std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(0.025f));
     duration_t speed_log_spacing = std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(0.5f));
 
     // state
@@ -114,22 +115,56 @@ struct optimiser {
         std::vector<float> best_arg;
         R best_result;
 
-        std::thread worker;
+        time_point_t until;
 
+        std::atomic<bool> should_terminate{false};
+        std::atomic<bool> running{false};
+        std::thread worker;
+        std::mutex ready_mutex;
+        std::condition_variable cv;
+
+        size_t adapt_counter = 0;
+        // our search directions - each sampler keeps track of its own persistent set
         std::vector<std::vector<float>> search_directions;
+
+        // state fed to us
         std::vector<float> cur_lower_bounds;
         std::vector<float> cur_upper_bounds;
-        size_t adapt_counter = 0;
 
         // state for logging
-        size_t sample_count = 0;
-        size_t valid_sample_count = 0;
+        std::atomic<size_t> sample_count{0};
+        std::atomic<size_t> valid_sample_count{0};
 
         sampler(const optimiser<T, R>& parent): parent(parent) {
-            reset(parent.lower_bounds, parent.upper_bounds, parent.base_search_directions());
+            search_directions = parent.base_search_directions();
+
+            worker = std::thread([this] {
+                std::mutex mutex;
+                std::unique_lock lock(mutex);
+                while (true) {
+                    cv.wait(lock, [this]{ return running.load() || should_terminate.load() || status_SIGINT; });
+                    if (should_terminate.load() || status_SIGINT) break;
+
+                    ready_mutex.lock();
+                    while (main_clock.now() < until) {
+                        if(status_SIGINT) break;
+                        do_sampling();
+                    }
+                    ready_mutex.unlock();
+
+                    running = false;
+                }
+            });
         }
 
-        void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds, const std::vector<std::vector<float>>& new_directions) {
+        ~sampler() {
+            running = false;
+            should_terminate = true;
+            cv.notify_all();
+            worker.join();
+        }
+
+        void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds) {
             log_level = parent.log_level;
             maximise = parent.maximise;
             do_adapt = parent.do_adapt;
@@ -140,33 +175,32 @@ struct optimiser {
             best_result = parent.best_result;
             cur_lower_bounds = lower_bounds;
             cur_upper_bounds = upper_bounds;
-            search_directions = new_directions;
             adapt_counter = 0;
             sample_count = 0;
             valid_sample_count = 0;
         }
 
-        void sample_until(time_point_t until) {
-            worker = std::thread(__sample_until, this, until);
+        void start_sampling(time_point_t until) {
+            this->until = until;
+            running = true;
+            cv.notify_one();
         }
 
-        void join() {
-            worker.join();
+        void wait_ready() {
+            ready_mutex.lock();
+            ready_mutex.unlock();
         }
 
-        static void __sample_until(sampler* samp, time_point_t until) {
-            sampler& self = *samp;
-            while (main_clock.now() < until && !status_SIGINT) {
-                self.do_sampling();
-            }
+        void scale_search_directions(float scale) {
+            for (std::vector<float>& v : search_directions) v *= scale;
         }
 
         void do_sampling() {
             std::vector<float> current = random_vec(cur_lower_bounds, cur_upper_bounds);
-            log([&](){ return std::format("Doing initial sample at {}", vec_to_str(current)); }, log_level, LOG_TRACE);
+            log([&]{ return std::format("Doing initial sample at {}", vec_to_str(current)); }, log_level, LOG_TRACE);
             R c_result = sample(current);
             if (!c_result.valid()) {
-                log([&](){ return "Initial sample invalid, aborting"; }, log_level, LOG_TRACE);
+                log([&]{ return "Initial sample invalid, aborting"; }, log_level, LOG_TRACE);
                 return;
             }
 
@@ -182,7 +216,7 @@ struct optimiser {
                     recheck = false;
                     std::vector<step_candidate> candidates;
 
-                    log([&](){ return "Checking search directions"; }, log_level, LOG_TRACE);
+                    log([&]{ return "Checking search directions"; }, log_level, LOG_TRACE);
                     // Generate candidate steps in all search directions
                     size_t dirs = search_directions.size();
                     for(size_t dir_idx = 0; dir_idx < dirs; ++dir_idx) {
@@ -192,7 +226,7 @@ struct optimiser {
                         // check bounds
                         if (!vec_in_bounds(candidate, cur_lower_bounds, cur_upper_bounds)) continue;
 
-                        log([&](){ return std::format("Sampling candidate offset by {}", vec_to_str(move_dir)); }, log_level, LOG_TRACE);
+                        log([&]{ return std::format("Sampling candidate offset by {}", vec_to_str(move_dir)); }, log_level, LOG_TRACE);
                         candidates.emplace_back(dir_idx, sample(candidate));
                     }
 
@@ -209,7 +243,7 @@ struct optimiser {
                     move_scl *= move_scaling;
 
                     std::vector<float>& best_dir = search_directions[best_it->dir_index];
-                    log([&](){ return std::format("Best direction {} found, result {} vs {}", vec_to_str(best_dir), best_it->result.rating(), c_result.rating()); }, log_level, LOG_TRACE);
+                    log([&]{ return std::format("Best direction {} found, result {} vs {}", vec_to_str(best_dir), best_it->result.rating(), c_result.rating()); }, log_level, LOG_TRACE);
                     if (!do_adapt || is_scaled) {
                         current += best_dir;
                         c_result = best_it->result;
@@ -236,19 +270,19 @@ struct optimiser {
                     if(parent.better_than(rotated_result, best_it->result, maximise)) {
                         current = improv_candidate;
                         c_result = rotated_result;
-                        log([&](){ return std::format("Improved direction {} [{}] -> [{}]",
+                        log([&]{ return std::format("Improved direction {} [{}] -> [{}]",
                             best_it->dir_index, vec_to_str(best_dir), vec_to_str(dir_improv_candidate)); }, log_level, LOG_DEBUG);
                         best_dir = dir_improv_candidate;
                         ++adapt_counter;
                         if (adapt_counter > parent.orth_interval) {
-                            log([&](){ return "Orthogonalising search vectors, current:"; }, log_level, LOG_DEBUG);
+                            log([&]{ return "Orthogonalising search vectors, current:"; }, log_level, LOG_DEBUG);
                             if (log_level >= LOG_DEBUG) {
-                                for (const std::vector<float>& dir : search_directions) log([&](){ return std::format("[{}]", vec_to_str(dir)); }, log_level, LOG_DEBUG);
+                                for (const std::vector<float>& dir : search_directions) log([&]{ return std::format("[{}]", vec_to_str(dir)); }, log_level, LOG_DEBUG);
                             }
                             space_vectors(search_directions, parent.orth_strength);
-                            log([&](){ return "New:"; }, log_level, LOG_DEBUG);
+                            log([&]{ return "New:"; }, log_level, LOG_DEBUG);
                             if (log_level >= LOG_DEBUG) {
-                                for (const std::vector<float>& dir : search_directions) log([&](){ return std::format("[{}]", vec_to_str(dir)); }, log_level, LOG_DEBUG);
+                                for (const std::vector<float>& dir : search_directions) log([&]{ return std::format("[{}]", vec_to_str(dir)); }, log_level, LOG_DEBUG);
                             }
                             adapt_counter = 0;
                         }
@@ -265,9 +299,9 @@ struct optimiser {
 
             ++sample_count;
             valid_sample_count += res.valid();
-            log([&](){ return std::format("Sampled {}, result {}", vec_to_str(at), res.rating_str()); }, log_level, LOG_TRACE);
+            log([&]{ return std::format("Sampled {}, result {}", vec_to_str(at), res.rating_str()); }, log_level, LOG_TRACE);
             if (parent.better_than(res, best_result, maximise)) {
-                log([&](){ return std::format("Updating best from {}", best_result.rating_str()); }, log_level, LOG_DEBUG);
+                log([&]{ return std::format("Updating best from {}", best_result.rating_str()); }, log_level, LOG_DEBUG);
                 best_result = res;
                 best_arg = at;
             }
@@ -285,10 +319,10 @@ struct optimiser {
                 float v_size = (upper_bounds[i] - lower_bounds[i]) * base_step;
                 out_vec.emplace_back(dims, 0.f);
                 out_vec.back()[i] = v_size;
-                log([&](){ return std::format("Initialised step vector [{}]", vec_to_str(out_vec.back())); }, log_level, LOG_DEBUG);
+                log([&]{ return std::format("Initialised step vector [{}]", vec_to_str(out_vec.back())); }, log_level, LOG_DEBUG);
                 out_vec.emplace_back(dims, 0.f);
                 out_vec.back()[i] = -v_size;
-                log([&](){ return std::format("Initialised step vector [{}]", vec_to_str(out_vec.back())); }, log_level, LOG_DEBUG);
+                log([&]{ return std::format("Initialised step vector [{}]", vec_to_str(out_vec.back())); }, log_level, LOG_DEBUG);
             }
         }
 
@@ -296,10 +330,9 @@ struct optimiser {
     }
 
     void find_best() {
-        std::vector<sampler> samplers;
-        std::vector<std::vector<float>> search_directions = base_search_directions();
+        std::vector<std::unique_ptr<sampler>> samplers;
         for (size_t i = 0; i < n_threads; ++i) {
-            samplers.emplace_back(*this);
+            samplers.emplace_back(std::make_unique<sampler>(*this));
         }
 
         bool any_valid = false;
@@ -310,8 +343,6 @@ struct optimiser {
         std::vector<float> cur_lower_bounds(lower_bounds);
         std::vector<float> cur_upper_bounds(upper_bounds);
 
-        bool is_one = n_threads == 1;
-
         for (size_t samp_idx = 0; samp_idx < sample_rounds; ++samp_idx) {
             if (status_SIGINT) break;
 
@@ -319,37 +350,26 @@ struct optimiser {
             while (main_clock.now() - s_time < max_duration) {
                 if (status_SIGINT) break;
 
-                // run samplers
+                // Start all samplers
                 auto from = main_clock.now();
-                // sample on main thread if we only have one requested thread
-                if (is_one) {
-                    samplers[0].reset(cur_lower_bounds, cur_upper_bounds, search_directions);
-                    sampler::__sample_until(&samplers[0], from + poll_spacing);
-                } else {
-                    for (sampler& samp : samplers) {
-                        samp.reset(cur_lower_bounds, cur_upper_bounds, search_directions);
-                        samp.sample_until(from + poll_spacing);
-                    }
-                    for (sampler& t : samplers) {
-                        t.join();
-                    }
+                for (std::unique_ptr<sampler>& samp : samplers) {
+                    samp->reset(cur_lower_bounds, cur_upper_bounds);
+                    samp->start_sampling(from + poll_spacing);
                 }
+
+                // Wait for sampling period
+                std::this_thread::sleep_until(from + poll_spacing);
 
                 // aggregate sampler data
-                for (const sampler& samp : samplers) {
-                    sample_count += samp.sample_count;
-                    valid_sample_count += samp.valid_sample_count;
-                    any_valid |= samp.best_result.valid();
-                    if (better_than(samp.best_result, best_result, maximise)) {
-                        best_result = samp.best_result;
-                        best_arg = samp.best_arg;
+                for (const std::unique_ptr<sampler>& samp : samplers) {
+                    samp->wait_ready();
+                    sample_count += samp->sample_count;
+                    valid_sample_count += samp->valid_sample_count;
+                    any_valid |= samp->best_result.valid();
+                    if (better_than(samp->best_result, best_result, maximise)) {
+                        best_result = samp->best_result;
+                        best_arg = samp->best_arg;
                     }
-                }
-
-                // also aggregate search directions
-                size_t dirs = search_directions.size();
-                for (size_t d = 0; d < dirs; ++d) {
-                    search_directions[d] = samplers[(size_t)frand(n_threads)].search_directions[d];
                 }
 
                 if (log_level >= LOG_INFO) {
@@ -364,7 +384,7 @@ struct optimiser {
                         last_speed_update_time = now;
                     }
                     last_poll_time = now;
-                    log([&](){ return std::format("{} ({} valid) Samples ({:.0f} ({:.0f}) samples/s), best: {}",
+                    log([&]{ return std::format("{} ({} valid) Samples ({:.0f} ({:.0f}) samples/s), best: {}",
                                                 sample_count, valid_sample_count,
                                                 speed_iters, speed_valid_iters,
                                                 best_result.rating());
@@ -374,14 +394,14 @@ struct optimiser {
             }
 
             if (!any_valid) {
-                log([&](){ return "Failed to find any viable result, retrying sample 1..."; }, log_level, LOG_BASIC);
+                log([&]{ return "Failed to find any viable result, retrying sample 1..."; }, log_level, LOG_BASIC);
                 --samp_idx;
                 continue;
             }
 
             // try enhancing our best result
+            sampler t_samp(*this);
             for (size_t f_i = 0; f_i < fuzzn; ++f_i) {
-                sampler t_samp(*this);
                 std::vector<float> rv = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds);
                 std::vector<float> fuzz_coord = best_arg + rv * (base_step * frand());
                 if (!vec_in_bounds(fuzz_coord, cur_lower_bounds, cur_upper_bounds)) continue;
@@ -396,10 +416,13 @@ struct optimiser {
 
                 cur_lower_bounds = lerp(lower_bounds, best_arg, 1.f - c_scale);
                 cur_upper_bounds = lerp(upper_bounds, best_arg, 1.f - c_scale);
-                // also downscale search directions
-                for (std::vector<float>& v : search_directions) v *= bounds_scale;
 
-                log([&](){ return std::format("New bounds: [{}] to [{}]", vec_to_str(cur_lower_bounds), vec_to_str(cur_upper_bounds)); }, log_level, LOG_INFO);
+                // also downscale search directions
+                for (std::unique_ptr<sampler>& samp : samplers) {
+                    samp->scale_search_directions(bounds_scale);
+                }
+
+                log([&]{ return std::format("New bounds: [{}] to [{}]", vec_to_str(cur_lower_bounds), vec_to_str(cur_upper_bounds)); }, log_level, LOG_INFO);
             }
         }
 

@@ -15,7 +15,7 @@ cd atmosim
 ```
 3. Build using the Makefile:
 ```bash
-make
+make -j
 ```
 
 ## Running
