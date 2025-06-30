@@ -406,6 +406,10 @@ struct optimiser {
                 if (!vec_in_bounds(fuzz_coord, cur_lower_bounds, cur_upper_bounds)) continue;
                 t_samp.sample(fuzz_coord);
             }
+            if (better_than(t_samp.best_result, best_result, maximise)) {
+                best_result = t_samp.best_result;
+                best_arg = t_samp.best_arg;
+            }
             sample_count += t_samp.sample_count;
             valid_sample_count += t_samp.valid_sample_count;
 
