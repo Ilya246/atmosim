@@ -43,9 +43,7 @@ float gas_mixture::amount_of(gas_ref gas) const {
 }
 
 float gas_mixture::total_gas() const {
-    float amt = 0.f;
-    for (size_t i = 0; i < gas_count; ++i) amt += amounts[i];
-    return amt;
+    return std::accumulate(std::begin(amounts), std::end(amounts), 0.f);
 }
 
 float gas_mixture::heat_capacity() const {

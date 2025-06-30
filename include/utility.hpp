@@ -39,8 +39,8 @@ std::vector<float> operator*(const std::vector<float>& lhs, float rhs);
 std::vector<float> operator*(float lhs, const std::vector<float>& rhs);
 
 // ->vector non-modifying operations
-std::vector<float> lerp(const std::vector<float>& vec, const std::vector<float>& to, float by);
-std::vector<float> get_fractions(const std::vector<float>& ratios);
+std::vector<float> lerp(std::vector<float> vec, const std::vector<float>& to, float by);
+std::vector<float> get_fractions(std::vector<float> ratios);
 
 // modifying operations
 std::vector<float>& normalize(std::vector<float>& vec);
@@ -90,14 +90,19 @@ std::vector<std::pair<T, float>> get_fractions(const std::vector<std::pair<T, fl
 }
 
 template<typename T>
-inline std::string vec_to_str(const std::vector<T>& vec) {
+inline std::string vec_to_str(const std::vector<T>& vec, std::string_view sep = ", ", std::function<std::string(const T&)>&& fmt = [](const T& arg){ return std::format("{}", arg); }) {
     size_t to = vec.size();
     if (to == 0) return "[empty]";
-    std::string out_str = std::format("{}", vec[0]);
+    std::string out_str = std::format("{}", fmt(vec[0]));
     for (size_t i = 1; i < to; ++i) {
-        out_str += std::format(", {}", vec[i]);
+        out_str += std::format("{}{}", sep, fmt(vec[i]));
     }
     return out_str;
+}
+
+template<typename V>
+inline std::string vec_to_str(const std::vector<std::vector<V>>& vec, std::string_view sep_inner = ", ", std::string_view sep_outer = ", ") {
+    return vec_to_str<std::vector<V>>(vec, sep_outer, [&](const std::vector<V>& arg){ return std::format("[{}]", vec_to_str(arg, sep_inner)); });
 }
 
 inline volatile sig_atomic_t status_SIGINT = 0;

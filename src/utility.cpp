@@ -81,24 +81,22 @@ std::vector<float> operator*(float lhs, const std::vector<float>& rhs) {
     return rhs * lhs;
 }
 
-std::vector<float> lerp(const std::vector<float>& vec, const std::vector<float>& to, float by) {
-    std::vector<float> out_vec(vec);
+std::vector<float> lerp(std::vector<float> vec, const std::vector<float>& to, float by) {
     float self = 1.f - by;
     size_t dims = vec.size();
     for (size_t i = 0; i < dims; ++i) {
-        out_vec[i] *= self;
-        out_vec[i] += to[i] * by;
+        vec[i] *= self;
+        vec[i] += to[i] * by;
     }
-    return out_vec;
+    return vec;
 }
 
-std::vector<float> get_fractions(const std::vector<float>& ratios) {
-    std::vector<float> fractions(ratios.size());
-    float total = std::accumulate(ratios.begin(), ratios.end(), 0.f);
+std::vector<float> get_fractions(std::vector<float> ratios) {
+    float i_total = 1.f / std::accumulate(ratios.begin(), ratios.end(), 0.f);
     for (size_t i = 0; i < ratios.size(); ++i) {
-        fractions[i] = ratios[i] / total;
+        ratios[i] *= i_total;
     }
-    return fractions;
+    return ratios;
 }
 
 std::vector<float>& normalize(std::vector<float>& vec) {

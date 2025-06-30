@@ -255,7 +255,7 @@ struct optimiser {
                     is_scaled = true;
 
                     // attempt to randomly improve current movement vector
-                    std::vector<float> dir_improv_candidate = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds) * (base_step * adapt_noise);
+                    std::vector<float> dir_improv_candidate = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds) * (base_step * adapt_noise * frand());
                     dir_improv_candidate += best_dir;
                     dir_improv_candidate *= length(best_dir) / length(dir_improv_candidate);
 
@@ -277,15 +277,9 @@ struct optimiser {
                         best_dir = dir_improv_candidate;
                         ++adapt_counter;
                         if (adapt_counter > parent.orth_interval) {
-                            log([&]{ return std::format("{}Orthogonalising search vectors, current:", worker_prefix); }, log_level, LOG_DEBUG);
-                            if (log_level >= LOG_DEBUG) {
-                                for (const std::vector<float>& dir : search_directions) log([&]{ return std::format("[{}]", vec_to_str(dir)); }, log_level, LOG_DEBUG);
-                            }
+                            log([&]{ return std::format("{}Orthogonalising search vectors, current:\n{}", worker_prefix, vec_to_str(search_directions, ", ", "\n")); }, log_level, LOG_DEBUG);
                             space_vectors(search_directions, parent.orth_strength);
-                            log([&]{ return std::format("{}New:", worker_prefix); }, log_level, LOG_DEBUG);
-                            if (log_level >= LOG_DEBUG) {
-                                for (const std::vector<float>& dir : search_directions) log([&]{ return std::format("[{}]", vec_to_str(dir)); }, log_level, LOG_DEBUG);
-                            }
+                            log([&]{ return std::format("{}New:\n{}", worker_prefix, vec_to_str(search_directions, ", ", "\n")); }, log_level, LOG_DEBUG);
                             adapt_counter = 0;
                         }
                     } else {
@@ -411,6 +405,8 @@ struct optimiser {
                 if (!vec_in_bounds(fuzz_coord, cur_lower_bounds, cur_upper_bounds)) continue;
                 t_samp.sample(fuzz_coord);
             }
+            sample_count += t_samp.sample_count;
+            valid_sample_count += t_samp.valid_sample_count;
 
             if (samp_idx + 1 != sample_rounds) {
                 log([&]() { return std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating_str()); }, log_level, LOG_BASIC);
