@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/benchmark/catch_benchmark.hpp>
 #include <argparse/args.hpp>
 
 #include "constants.hpp"
@@ -103,6 +104,42 @@ TEST_CASE("Vector math operations") {
         std::vector<float> noise = orthogonal_noise(vec, 1.f);
         REQUIRE(length(noise) == Approx(1.f).epsilon(0.001f));
         REQUIRE(dot(vec, noise) == Approx(0.0f).margin(0.001f));
+    }
+}
+
+TEST_CASE("Gas system performance benchmarks") {
+    gas_mixture bench_mix(tank_volume);
+
+    SECTION("total_gas() calculation") {
+        bench_mix.canister_fill_to({ {oxygen, 0.2f}, {nitrogen, 0.5f}, {plasma, 0.3f} }, 500.f, 3000.f);
+
+        BENCHMARK("Mols calculation") {
+            return bench_mix.total_gas();
+        };
+    }
+
+    SECTION("pressure() calculation") {
+        bench_mix.canister_fill_to({ {oxygen, 0.2f}, {nitrogen, 0.5f}, {plasma, 0.3f} }, 500.f, 3000.f);
+
+        BENCHMARK("Pressure calculation") {
+            return bench_mix.pressure();
+        };
+    }
+
+    SECTION("heat_capacity() calculation") {
+        bench_mix.canister_fill_to({ {tritium, 0.4f}, {carbon_dioxide, 0.6f} }, 800.f, 1500.f);
+
+        BENCHMARK("Heat capacity calculation") {
+            return bench_mix.heat_capacity();
+        };
+    }
+
+    SECTION("reaction_tick processing") {
+        bench_mix.canister_fill_to({ {oxygen, 10.f}, {plasma, 5.f} }, 2000.f, 1.f);
+
+        BENCHMARK("Process reactions") {
+            return bench_mix.reaction_tick();
+        };
     }
 }
 

@@ -21,11 +21,9 @@ struct gas_type {
     gas_type(const gas_type& rhs) = delete;
 };
 
-extern inline const gas_type gases[];
-
 // all supported gases - if it's not here, it's not supported
 // UP TO DATE AS OF: 21.06.2025
-inline const gas_type gases[] {
+inline const gas_type gas_types[] {
     {20.f  * heat_scale, "oxygen"},
     {30.f  * heat_scale, "nitrogen"},
     {200.f * heat_scale, "plasma"},
@@ -37,18 +35,18 @@ inline const gas_type gases[] {
     {10.f  * heat_scale, "nitrium"}
 };
 
-inline const size_t gas_count = std::end(gases) - std::begin(gases);
+inline const size_t gas_count = std::end(gas_types) - std::begin(gas_types);
 
-// for when we need to serialize a reference to a gas type
+// convenience wrapper for gas type index
 struct gas_ref {
     size_t idx = -1;
 
     float specific_heat() const {
-        return gases[idx].specific_heat;
+        return gas_types[idx].specific_heat;
     }
 
     std::string_view name() const {
-        return gases[idx].name;
+        return gas_types[idx].name;
     }
 
     bool operator==(const gas_ref& rhs) const {
@@ -64,7 +62,7 @@ struct gas_ref {
 inline const std::map<std::string, gas_ref> string_gas_map = []() {
     std::map<std::string, gas_ref> map;
     for (size_t i = 0; i < gas_count; ++i) {
-        map[gases[i].name] = {i};
+        map[gas_types[i].name] = {i};
     }
     return map;
 }();

@@ -399,6 +399,7 @@ struct optimiser {
 
             // try enhancing our best result
             sampler t_samp(*this);
+            t_samp.reset(cur_lower_bounds, cur_upper_bounds);
             for (size_t f_i = 0; f_i < fuzzn; ++f_i) {
                 std::vector<float> rv = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds);
                 std::vector<float> fuzz_coord = best_arg + rv * (base_step * frand());

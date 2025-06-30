@@ -27,9 +27,9 @@ std::istream& operator>>(std::istream& stream, gas_ref& g) {
 }
 
 std::string list_gases(std::string_view sep) {
-    std::string out_str = gases[0].name;
+    std::string out_str = gas_types[0].name;
     for (size_t i = 1; i < gas_count; ++i) {
-        out_str += (std::string)sep + gases[i].name;
+        out_str += (std::string)sep + gas_types[i].name;
     }
     return out_str;
 }
@@ -49,7 +49,7 @@ float gas_mixture::total_gas() const {
 float gas_mixture::heat_capacity() const {
     float sum = 0.f;
     for (size_t i = 0; i < gas_count; ++i) {
-        gas_ref gas = {i};
+        gas_ref gas(i);
         sum += gas.specific_heat() * amount_of(gas);
     }
     return sum;
