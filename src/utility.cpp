@@ -221,4 +221,8 @@ duration_t as_seconds(float count) {
     return std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(count));
 }
 
+float to_seconds(duration_t duration) {
+    return std::chrono::duration_cast<std::chrono::duration<float>>(duration).count();
+}
+
 }

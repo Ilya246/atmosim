@@ -68,6 +68,7 @@ inline std::mutex log_mutex;
 void log(std::function<std::string()>&& str, size_t log_level, size_t level, bool endl = true, bool clear = true);
 
 duration_t as_seconds(float count);
+float to_seconds(duration_t duration);
 
 template<typename L, typename R>
 inline std::istream& operator>>(std::istream& lhs, std::pair<L, R>& rhs) {

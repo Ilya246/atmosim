@@ -36,8 +36,8 @@ struct optimiser {
     // each how many vector adjustments should we try to space them apart
     size_t orth_interval = 100;
     size_t fuzzn = 10000;
-    duration_t poll_spacing = std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(0.025f));
-    duration_t speed_log_spacing = std::chrono::duration_cast<duration_t>(std::chrono::duration<float>(0.5f));
+    duration_t poll_spacing = as_seconds(0.025f);
+    duration_t speed_log_spacing = as_seconds(0.5f);
 
     // state
     time_point_t last_poll_time;
@@ -374,7 +374,7 @@ struct optimiser {
                     auto now = main_clock.now();
                     duration_t speed_tdiff = now - last_speed_update_time;
                     if (speed_tdiff > speed_log_spacing) {
-                        float sec = std::chrono::duration_cast<std::chrono::duration<float>>(speed_tdiff).count();
+                        float sec = to_seconds(speed_tdiff);
                         speed_iters = (sample_count - last_sample_count) / sec;
                         speed_valid_iters = (valid_sample_count - last_valid_sample_count) / sec,
                         last_sample_count = sample_count;
