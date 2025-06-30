@@ -24,6 +24,7 @@ float frand(float from, float to) {
 }
 
 float round_to(float what, float to) {
+    if (to == 0.f) return what;
     return std::round(what / to) * to;
 }
 

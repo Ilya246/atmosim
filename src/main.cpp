@@ -89,6 +89,8 @@ int main(int argc, char* argv[]) {
     bool step_target_temp = false;
     size_t tick_cap = numeric_limits<size_t>::max(); // 10 minutes
     bool do_round = true;
+    // note: this is percentage
+    float round_ratio_to = 0.001f; // default is 0.001% to mitigate FP inaccuracy
 
     tuple<field_ref<bomb_data>, bool, bool> opt_params{bomb_data::radius_field, true, false};
 
@@ -113,6 +115,7 @@ int main(int argc, char* argv[]) {
         argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
         argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
         argp::make_argument("round", "r", "whether to round pressures and temperatures to settable values", do_round),
+        argp::make_argument("roundratio", "", "also round ratio to this much", round_ratio_to),
         argp::make_argument("lowerp", "p1", "lower mix-to pressure to check, kPa, default is pressure cap", lower_pressure),
         argp::make_argument("upperp", "p2", "upper mix-to pressure to check, kPa, default is pressure cap", upper_pressure),
         argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
@@ -296,7 +299,7 @@ int main(int argc, char* argv[]) {
           lower_bounds,
           upper_bounds,
           optimise_maximise,
-          {mix_gases, primer_gases, optimise_measure_before, do_round, tick_cap, opt_param, pre_restrictions, post_restrictions},
+          {mix_gases, primer_gases, optimise_measure_before, do_round, round_ratio_to, tick_cap, opt_param, pre_restrictions, post_restrictions},
           as_seconds(max_runtime),
           sample_rounds,
           bounds_scale,

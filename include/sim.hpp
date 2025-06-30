@@ -160,6 +160,7 @@ struct bomb_args {
     const std::vector<gas_ref>& primer_gases;
     bool measure_before;
     bool do_rounding;
+    float round_ratio_to;
     size_t tick_cap;
     field_ref<bomb_data> opt_param;
     const std::vector<field_restriction<bomb_data>>& pre_restrictions;
