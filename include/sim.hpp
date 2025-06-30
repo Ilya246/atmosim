@@ -88,21 +88,20 @@ struct bomb_data {
     float fin_pressure = 0.f, fin_radius = 0.f;
     int ticks;
     bool do_rounding;
+    float round_ratio_to; // percentage to round ratio to
 
     // TODO: make this more sane somehow?
     bomb_data(std::vector<float> mix_ratios, std::vector<float> primer_ratios, float to_pressure,
               float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_temp,
               const std::vector<gas_ref>& mix_gases, const std::vector<gas_ref>& primer_gases,
-              gas_tank tank, float optstat = -1.f,
-              int ticks = 0,
-              bool do_rounding = false)
+              gas_tank tank,
+              bool do_rounding = false, float round_ratio_to = 0.001f)
     :
         mix_ratios(mix_ratios), primer_ratios(primer_ratios), to_pressure(to_pressure),
         fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_temp(mix_to_temp),
         mix_gases(mix_gases), primer_gases(primer_gases),
-        tank(tank), optstat(optstat),
-        ticks(ticks),
-        do_rounding(do_rounding) {};
+        tank(tank),
+        do_rounding(do_rounding), round_ratio_to(round_ratio_to) {};
 
     void sim_ticks(size_t up_to, field_ref<bomb_data> optstat_ref, bool measure_pre);
 

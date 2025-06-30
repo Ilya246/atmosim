@@ -26,6 +26,7 @@ float frand(float to);
 float frand(float from, float to);
 
 float round_to(float what, float to);
+std::string str_round_to(float what, float to);
 
 // vec-vec operators
 std::vector<float>& operator+=(std::vector<float>& lhs, const std::vector<float>& rhs);

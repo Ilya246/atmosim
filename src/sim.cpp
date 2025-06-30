@@ -28,7 +28,7 @@ void bomb_data::sim_ticks(size_t up_to, field_ref<bomb_data> optstat_ref, bool m
 std::string bomb_data::mix_string(const std::vector<gas_ref>& gases, const std::vector<float>& fractions) const {
     std::string out;
     for (size_t i = 0; i < gases.size(); ++i) {
-        out += std::format("{}% {}", fractions[i] * 100.f, gases[i].name());
+        out += std::format("{}% {}", str_round_to(fractions[i] * 100.f, round_ratio_to * 100.f), gases[i].name());
         if (i != gases.size() - 1) out += " | ";
     }
     return out;
@@ -38,7 +38,7 @@ std::string bomb_data::mix_string(const std::vector<gas_ref>& gases, const std::
 std::string bomb_data::mix_string_simple(const std::vector<gas_ref>& gases, const std::vector<float>& fractions) const {
     std::string out = "[";
     for (size_t i = 0; i < gases.size(); ++i) {
-        out += std::format("[{},{}]", gases[i].name(), fractions[i]);
+        out += std::format("[{},{}]", gases[i].name(), str_round_to(fractions[i], round_ratio_to));
         if (i != gases.size() - 1) out += ",";
     }
     return out + "]";
@@ -72,12 +72,11 @@ bomb_data bomb_data::deserialize(std::string_view str) {
         start = space_pos + 1;
     }
 
-    float optstat = std::stof(kv_pairs["os"]);
-    int ticks = std::stoi(kv_pairs["ti"]);
+    float optstat = kv_pairs.contains("os") ? std::stof(kv_pairs["os"]) : 0.f;
+    int ticks = kv_pairs.contains("ti") ? std::stoi(kv_pairs["ti"]) : 0;
     float fuel_temp = std::stof(kv_pairs["ft"]);
     float fuel_pressure = std::stof(kv_pairs["fp"]);
     float to_pressure = std::stof(kv_pairs["tp"]);
-    float mix_to_temp = std::stof(kv_pairs["mt"]);
     float thir_temp = std::stof(kv_pairs["tt"]);
     auto mix_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["mi"]);
     auto primer_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["pm"]);
@@ -105,14 +104,14 @@ bomb_data bomb_data::deserialize(std::string_view str) {
         fuel_temp,
         fuel_pressure,
         thir_temp,
-        mix_to_temp,
+        tank.mix.temperature,
         mix_refs,
         primer_refs,
         std::move(tank),
-        optstat,
-        ticks,
         false
     );
+    data.optstat = optstat;
+    data.ticks = ticks;
     data.fin_pressure = data.tank.mix.pressure();
     data.fin_radius = data.tank.calc_radius();
     return data;
@@ -159,7 +158,7 @@ std::string bomb_data::print_full() const {
     }
     std::string req_str;
     for (size_t i = 0; i < total_c; ++i) {
-        req_str += std::format("{:.2f}mol {}", min_amounts[i].first, min_amounts[i].second);
+        req_str += std::format("{:.0f}mol {}", min_amounts[i].first, min_amounts[i].second);
         if (i + 1 != total_c) req_str += " | ";
     }
 
@@ -211,7 +210,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
         target_temp = round_to(target_temp, round_temp_to);
         fuel_temp = round_to(fuel_temp, round_temp_to);
         thir_temp = round_to(thir_temp, round_temp_to);
-        fill_pressure = round_to(fill_pressure, round_pressure_to);
+        fill_pressure = std::min(pressure_cap, round_to(fill_pressure, round_pressure_to));
     }
     // invalid mix, abort early
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
@@ -268,8 +267,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_fractions, primer_fractions, fill_pressure,
                    fuel_temp, fuel_pressure, thir_temp, target_temp,
                    mix_gases, primer_gases,
-                   std::move(mix_tank));
-    bomb->do_rounding = do_rounding;
+                   std::move(mix_tank), do_rounding, round_ratio_to);
 
     bool pre_met = std::none_of(pre_restrictions.begin(), pre_restrictions.end(), [&bomb](const auto& r){ return !r.OK(*bomb); });
 

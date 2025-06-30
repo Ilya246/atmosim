@@ -28,6 +28,13 @@ float round_to(float what, float to) {
     return std::round(what / to) * to;
 }
 
+std::string str_round_to(float what, float to) {
+    float rounded = round_to(what, to);
+    const long float_digits = std::numeric_limits<float>::digits10;
+    long digits = to < std::pow(0.1f, float_digits) ? float_digits : std::max(0l, std::lround(-std::log10(to)));
+    return std::format("{:.{}f}", rounded, digits);
+}
+
 std::vector<float>& operator+=(std::vector<float>& lhs, const std::vector<float>& rhs) {
     size_t dims = lhs.size();
     for (size_t i = 0; i < dims; ++i) {
