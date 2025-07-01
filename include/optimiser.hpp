@@ -38,6 +38,9 @@ struct optimiser {
     size_t fuzzn = 10000;
     duration_t poll_spacing = as_seconds(0.025f);
     duration_t speed_log_spacing = as_seconds(0.5f);
+    // when checking tolerances, consider results with this much of the best's rating acceptable
+    float tolerance_ratio = 0.95f;
+    size_t tolerance_iters = 1000;
 
     // state
     time_point_t last_poll_time;
@@ -432,6 +435,47 @@ struct optimiser {
         }
 
         log([&]() { return std::format("Finished with {} ({}) samples", sample_count, valid_sample_count); }, log_level, LOG_BASIC);
+
+        // calculate tolerance intervals
+        if (best_result.valid()) {
+            log([&]() {
+                size_t dims = lower_bounds.size();
+
+                const float target_rating = best_result.rating() * tolerance_ratio;
+                std::vector<std::vector<float>> tolerance_intervals(dims);
+
+                auto find_tolerance = [&](size_t dim, float dir) -> float {
+                    std::vector<float> test_point = best_arg;
+                    float low = best_arg[dim];
+                    float last_valid = best_arg[dim];
+
+                    float base = 0.f, adj = 1.f;
+                    for (size_t i = 0; i < tolerance_iters; ++i) {
+                        test_point[dim] = low + (base + adj) * dir;
+
+                        R res = apply(funct, std::tie(test_point, args));
+                        if (res.valid() && res.rating() >= target_rating) {
+                            last_valid = test_point[dim];
+                            base = base + adj;
+                            adj *= 2.f;
+                        } else {
+                            adj *= 0.5f;
+                        }
+                    }
+                    return last_valid;
+                };
+
+                for (size_t dim = 0; dim < dims; ++dim) {
+                    float lower_tol = find_tolerance(dim, -1.f);
+                    float upper_tol = find_tolerance(dim, 1.f);
+                    tolerance_intervals[dim] = {lower_tol, best_arg[dim], upper_tol};
+                }
+
+                return std::format("{}x tolerance intervals: {}", tolerance_ratio, vec_to_str<std::vector<float>>(tolerance_intervals, ", ", [&](const std::vector<float>& p) {
+                    return std::format("[l {} m {} h {}]", p[0], p[1], p[2]);
+                }));
+            }, log_level, LOG_BASIC);
+        }
     }
 
     static bool better_than(const R& what, const R& than, bool maximise) {
