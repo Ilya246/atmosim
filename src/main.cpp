@@ -329,7 +329,7 @@ int main(int argc, char* argv[]) {
     if (!simple_output) {
         cout << "\nSerialized string: " << best_res.data->serialize() << endl;
     }
-    cout << "Tolerances:\n" << best_res.data->measure_tolerances() << endl;
+    cout << default_tol << "x tolerances:\n" << best_res.data->measure_tolerances() << endl;
     if (silent) {
         cout.setstate(ios::failbit);
     }

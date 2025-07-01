@@ -115,7 +115,7 @@ struct bomb_data {
     // deserialises us from an input string - note that this gives an unsimulated tank
     static bomb_data deserialize(std::string_view str);
 
-    std::string measure_tolerances(float tol = 0.95f) const;
+    std::string measure_tolerances(float tol = default_tol) const;
 
     static const field_ref<bomb_data> radius_field;
     static const field_ref<bomb_data> ticks_field;

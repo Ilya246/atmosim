@@ -165,24 +165,28 @@ std::string bomb_data::measure_tolerances(float min_ratio) const {
     auto [tt_min, tt_max] = find_tolerances([](auto& c, float v){ c.thir_temp = v; }, thir_temp);
     msg += std::format("  Primer temp: {}K - {}K\n", tt_min, tt_max);
 
-    float mix_sum = std::accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
-    for (size_t i = 0; i < mix_ratios.size(); ++i) {
-        float orig_ratio = mix_ratios[i];
-        auto [min_ratio, max_ratio] = find_tolerances([i](auto& c, float v){ c.mix_ratios[i] = v; }, orig_ratio);
-        min_ratio /= mix_sum + min_ratio - orig_ratio;
-        max_ratio /= mix_sum + max_ratio - orig_ratio;
+    if (mix_ratios.size() > 1) {
+        float mix_sum = std::accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
+        for (size_t i = 0; i < mix_ratios.size(); ++i) {
+            float orig_ratio = mix_ratios[i];
+            auto [min_ratio, max_ratio] = find_tolerances([i](auto& c, float v){ c.mix_ratios[i] = v; }, orig_ratio);
+            min_ratio /= mix_sum + min_ratio - orig_ratio;
+            max_ratio /= mix_sum + max_ratio - orig_ratio;
 
-        msg += std::format("  Mix {}: {}% - {}%\n", mix_gases[i].name(), min_ratio * 100.f, max_ratio * 100.f);
+            msg += std::format("  Mix {}: {}% - {}%\n", mix_gases[i].name(), min_ratio * 100.f, max_ratio * 100.f);
+        }
     }
 
-    float primer_sum = std::accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
-    for (size_t i = 0; i < primer_ratios.size(); ++i) {
-        float orig_ratio = primer_ratios[i];
-        auto [min_ratio, max_ratio] = find_tolerances([i](auto& c, float v){ c.primer_ratios[i] = v; }, orig_ratio);
-        min_ratio /= primer_sum + min_ratio - orig_ratio;
-        max_ratio /= primer_sum + max_ratio - orig_ratio;
+    if (primer_ratios.size() > 1) {
+        float primer_sum = std::accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
+        for (size_t i = 0; i < primer_ratios.size(); ++i) {
+            float orig_ratio = primer_ratios[i];
+            auto [min_ratio, max_ratio] = find_tolerances([i](auto& c, float v){ c.primer_ratios[i] = v; }, orig_ratio);
+            min_ratio /= primer_sum + min_ratio - orig_ratio;
+            max_ratio /= primer_sum + max_ratio - orig_ratio;
 
-        msg += std::format("  Primer {}: {}% - {}%\n", primer_gases[i].name(), min_ratio * 100.f, max_ratio * 100.f);
+            msg += std::format("  Primer {}: {}% - {}%\n", primer_gases[i].name(), min_ratio * 100.f, max_ratio * 100.f);
+        }
     }
 
     return msg;

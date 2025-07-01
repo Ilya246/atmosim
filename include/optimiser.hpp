@@ -39,7 +39,7 @@ struct optimiser {
     duration_t poll_spacing = as_seconds(0.025f);
     duration_t speed_log_spacing = as_seconds(0.5f);
     // when checking tolerances, consider results with this much of the best's rating acceptable
-    float tolerance_ratio = 0.95f;
+    float tolerance_ratio = default_tol;
     size_t tolerance_iters = 1000;
 
     // state
