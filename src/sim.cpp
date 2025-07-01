@@ -54,7 +54,11 @@ std::string bomb_data::print_very_simple() const {
 }
 
 std::string bomb_data::serialize() const {
-    return print_very_simple();
+    std::string out_str;
+    std::vector<float> mix_fractions = get_fractions(mix_ratios);
+    std::vector<float> primer_fractions = get_fractions(primer_ratios);
+    out_str += std::format("ft={} fp={} tp={} tt={} mi={} pm={}", fuel_temp, fuel_pressure, to_pressure, thir_temp, mix_string_simple(mix_gases, mix_fractions), mix_string_simple(primer_gases, primer_fractions));
+    return out_str;
 }
 
 bomb_data bomb_data::deserialize(std::string_view str) {
@@ -72,8 +76,6 @@ bomb_data bomb_data::deserialize(std::string_view str) {
         start = space_pos + 1;
     }
 
-    float optstat = kv_pairs.contains("os") ? std::stof(kv_pairs["os"]) : 0.f;
-    int ticks = kv_pairs.contains("ti") ? std::stoi(kv_pairs["ti"]) : 0;
     float fuel_temp = std::stof(kv_pairs["ft"]);
     float fuel_pressure = std::stof(kv_pairs["fp"]);
     float to_pressure = std::stof(kv_pairs["tp"]);
@@ -110,10 +112,6 @@ bomb_data bomb_data::deserialize(std::string_view str) {
         std::move(tank),
         false
     );
-    data.optstat = optstat;
-    data.ticks = ticks;
-    data.fin_pressure = data.tank.mix.pressure();
-    data.fin_radius = data.tank.calc_radius();
     return data;
 }
 

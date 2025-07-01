@@ -449,7 +449,7 @@ struct optimiser {
                     float low = best_arg[dim];
                     float last_valid = best_arg[dim];
 
-                    float base = 0.f, adj = 1.f;
+                    float base = 0.f, adj = std::abs(best_arg[dim]);
                     for (size_t i = 0; i < tolerance_iters; ++i) {
                         test_point[dim] = low + (base + adj) * dir;
 
