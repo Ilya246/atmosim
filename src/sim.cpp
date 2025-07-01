@@ -165,6 +165,9 @@ std::string bomb_data::measure_tolerances(float min_ratio) const {
     auto [tt_min, tt_max] = find_tolerances([](auto& c, float v){ c.thir_temp = v; }, thir_temp);
     msg += std::format("  Primer temp: {}K - {}K\n", tt_min, tt_max);
 
+    auto [tp_min, tp_max] = find_tolerances([](auto& c, float v){ c.to_pressure = v; }, to_pressure);
+    msg += std::format("  Release pressure: {}kPa - {}kPa\n", tp_min, tp_max);
+
     if (mix_ratios.size() > 1) {
         float mix_sum = std::accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
         for (size_t i = 0; i < mix_ratios.size(); ++i) {
