@@ -115,6 +115,79 @@ bomb_data bomb_data::deserialize(std::string_view str) {
     return data;
 }
 
+// this is kinda cursed but if it works it works
+std::string bomb_data::measure_tolerances(float min_ratio) const {
+    const size_t measure_iters = 1000;
+    const float target_radius = fin_radius * min_ratio;
+    const float target_ticks = ticks * min_ratio;
+    std::string msg;
+
+    auto test_variation = [&](auto&& adjust_fn) -> bool {
+        bomb_data d_copy(*this);
+        adjust_fn(d_copy);
+        if (*std::min_element(d_copy.mix_ratios.begin(), d_copy.mix_ratios.end()) < 0.f) return false;
+        if (*std::min_element(d_copy.primer_ratios.begin(), d_copy.primer_ratios.end()) < 0.f) return false;
+        if (d_copy.fuel_temp < 0.f || d_copy.fuel_pressure < 0.f || d_copy.thir_temp < 0.f || d_copy.to_pressure < 0.f) return false;
+        gas_tank tank;
+        tank.mix.canister_fill_to(d_copy.mix_gases, get_fractions(d_copy.mix_ratios), d_copy.fuel_temp, d_copy.fuel_pressure);
+        tank.mix.canister_fill_to(d_copy.primer_gases, get_fractions(d_copy.primer_ratios), d_copy.thir_temp, d_copy.to_pressure);
+        size_t c_ticks = tank.tick_n(ticks / min_ratio);
+        return tank.calc_radius() >= target_radius && c_ticks >= target_ticks;
+    };
+
+    auto find_tolerance = [&](auto&& adjust_fn, float start, float dir) -> float {
+        float base = 0.f, adj = std::abs(start) / 1024.f;
+        float farthest = start;
+        for (size_t i = 0; i < measure_iters; ++i) {
+            float test_val = start + (base + adj) * dir;
+            bool valid = test_variation([&](bomb_data& c){ adjust_fn(c, test_val); });
+            if (valid) {
+                farthest = test_val;
+                base = base + adj;
+                adj *= 2.f;
+            } else {
+                adj *= 0.5f;
+            }
+        }
+        return farthest;
+    };
+
+    auto find_tolerances = [&](auto&& adjust_fn, float start) -> std::pair<float, float> {
+        return {find_tolerance(adjust_fn, start, -1.f), find_tolerance(adjust_fn, start, 1.f)};
+    };
+
+    auto [ft_min, ft_max] = find_tolerances([](auto& c, float v){ c.fuel_temp = v; }, fuel_temp);
+    msg += std::format("  Fuel temp: {}K - {}K\n", ft_min, ft_max);
+
+    auto [fp_min, fp_max] = find_tolerances([](auto& c, float v){ c.fuel_pressure = v; }, fuel_pressure);
+    msg += std::format("  Fuel pressure: {}kPa - {}kPa\n", fp_min, fp_max);
+
+    auto [tt_min, tt_max] = find_tolerances([](auto& c, float v){ c.thir_temp = v; }, thir_temp);
+    msg += std::format("  Primer temp: {}K - {}K\n", tt_min, tt_max);
+
+    float mix_sum = std::accumulate(mix_ratios.begin(), mix_ratios.end(), 0.f);
+    for (size_t i = 0; i < mix_ratios.size(); ++i) {
+        float orig_ratio = mix_ratios[i];
+        auto [min_ratio, max_ratio] = find_tolerances([i](auto& c, float v){ c.mix_ratios[i] = v; }, orig_ratio);
+        min_ratio /= mix_sum + min_ratio - orig_ratio;
+        max_ratio /= mix_sum + max_ratio - orig_ratio;
+
+        msg += std::format("  Mix {}: {}% - {}%\n", mix_gases[i].name(), min_ratio * 100.f, max_ratio * 100.f);
+    }
+
+    float primer_sum = std::accumulate(primer_ratios.begin(), primer_ratios.end(), 0.f);
+    for (size_t i = 0; i < primer_ratios.size(); ++i) {
+        float orig_ratio = primer_ratios[i];
+        auto [min_ratio, max_ratio] = find_tolerances([i](auto& c, float v){ c.primer_ratios[i] = v; }, orig_ratio);
+        min_ratio /= primer_sum + min_ratio - orig_ratio;
+        max_ratio /= primer_sum + max_ratio - orig_ratio;
+
+        msg += std::format("  Primer {}: {}% - {}%\n", primer_gases[i].name(), min_ratio * 100.f, max_ratio * 100.f);
+    }
+
+    return msg;
+}
+
 std::string bomb_data::print_inline() const {
     size_t pressure_round_digs = do_rounding ? round_pressure_dig : 6;
     size_t temp_round_digs = do_rounding ? round_temp_dig : 6;

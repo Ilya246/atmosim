@@ -73,10 +73,10 @@ int main(int argc, char* argv[]) {
 
     size_t log_level = 2;
 
-    enum _mode {normal, mixing, full_input};
-    _mode mode = normal;
+    enum struct work_mode {normal, mixing, full_input, tolerances};
+    work_mode mode = work_mode::normal;
 
-    bool mixing_mode = false, full_input_mode = false;
+    bool mixing_mode = false, full_input_mode = false, tolerances_mode = false;
     bool simple_output = false, silent = false;
 
     vector<gas_ref> mix_gases;
@@ -108,6 +108,7 @@ int main(int argc, char* argv[]) {
         argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
         argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
         argp::make_argument("fullinput", "f", "UTILITY TOOL: simulate and print every tick of a bomb with chosen gases", full_input_mode),
+        argp::make_argument("tolerance", "", "UTILITY TOOL: measure tolerances for a bomb serialised string", tolerances_mode),
         argp::make_argument("mixg", "mg", "list of fuel gases (usually, in tank)", mix_gases),
         argp::make_argument("primerg", "pg", "list of primer gases (usually, in canister)", primer_gases),
         argp::make_argument("mixt1", "m1", "minimum fuel mix temperature to check, Kelvin", mixt1),
@@ -165,11 +166,12 @@ int main(int argc, char* argv[]) {
     );
 
     // check if we chose an alternate mode
-    if (mixing_mode) mode = mixing;
-    if (full_input_mode) mode = full_input;
+    if (mixing_mode) mode = work_mode::mixing;
+    if (full_input_mode) mode = work_mode::full_input;
+    if (tolerances_mode) mode = work_mode::tolerances;
 
     switch (mode) {
-        case (mixing): {
+        case (work_mode::mixing): {
             cout << "Input desired % of first gas: ";
             float perc = get_input<float>();
             cout << "Input temperature of first gas: ";
@@ -182,7 +184,7 @@ int main(int argc, char* argv[]) {
             cout << format("Desired percentage: {}% first {}% second", n_perc, 100.f - n_perc) << endl;
             break;
         }
-        case (full_input): {
+        case (work_mode::full_input): {
             gas_tank tank;
 
             cout << "Normal (y) or serialized (n) input [Y/n]: ";
@@ -243,12 +245,25 @@ int main(int argc, char* argv[]) {
                             tank.get_status(), state_name, tank.calc_radius()) << endl;
             break;
         }
+        case (work_mode::tolerances): {
+            cout << "Input serialised string: ";
+            std::string str;
+            getline(cin, str);
+            bomb_data data = bomb_data::deserialize(str);
+            data.ticks = data.tank.tick_n(tick_cap);
+            data.fin_radius = data.tank.calc_radius();
+            data.fin_pressure = data.tank.mix.pressure();
+            cout << "Input desired tolerance (omit for 0.95): ";
+            float tol = input_or_default<float>(0.95f);
+            cout << "Tolerances:\n" << data.measure_tolerances(tol) << endl;
+            break;
+        }
         default: {
             break;
         }
     }
 
-    if (mode != normal) return 0;
+    if (mode != work_mode::normal) return 0;
 
     field_ref<bomb_data> opt_param = get<0>(opt_params);
     bool optimise_maximise = get<1>(opt_params);
@@ -314,6 +329,7 @@ int main(int argc, char* argv[]) {
     if (!simple_output) {
         cout << "\nSerialized string: " << best_res.data->serialize() << endl;
     }
+    cout << "Tolerances:\n" << best_res.data->measure_tolerances() << endl;
     if (silent) {
         cout.setstate(ios::failbit);
     }
