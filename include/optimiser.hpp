@@ -122,7 +122,7 @@ struct optimiser {
 
         std::atomic<bool> should_terminate{false};
         std::atomic<bool> running{false};
-        std::thread worker;
+        std::unique_ptr<std::thread> worker = nullptr;
         std::mutex ready_mutex;
         std::condition_variable cv;
 
@@ -139,37 +139,41 @@ struct optimiser {
         std::atomic<size_t> sample_count{0};
         std::atomic<size_t> valid_sample_count{0};
 
-        sampler(const optimiser<T, R>& parent, int index = -1): parent(parent) {
+        sampler(const optimiser<T, R>& parent, int index = -1, bool do_threading = true): parent(parent){
             search_directions = parent.base_search_directions();
 
             if (index >= 0) {
                 worker_prefix = std::format("[{}]: ", index);
             }
 
-            worker = std::thread([this] {
-                std::mutex mutex;
-                std::unique_lock lock(mutex);
-                while (true) {
-                    cv.wait(lock, [this]{ return running.load() || should_terminate.load() || status_SIGINT; });
-                    if (should_terminate.load() || status_SIGINT) break;
+            if (do_threading) {
+                worker = std::make_unique<std::thread>([this] {
+                    std::mutex mutex;
+                    std::unique_lock lock(mutex);
+                    while (true) {
+                        cv.wait(lock, [this]{ return running.load() || should_terminate.load() || status_SIGINT; });
+                        if (should_terminate.load() || status_SIGINT) break;
 
-                    ready_mutex.lock();
-                    while (main_clock.now() < until) {
-                        if(status_SIGINT) break;
-                        do_sampling();
+                        ready_mutex.lock();
+                        while (main_clock.now() < until) {
+                            if(status_SIGINT) break;
+                            do_sampling();
+                        }
+                        ready_mutex.unlock();
+
+                        running = false;
                     }
-                    ready_mutex.unlock();
-
-                    running = false;
-                }
-            });
+                });
+            }
         }
 
         ~sampler() {
-            running = false;
-            should_terminate = true;
-            cv.notify_all();
-            worker.join();
+            if (worker) {
+                running = false;
+                should_terminate = true;
+                cv.notify_all();
+                worker->join();
+            }
         }
 
         void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds) {
@@ -188,7 +192,15 @@ struct optimiser {
         void start_sampling(time_point_t until) {
             this->until = until;
             running = true;
-            cv.notify_one();
+            if (worker) {
+                cv.notify_one();
+            } else {
+                while (main_clock.now() < until) {
+                    if(status_SIGINT) break;
+                    do_sampling();
+                }
+                running = false;
+            }
         }
 
         void wait_ready() {
@@ -331,7 +343,7 @@ struct optimiser {
     void find_best() {
         std::vector<std::unique_ptr<sampler>> samplers;
         for (size_t i = 0; i < n_threads; ++i) {
-            samplers.emplace_back(std::make_unique<sampler>(*this, i));
+            samplers.emplace_back(std::make_unique<sampler>(*this, i, n_threads != 1));
         }
 
         bool any_valid = false;
@@ -349,15 +361,15 @@ struct optimiser {
             while (main_clock.now() - s_time < max_duration) {
                 if (status_SIGINT) break;
 
-                // Start all samplers
-                auto from = main_clock.now();
+                time_point_t from = main_clock.now();
+                time_point_t time_to = from + poll_spacing;
                 for (std::unique_ptr<sampler>& samp : samplers) {
                     samp->reset(cur_lower_bounds, cur_upper_bounds);
-                    samp->start_sampling(from + poll_spacing);
+                    samp->start_sampling(time_to);
                 }
 
-                // Wait for sampling period
-                std::this_thread::sleep_until(from + poll_spacing);
+                // just sleep until the samplers are done
+                std::this_thread::sleep_until(time_to);
 
                 // aggregate sampler data
                 for (const std::unique_ptr<sampler>& samp : samplers) {
@@ -401,7 +413,7 @@ struct optimiser {
             }
 
             // try enhancing our best result
-            sampler t_samp(*this);
+            sampler t_samp(*this, -1, false);
             t_samp.reset(cur_lower_bounds, cur_upper_bounds);
             for (size_t f_i = 0; f_i < fuzzn; ++f_i) {
                 std::vector<float> rv = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds);
@@ -449,7 +461,7 @@ struct optimiser {
                     float low = best_arg[dim];
                     float last_valid = best_arg[dim];
 
-                    float base = 0.f, adj = std::abs(best_arg[dim]);
+                    float base = 0.f, adj = std::abs(best_arg[dim]) / 1024.f;
                     for (size_t i = 0; i < tolerance_iters; ++i) {
                         test_point[dim] = low + (base + adj) * dir;
 
