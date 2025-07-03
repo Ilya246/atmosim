@@ -257,13 +257,13 @@ TEST_CASE("Gas reactions") {
 TEST_CASE("Tank simulation validation") {
     gas_tank tank;
 
-    // UP TO DATE AS OF: 21.06.2025
-    SECTION("ticks-13r-22.5s-PT+O") {
+    // UP TO DATE AS OF: 03.07.2025
+    SECTION("ticks-12.3r-22.5s-PT+O") {
         float mix_pressure = 684.853f;
         float mix_temp = 382.42734f;
         float plasma_frac = 0.52208485f;
         float tritium_frac = 1.f - plasma_frac;
-        float radius_expected = 13.02f;
+        float radius_expected = 12.275f;
         size_t ticks_expected = 45;
 
         std::vector<std::pair<gas_ref, float>> mix = {{plasma, plasma_frac}, {tritium, tritium_frac}};
@@ -277,15 +277,15 @@ TEST_CASE("Tank simulation validation") {
         REQUIRE(ticks == ticks_expected);
     }
 
-    // UP TO DATE AS OF: 21.06.2025
-    SECTION("ticks-26r-8.5s-O/T/N2+F") {
+    // UP TO DATE AS OF: 03.07.2025
+    SECTION("ticks-24.6r-8.5s-O/T/N2+F") {
         float mix_pressure = 726.60645f;
         float mix_temp = 112.840805f;
         float thir_temp = 542.761f;
         float oxygen_frac = 0.14539835f;
         float tritium_frac = 0.16864481f;
         float oxide_frac = 0.6859568f;
-        float radius_expected = 26.13f;
+        float radius_expected = 24.635f;
         size_t ticks_expected = 17;
 
         std::vector<std::pair<gas_ref, float>> mix = {{oxygen, oxygen_frac}, {tritium, tritium_frac}, {nitrous_oxide, oxide_frac}};
@@ -299,8 +299,8 @@ TEST_CASE("Tank simulation validation") {
         REQUIRE(ticks == ticks_expected);
     }
 
-    // UP TO DATE AS OF: 28.06.2025
-    SECTION("ticks-17r-1921s-N2/T+O/F") {
+    // UP TO DATE AS OF: 03.07.2025
+    SECTION("ticks-16r-1921s-N2/T+O/F") {
         float mix_pressure = 476.4f;
         float mix_temp = 159.82f;
         float thir_temp = 528.35f;
@@ -309,7 +309,7 @@ TEST_CASE("Tank simulation validation") {
         float tritium_frac = 0.50688046f;
         float oxygen_frac = 0.028119187f;
         float frezon_frac = 0.9718808f;
-        float radius_expected = 17.01f;
+        float radius_expected = 16.037f;
         size_t ticks_expected = 3843;
 
         std::vector<std::pair<gas_ref, float>> mix = {{nitrous_oxide, oxide_frac}, {tritium, tritium_frac}};
