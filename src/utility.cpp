@@ -28,10 +28,15 @@ float round_to(float what, float to) {
     return std::round(what / to) * to;
 }
 
+long get_float_digits(float num) {
+    const long float_digits = std::numeric_limits<float>::digits10;
+    long digits = num < std::pow(0.1f, float_digits) ? float_digits : std::max(0l, std::lround(-std::log10(num)));
+    return digits;
+}
+
 std::string str_round_to(float what, float to) {
     float rounded = round_to(what, to);
-    const long float_digits = std::numeric_limits<float>::digits10;
-    long digits = to < std::pow(0.1f, float_digits) ? float_digits : std::max(0l, std::lround(-std::log10(to)));
+    long digits = get_float_digits(to);
     return std::format("{:.{}f}", rounded, digits);
 }
 

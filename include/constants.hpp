@@ -65,8 +65,6 @@ nitrium_decomposition_energy = 30000.f,
 
 tickrate = 0.5f,
 
-round_temp_to = 0.01f, round_pressure_to = 0.1f,
-
 default_tol = 0.95f;
 
 inline const size_t round_temp_dig = 2, round_pressure_dig = 1;

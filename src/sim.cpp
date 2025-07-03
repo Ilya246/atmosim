@@ -196,8 +196,8 @@ std::string bomb_data::measure_tolerances(float min_ratio) const {
 }
 
 std::string bomb_data::print_inline() const {
-    size_t pressure_round_digs = do_rounding ? round_pressure_dig : 6;
-    size_t temp_round_digs = do_rounding ? round_temp_dig : 6;
+    size_t pressure_round_digs = round_pressure_to < 1e-6f ? 6 : get_float_digits(round_pressure_to);
+    size_t temp_round_digs = round_temp_to < 1e-6f ? 6 :get_float_digits(round_temp_to);
     std::string out_str;
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
@@ -217,8 +217,8 @@ std::string bomb_data::print_inline() const {
 
 std::string bomb_data::print_full() const {
     std::string out_str;
-    size_t pressure_round_digs = do_rounding ? round_pressure_dig : 6;
-    size_t temp_round_digs = do_rounding ? round_temp_dig : 6;
+    size_t pressure_round_digs = round_pressure_to < 1e-6f ? 6 : get_float_digits(round_pressure_to);
+    size_t temp_round_digs = round_temp_to < 1e-6f ? 6 :get_float_digits(round_temp_to);
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
     std::vector<float> primer_fractions = get_fractions(primer_ratios);
@@ -283,12 +283,12 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     float fuel_temp = in_args[1];
     float thir_temp = in_args[2];
     float fill_pressure = in_args[3];
-    bool do_rounding = args.do_rounding;
-    if (do_rounding) {
-        target_temp = round_to(target_temp, round_temp_to);
-        fuel_temp = round_to(fuel_temp, round_temp_to);
-        thir_temp = round_to(thir_temp, round_temp_to);
-        fill_pressure = std::min(pressure_cap, round_to(fill_pressure, round_pressure_to));
+    target_temp = round_to(target_temp, args.round_temp_to);
+    fuel_temp = round_to(fuel_temp, args.round_temp_to);
+    thir_temp = round_to(thir_temp, args.round_temp_to);
+    // only round fill pressure if it's not too close to pressure cap
+    if (std::abs(fill_pressure - pressure_cap) > args.round_pressure_to * 2.f) {
+        fill_pressure = std::min(pressure_cap, round_to(fill_pressure, args.round_pressure_to));
     }
     // invalid mix, abort early
     if ((target_temp > fuel_temp) == (target_temp > thir_temp)) {
@@ -331,9 +331,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     float primer_specheat = get_mix_heat_capacity(primer_gases, primer_fractions);
     // to how much we want to fill the tank
     float fuel_pressure = (target_temp / thir_temp - 1.f) * fill_pressure / (fuel_specheat / primer_specheat - 1.f + target_temp * (1.f / thir_temp - fuel_specheat / primer_specheat / fuel_temp));
-    if (do_rounding) {
-        fuel_pressure = round_to(fuel_pressure, round_pressure_to);
-    }
+    fuel_pressure = round_to(fuel_pressure, args.round_pressure_to);
     mix_tank.mix.canister_fill_to(mix_gases, mix_fractions, fuel_temp, fuel_pressure);
     mix_tank.mix.canister_fill_to(primer_gases, primer_fractions, thir_temp, fill_pressure);
 
@@ -345,7 +343,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_fractions, primer_fractions, fill_pressure,
                    fuel_temp, fuel_pressure, thir_temp, target_temp,
                    mix_gases, primer_gases,
-                   std::move(mix_tank), do_rounding, round_ratio_to);
+                   std::move(mix_tank), args.round_pressure_to, args.round_temp_to, round_ratio_to);
 
     bool pre_met = std::none_of(pre_restrictions.begin(), pre_restrictions.end(), [&bomb](const auto& r){ return !r.OK(*bomb); });
 

@@ -25,6 +25,8 @@ float frand();
 float frand(float to);
 float frand(float from, float to);
 
+long get_float_digits(float num);
+
 float round_to(float what, float to);
 std::string str_round_to(float what, float to);
 
