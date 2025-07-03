@@ -24,7 +24,7 @@ one_atmosphere = 101.325f,
 tank_leak_pressure = 30.f * one_atmosphere,
 tank_rupture_pressure = 40.f * one_atmosphere,
 tank_fragment_pressure = 50.f * one_atmosphere,
-tank_fragment_scale = 2.f * one_atmosphere,
+tank_fragment_scale = 2.25f * one_atmosphere,
 tank_volume = 5.f,
 
 reaction_min_gas = 0.01f,
