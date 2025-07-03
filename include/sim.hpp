@@ -94,7 +94,7 @@ struct bomb_data {
               float fuel_temp, float fuel_pressure, float thir_temp, float mix_to_temp,
               const std::vector<gas_ref>& mix_gases, const std::vector<gas_ref>& primer_gases,
               gas_tank tank,
-              float round_pressure_to = 0.1f, float round_temp_to = 0.01f, float round_ratio_to = 0.001f)
+              float round_pressure_to = 0.1f, float round_temp_to = 0.01f, float round_ratio_to = 0.00001f)
     :
         mix_ratios(mix_ratios), primer_ratios(primer_ratios), to_pressure(to_pressure),
         fuel_temp(fuel_temp), fuel_pressure(fuel_pressure), thir_temp(thir_temp), mix_to_temp(mix_to_temp),

@@ -312,8 +312,8 @@ int main(int argc, char* argv[]) {
     optim(do_sim,
           lower_bounds,
           upper_bounds,
-          optimise_maximise,
-          {mix_gases, primer_gases, optimise_measure_before, round_pressure_to, round_temp_to, round_ratio_to, tick_cap, opt_param, pre_restrictions, post_restrictions},
+          optimise_maximise,                                                                   // convert percentage to fraction
+          {mix_gases, primer_gases, optimise_measure_before, round_pressure_to, round_temp_to, round_ratio_to * 0.01f, tick_cap, opt_param, pre_restrictions, post_restrictions},
           as_seconds(max_runtime),
           sample_rounds,
           bounds_scale,

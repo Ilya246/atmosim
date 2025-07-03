@@ -302,8 +302,6 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     const std::vector<field_restriction<bomb_data>>& pre_restrictions = args.pre_restrictions;
     const std::vector<field_restriction<bomb_data>>& post_restrictions = args.post_restrictions;
 
-    // convert percentage to ratio
-    float round_ratio_to = args.round_ratio_to * 0.01f;
     // read gas ratios
     std::vector<float> mix_ratios(mix_gases.size(), 1.f);
     std::vector<float> primer_ratios(primer_gases.size(), 1.f);
@@ -317,10 +315,10 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     }
 
     std::vector<float> mix_fractions = get_fractions(mix_ratios);
-    for (float& f : mix_fractions) f = round_to(f, round_ratio_to);
+    for (float& f : mix_fractions) f = round_to(f, args.round_ratio_to);
     mix_fractions *= 1.f / std::accumulate(mix_fractions.begin(), mix_fractions.end(), 0.f);
     std::vector<float> primer_fractions = get_fractions(primer_ratios);
-    for (float& f : primer_fractions) f = round_to(f, round_ratio_to);
+    for (float& f : primer_fractions) f = round_to(f, args.round_ratio_to);
     primer_fractions *= 1.f / std::accumulate(primer_fractions.begin(), primer_fractions.end(), 0.f);
 
     // set up the tank
@@ -343,7 +341,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     std::shared_ptr<bomb_data> bomb = std::make_shared<bomb_data>(mix_fractions, primer_fractions, fill_pressure,
                    fuel_temp, fuel_pressure, thir_temp, target_temp,
                    mix_gases, primer_gases,
-                   std::move(mix_tank), args.round_pressure_to, args.round_temp_to, round_ratio_to);
+                   std::move(mix_tank), args.round_pressure_to, args.round_temp_to, args.round_ratio_to);
 
     bool pre_met = std::none_of(pre_restrictions.begin(), pre_restrictions.end(), [&bomb](const auto& r){ return !r.OK(*bomb); });
 
