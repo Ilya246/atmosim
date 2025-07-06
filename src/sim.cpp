@@ -38,7 +38,7 @@ std::string bomb_data::mix_string(const std::vector<gas_ref>& gases, const std::
 std::string bomb_data::mix_string_simple(const std::vector<gas_ref>& gases, const std::vector<float>& fractions) const {
     std::string out = "[";
     for (size_t i = 0; i < gases.size(); ++i) {
-        out += std::format("[{},{}]", gases[i].name(), str_round_to(fractions[i], round_ratio_to));
+        out += std::format("[{},{}]", gases[i].name(), fractions[i]);
         if (i != gases.size() - 1) out += ",";
     }
     return out + "]";
@@ -76,10 +76,10 @@ bomb_data bomb_data::deserialize(std::string_view str) {
         start = space_pos + 1;
     }
 
-    float fuel_temp = std::stof(kv_pairs["ft"]);
-    float fuel_pressure = std::stof(kv_pairs["fp"]);
-    float to_pressure = std::stof(kv_pairs["tp"]);
-    float thir_temp = std::stof(kv_pairs["tt"]);
+    float fuel_temp = argp::parse_value<float>(kv_pairs["ft"]);
+    float fuel_pressure = argp::parse_value<float>(kv_pairs["fp"]);
+    float to_pressure = argp::parse_value<float>(kv_pairs["tp"]);
+    float thir_temp = argp::parse_value<float>(kv_pairs["tt"]);
     auto mix_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["mi"]);
     auto primer_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["pm"]);
 
@@ -117,7 +117,7 @@ bomb_data bomb_data::deserialize(std::string_view str) {
 
 // this is kinda cursed but if it works it works
 std::string bomb_data::measure_tolerances(float min_ratio) const {
-    const size_t measure_iters = 1000;
+    const size_t measure_iters = 100;
     const float target_radius = fin_radius * min_ratio;
     const float target_ticks = ticks * min_ratio;
     std::string msg;
@@ -138,15 +138,18 @@ std::string bomb_data::measure_tolerances(float min_ratio) const {
     auto find_tolerance = [&](auto&& adjust_fn, float start, float dir) -> float {
         float base = 0.f, adj = std::abs(start) / 1024.f;
         float farthest = start;
+        bool had_invalid = false;
+        // binary search
         for (size_t i = 0; i < measure_iters; ++i) {
             float test_val = start + (base + adj) * dir;
             bool valid = test_variation([&](bomb_data& c){ adjust_fn(c, test_val); });
             if (valid) {
                 farthest = test_val;
                 base = base + adj;
-                adj *= 2.f;
+                adj *= had_invalid ? 0.5f : 2.f;
             } else {
                 adj *= 0.5f;
+                had_invalid = true;
             }
         }
         return farthest;
