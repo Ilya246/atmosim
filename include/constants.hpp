@@ -10,7 +10,7 @@ inline const float heat_scale = 1.0 / 8.0,
 
 pressure_cap = 1013.25f,
 pipe_pressure_cap = 4500.f,
-required_transfer_volume = 1400.f,
+required_transfer_volume = 1900.f,
 TCMB = 2.7f,
 T0C = 273.15f,
 T20C = 293.15f,
