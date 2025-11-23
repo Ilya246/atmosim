@@ -379,7 +379,6 @@ TEST_CASE("Optimiser validation") {
                 5,
                 0.5f);
             optim.poll_spacing = as_seconds(0.01f);
-            optim.fuzzn = 1000;
 
             SECTION("Minimisation") {
                 optim.maximise = false;
@@ -415,7 +414,6 @@ TEST_CASE("Optimiser validation") {
                 5,
                 0.5f);
             c_optim.poll_spacing = as_seconds(0.05f);
-            c_optim.fuzzn = 10000;
 
             SECTION("Maximisation") {
                 c_optim.find_best();

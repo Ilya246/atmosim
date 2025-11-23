@@ -1,11 +1,15 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <format>
 #include <functional>
 #include <iostream>
+#include <mutex>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -29,28 +33,28 @@ struct optimiser {
     // specific optimiser configuration
     float bounds_scale;
     size_t sample_rounds;
-    float base_step = 0.001f;
-    float adapt_noise = 0.5f;
-    float orth_strength = 0.2f;
-    float move_scaling = 1.5f;
-    // each how many vector adjustments should we try to space them apart
-    size_t orth_interval = 100;
-    size_t fuzzn = 10000;
+
+    // DE Parameters
+    // Population size: usually 10x dimension, but we clamp for performance/time trade-off
+    size_t pop_size = 50;
+    // Differential weight (0.5 - 1.0)
+    float mutation_factor = 0.6f;
+    // Crossover probability (0.8 - 1.0)
+    float crossover_prob = 0.9f;
+
+    // Reporting
     duration_t poll_spacing = as_seconds(0.025f);
     duration_t speed_log_spacing = as_seconds(0.5f);
-    // when checking tolerances, consider results with this much of the best's rating acceptable
-    float tolerance_ratio = default_tol;
-    size_t tolerance_iters = 100;
 
-    // state
+    // State
     time_point_t last_poll_time;
     time_point_t last_speed_update_time;
-    bool do_adapt;
-    // inter-round state
-    float step_scale = 1.f;
+
+    // Inter-round state
     std::vector<float> best_arg;
     R best_result;
-    // dimensions we don't want to be stepping in
+
+    // Dimensions we don't want to be stepping in
     std::vector<bool> fixed_dims;
 
     optimiser(std::function<R(const std::vector<float>&, T)> func,
@@ -85,6 +89,10 @@ struct optimiser {
             }
         }
 
+        // Auto-tune population size based on dimensions, clamped
+        size_t dims = lowerb.size();
+        pop_size = std::max((size_t)20, std::min((size_t)100, dims * 15));
+
         reset();
     }
 
@@ -92,15 +100,9 @@ struct optimiser {
         size_t dims = lower_bounds.size();
         // Identify fixed dimensions
         fixed_dims.resize(dims);
-        size_t non_fixed_dims = 0;
         for(size_t i = 0; i < dims; ++i) {
             fixed_dims[i] = (lower_bounds[i] == upper_bounds[i]);
-            non_fixed_dims += !fixed_dims[i];
         }
-        // don't adapt step vectors if we only have one direction we can actually step in
-        do_adapt = non_fixed_dims > 1;
-
-        step_scale = 1.f;
 
         last_poll_time = main_clock.now();
         last_speed_update_time = main_clock.now();
@@ -111,8 +113,11 @@ struct optimiser {
 
         // copies of parent state
         size_t log_level;
-        bool maximise, do_adapt;
-        float move_scaling, base_step, adapt_noise;
+        bool maximise;
+
+        // DE Parameters local copy
+        size_t pop_size;
+        float F, CR;
 
         // state
         std::vector<float> best_arg;
@@ -126,10 +131,6 @@ struct optimiser {
         std::mutex ready_mutex;
         std::condition_variable cv;
 
-        size_t adapt_counter = 0;
-        // our search directions - each sampler keeps track of its own persistent set
-        std::vector<std::vector<float>> search_directions;
-
         // state fed to us
         std::string worker_prefix = "";
         std::vector<float> cur_lower_bounds;
@@ -139,8 +140,11 @@ struct optimiser {
         std::atomic<size_t> sample_count{0};
         std::atomic<size_t> valid_sample_count{0};
 
-        sampler(const optimiser<T, R>& parent, int index = -1, bool do_threading = true): parent(parent){
-            search_directions = parent.base_search_directions();
+        // RNG
+        std::mt19937 rng;
+
+        sampler(const optimiser<T, R>& parent, int index = -1, bool do_threading = true)
+            : parent(parent), rng(std::random_device{}()) {
 
             if (index >= 0) {
                 worker_prefix = std::format("[{}]: ", index);
@@ -179,10 +183,11 @@ struct optimiser {
         void reset(const std::vector<float>& lower_bounds, const std::vector<float>& upper_bounds) {
             log_level = parent.log_level;
             maximise = parent.maximise;
-            do_adapt = parent.do_adapt;
-            move_scaling = parent.move_scaling;
-            base_step = parent.base_step;
-            adapt_noise = parent.adapt_noise;
+
+            pop_size = parent.pop_size;
+            F = parent.mutation_factor;
+            CR = parent.crossover_prob;
+
             best_arg = parent.best_arg;
             best_result = parent.best_result;
             cur_lower_bounds = lower_bounds;
@@ -208,100 +213,70 @@ struct optimiser {
             ready_mutex.unlock();
         }
 
-        void scale_search_directions(float scale) {
-            for (std::vector<float>& v : search_directions) v *= scale;
-        }
-
         void do_sampling() {
-            std::vector<float> current = random_vec(cur_lower_bounds, cur_upper_bounds);
-            log([&]{ return std::format("{}Doing initial sample at {}", worker_prefix, vec_to_str(current)); }, log_level, LOG_TRACE);
-            R c_result = sample(current);
-            if (!c_result.valid()) {
-                log([&]{ return std::format("{}Initial sample invalid, aborting", worker_prefix); }, log_level, LOG_TRACE);
-                return;
+            // Differential Evolution Implementation
+            size_t dims = cur_lower_bounds.size();
+
+            // Population initialization
+            std::vector<std::vector<float>> population(pop_size);
+            std::vector<R> fitness(pop_size);
+
+            std::uniform_real_distribution<float> dist01(0.f, 1.f);
+
+            // 1. Initialize Population
+            for(size_t i = 0; i < pop_size; ++i) {
+                if (i == 0 && best_result.valid()) {
+                    // Elitism: Keep the best found so far in the new round/population
+                    population[i] = best_arg;
+                } else {
+                    population[i] = random_vec(cur_lower_bounds, cur_upper_bounds);
+                }
+                fitness[i] = sample(population[i]);
             }
 
-            float move_scl = 1.f;
-            bool is_scaled = false;
-            while (!status_SIGINT) {
-                struct step_candidate {
-                    size_t dir_index;
-                    R result;
-                };
-                bool recheck = false;
-                do {
-                    recheck = false;
-                    std::vector<step_candidate> candidates;
+            std::vector<float> trial(dims);
 
-                    log([&]{ return std::format("{}Checking search directions", worker_prefix); }, log_level, LOG_TRACE);
-                    // Generate candidate steps in all search directions
-                    size_t dirs = search_directions.size();
-                    for(size_t dir_idx = 0; dir_idx < dirs; ++dir_idx) {
-                        const std::vector<float>& dir = search_directions[dir_idx];
-                        std::vector<float> move_dir = dir * move_scl;
-                        std::vector<float> candidate = current + move_dir;
-                        // check bounds
-                        if (!vec_in_bounds(candidate, cur_lower_bounds, cur_upper_bounds)) continue;
+            // 2. Evolution Loop
+            // We run generation by generation until the 'until' time is hit
+            // The outer loop in sampler handles the timing check
 
-                        log([&]{ return std::format("{}Sampling candidate offset by {}", worker_prefix, vec_to_str(move_dir)); }, log_level, LOG_TRACE);
-                        candidates.emplace_back(dir_idx, sample(candidate));
-                    }
+            while(main_clock.now() < until && !status_SIGINT) {
+                for(size_t i = 0; i < pop_size; ++i) {
+                    // Pick 3 distinct random indices (a, b, c) != i
+                    size_t a, b, c;
+                    do { a = std::uniform_int_distribution<size_t>(0, pop_size - 1)(rng); } while(a == i);
+                    do { b = std::uniform_int_distribution<size_t>(0, pop_size - 1)(rng); } while(b == i || b == a);
+                    do { c = std::uniform_int_distribution<size_t>(0, pop_size - 1)(rng); } while(c == i || c == a || c == b);
 
-                    // Find best candidate
-                    auto best_it = std::max_element(candidates.begin(), candidates.end(),
-                        [this](const auto& a, const auto& b) { return parent.better_than(b.result, a.result, maximise); });
-                    if (best_it == candidates.end() || !parent.better_than(best_it->result, c_result, maximise)) {
-                        if (!is_scaled) return;
-                        recheck = is_scaled;
-                        is_scaled = false;
-                        move_scl = 1.f;
-                        continue; // Local minimum found
-                    }
-                    move_scl *= move_scaling;
+                    // Mutation & Crossover
+                    // DE/rand/1/bin strategy
+                    // Mutant = a + F * (b - c)
+                    size_t R_idx = std::uniform_int_distribution<size_t>(0, dims - 1)(rng);
 
-                    std::vector<float>& best_dir = search_directions[best_it->dir_index];
-                    log([&]{ return std::format("{}Best direction {} found, result {} vs {}", worker_prefix, vec_to_str(best_dir), best_it->result.rating(), c_result.rating()); }, log_level, LOG_TRACE);
-                    if (!do_adapt || is_scaled) {
-                        current += best_dir;
-                        c_result = best_it->result;
-                        is_scaled = true;
-                        continue;
-                    }
-                    is_scaled = true;
-
-                    // attempt to randomly improve current movement vector
-                    std::vector<float> dir_improv_candidate = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds) * (base_step * adapt_noise * frand());
-                    dir_improv_candidate += best_dir;
-                    dir_improv_candidate *= length(best_dir) / length(dir_improv_candidate);
-
-                    std::vector<float> improv_candidate = current;
-                    improv_candidate = current + dir_improv_candidate;
-                    if (!vec_in_bounds(improv_candidate, cur_lower_bounds, cur_upper_bounds)) {
-                        current += best_dir;
-                        c_result = best_it->result;
-                        continue;
-                    }
-
-                    R rotated_result = sample(improv_candidate);
-                    // also update the search direction if we found a better one
-                    if(parent.better_than(rotated_result, best_it->result, maximise)) {
-                        current = improv_candidate;
-                        c_result = rotated_result;
-                        log([&]{ return std::format("{}Improved direction {} [{}] -> [{}]", worker_prefix,
-                            best_it->dir_index, vec_to_str(best_dir), vec_to_str(dir_improv_candidate)); }, log_level, LOG_DEBUG);
-                        best_dir = dir_improv_candidate;
-                        ++adapt_counter;
-                        if (adapt_counter > parent.orth_interval) {
-                            log([&]{ return std::format("{}Orthogonalising search vectors, current:\n{}", worker_prefix, vec_to_str(search_directions, ", ", "\n")); }, log_level, LOG_DEBUG);
-                            space_vectors(search_directions, parent.orth_strength);
-                            log([&]{ return std::format("{}New:\n{}", worker_prefix, vec_to_str(search_directions, ", ", "\n")); }, log_level, LOG_DEBUG);
-                            adapt_counter = 0;
+                    for(size_t j = 0; j < dims; ++j) {
+                        if (parent.fixed_dims[j]) {
+                            trial[j] = cur_lower_bounds[j];
+                            continue;
                         }
-                    } else {
-                        current += best_dir;
-                        c_result = best_it->result;
+
+                        if(dist01(rng) < CR || j == R_idx) {
+                            float val = population[a][j] + F * (population[b][j] - population[c][j]);
+                            // Bound handling: Clamp
+                            val = std::max(cur_lower_bounds[j], std::min(cur_upper_bounds[j], val));
+                            trial[j] = val;
+                        } else {
+                            trial[j] = population[i][j];
+                        }
                     }
-                } while (recheck);
+
+                    // Selection
+                    R trial_res = sample(trial);
+
+                    if (parent.better_eq_than(trial_res, fitness[i], maximise)) {
+                        population[i] = trial;
+                        fitness[i] = trial_res;
+                    }
+                }
             }
         }
 
@@ -310,9 +285,11 @@ struct optimiser {
 
             ++sample_count;
             valid_sample_count += res.valid();
-            log([&]{ return std::format("{}Sampled {}, result {}", worker_prefix, vec_to_str(at), res.rating_str()); }, log_level, LOG_TRACE);
+
+            // Check against local best
             if (parent.better_than(res, best_result, maximise)) {
-                log([&]{ return std::format("{}Updating best from {}", worker_prefix, best_result.rating_str()); }, log_level, LOG_DEBUG);
+                // Log only occasionally or if significantly better to avoid spam
+                log([&]{ return std::format("{}New local best: {}", worker_prefix, res.rating_str()); }, log_level, LOG_DEBUG);
                 best_result = res;
                 best_arg = at;
             }
@@ -320,25 +297,6 @@ struct optimiser {
             return res;
         }
     };
-
-    std::vector<std::vector<float>> base_search_directions() const {
-        std::vector<std::vector<float>> out_vec;
-        // Create initial directions only for free dimensions
-        size_t dims = fixed_dims.size();
-        for(size_t i = 0; i < dims; ++i) {
-            if(!fixed_dims[i]) {
-                float v_size = (upper_bounds[i] - lower_bounds[i]) * base_step;
-                out_vec.emplace_back(dims, 0.f);
-                out_vec.back()[i] = v_size;
-                log([&]{ return std::format("Initialised step vector [{}]", vec_to_str(out_vec.back())); }, log_level, LOG_DEBUG);
-                out_vec.emplace_back(dims, 0.f);
-                out_vec.back()[i] = -v_size;
-                log([&]{ return std::format("Initialised step vector [{}]", vec_to_str(out_vec.back())); }, log_level, LOG_DEBUG);
-            }
-        }
-
-        return out_vec;
-    }
 
     void find_best() {
         std::vector<std::unique_ptr<sampler>> samplers;
@@ -358,12 +316,18 @@ struct optimiser {
             if (status_SIGINT) break;
 
             time_point_t s_time = main_clock.now();
-            while (main_clock.now() - s_time < max_duration) {
+            // Divide total runtime by rounds
+            duration_t round_duration = max_duration / sample_rounds;
+            time_point_t end_time = s_time + round_duration;
+
+            while (main_clock.now() < end_time) {
                 if (status_SIGINT) break;
 
                 time_point_t from = main_clock.now();
-                time_point_t time_to = from + poll_spacing;
+                time_point_t time_to = std::min(end_time, from + poll_spacing);
+
                 for (std::unique_ptr<sampler>& samp : samplers) {
+                    // Update bounds for the samplers (in case we tightened them previous round)
                     samp->reset(cur_lower_bounds, cur_upper_bounds);
                     samp->start_sampling(time_to);
                 }
@@ -379,6 +343,7 @@ struct optimiser {
                     samp->sample_count = 0;
                     samp->valid_sample_count = 0;
                     any_valid |= samp->best_result.valid();
+
                     if (better_than(samp->best_result, best_result, maximise)) {
                         best_result = samp->best_result;
                         best_arg = samp->best_arg;
@@ -406,43 +371,34 @@ struct optimiser {
                 }
             }
 
-            if (!any_valid) {
-                log([&]{ return "Failed to find any viable result, retrying sample 1..."; }, log_level, LOG_BASIC);
-                --samp_idx;
+            if (!any_valid && samp_idx < sample_rounds - 1) {
+                log([&]{ return "Failed to find any viable result this round, retrying..."; }, log_level, LOG_BASIC);
                 continue;
             }
 
-            // try enhancing our best result
-            sampler t_samp(*this, -1, false);
-            t_samp.reset(cur_lower_bounds, cur_upper_bounds);
-            for (size_t f_i = 0; f_i < fuzzn; ++f_i) {
-                std::vector<float> rv = (random_vec(cur_lower_bounds, cur_upper_bounds) - cur_lower_bounds);
-                std::vector<float> fuzz_coord = best_arg + rv * (base_step * frand());
-                if (!vec_in_bounds(fuzz_coord, cur_lower_bounds, cur_upper_bounds)) continue;
-                t_samp.sample(fuzz_coord);
-            }
-            if (better_than(t_samp.best_result, best_result, maximise)) {
-                best_result = t_samp.best_result;
-                best_arg = t_samp.best_arg;
-            }
-            sample_count += t_samp.sample_count;
-            valid_sample_count += t_samp.valid_sample_count;
+            // If we found something valid, update our best
+            if (any_valid) {
+                 log([&]() { return std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating_str()); }, log_level, LOG_BASIC);
 
-            if (samp_idx + 1 != sample_rounds) {
-                log([&]() { return std::format("Sampling round {} complete, best: {}", samp_idx + 1, best_result.rating_str()); }, log_level, LOG_BASIC);
+                if (samp_idx + 1 != sample_rounds) {
+                    // Zooming Strategy:
+                    // Contract bounds around the best known argument to refine precision
+                    float c_scale = std::pow(bounds_scale, samp_idx + 1);
 
-                // update bounds and directions
-                float c_scale = std::pow(bounds_scale, samp_idx + 1);
+                    // Ensure we don't collapse to zero width on dimensions that need variation
+                    for(size_t d=0; d<cur_lower_bounds.size(); ++d) {
+                        if(fixed_dims[d]) continue;
 
-                cur_lower_bounds = lerp(lower_bounds, best_arg, 1.f - c_scale);
-                cur_upper_bounds = lerp(upper_bounds, best_arg, 1.f - c_scale);
+                        float span = upper_bounds[d] - lower_bounds[d];
+                        float current_span = span * c_scale;
 
-                // also downscale search directions
-                for (std::unique_ptr<sampler>& samp : samplers) {
-                    samp->scale_search_directions(bounds_scale);
+                        // Center around best arg, but clamp to original hard bounds
+                        cur_lower_bounds[d] = std::max(lower_bounds[d], best_arg[d] - current_span / 2.f);
+                        cur_upper_bounds[d] = std::min(upper_bounds[d], best_arg[d] + current_span / 2.f);
+                    }
+
+                    log([&]{ return std::format("New bounds: [{}] to [{}]", vec_to_str(cur_lower_bounds), vec_to_str(cur_upper_bounds)); }, log_level, LOG_INFO);
                 }
-
-                log([&]{ return std::format("New bounds: [{}] to [{}]", vec_to_str(cur_lower_bounds), vec_to_str(cur_upper_bounds)); }, log_level, LOG_INFO);
             }
         }
 
@@ -459,12 +415,6 @@ struct optimiser {
         if (!than.valid()) return true;
         if (!what.valid()) return !than.valid();
         return maximise ? what >= than : than >= what;
-    }
-
-    static bool eq_to(const R& what, const R& than) {
-        if (!than.valid()) return !what.valid();
-        if (!what.valid()) return !than.valid();
-        return what == than;
     }
 };
 
