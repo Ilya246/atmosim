@@ -1,8 +1,10 @@
+![Latest version](https://img.shields.io/github/v/tag/Ilya246/atmosim?label=Latest%20version)
+
 # Usage instructions
 
 ## Getting a ready release
 
-1. Go to the releases tab (.../atmosim/releases)
+1. Go to the [releases tab](https://github.com/Ilya246/atmosim/releases)
 2. Get the latest release depending on your system
 
 ## Compiling it yourself (will run faster)
@@ -16,6 +18,12 @@ cd atmosim
 3. Build using the Makefile:
 ```bash
 make -j
+```
+
+## Using AUR (on Arch Linux)
+![AUR version](https://img.shields.io/aur/version/atmosim?label=AUR%20version)
+```bash
+yay -S atmosim
 ```
 
 ## Running
