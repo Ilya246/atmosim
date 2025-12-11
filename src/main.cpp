@@ -99,6 +99,7 @@ int main(int argc, char* argv[]) {
     size_t sample_rounds = 5;
     float bounds_scale = 0.5f;
     size_t nthreads = 1;
+    float tank_volume = default_tank_volume;
 
     std::vector<std::shared_ptr<argp::base_argument>> args = {
         argp::make_argument("ratiob", "", "set gas ratio iteration bound", ratio_bound),
@@ -129,7 +130,8 @@ int main(int argc, char* argv[]) {
         argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
         argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds),
         argp::make_argument("boundsscale", "", "how much to scale bounds each sample round (default " + to_string(bounds_scale) + ")", bounds_scale),
-        argp::make_argument("nthreads", "j", "number of threads for the optimiser to use", nthreads)
+        argp::make_argument("nthreads", "j", "number of threads for the optimiser to use", nthreads),
+        argp::make_argument("tankvol", "", "tank volume in liters (default " + to_string(default_tank_volume) + ")", tank_volume)
     };
 
     argp::parse_arguments(args, argc, argv,
@@ -184,8 +186,7 @@ int main(int argc, char* argv[]) {
             break;
         }
         case (work_mode::full_input): {
-            gas_tank tank;
-
+            gas_tank tank(default_tank_volume); // dummy value
             cout << "Normal (y) or serialized (n) input [Y/n]: ";
             bool norm_input;
             if (!try_input<bool>(norm_input)) {
@@ -195,9 +196,11 @@ int main(int argc, char* argv[]) {
                 cout << "Input serialised string: ";
                 std::string str;
                 getline(cin, str);
-                bomb_data data = bomb_data::deserialize(str);
+                bomb_data data = bomb_data::deserialize(str, tank_volume);
                 tank = data.tank;
             } else {
+                cout << "Input tank volume in liters (omit for 5): ";
+                tank = gas_tank(input_or_default(default_tank_volume));
                 cout << "Input number of mixes (omit for 2): ";
                 int mix_c = input_or_default(2);
                 for (int i = 0; i < mix_c; ++i) {
@@ -248,7 +251,7 @@ int main(int argc, char* argv[]) {
             cout << "Input serialised string: ";
             std::string str;
             getline(cin, str);
-            bomb_data data = bomb_data::deserialize(str);
+            bomb_data data = bomb_data::deserialize(str, tank_volume);
             data.ticks = data.tank.tick_n(tick_cap);
             data.fin_radius = data.tank.calc_radius();
             data.fin_pressure = data.tank.mix.pressure();
@@ -313,7 +316,7 @@ int main(int argc, char* argv[]) {
           lower_bounds,
           upper_bounds,
           optimise_maximise,                                                                   // convert percentage to fraction
-          {mix_gases, primer_gases, optimise_measure_before, round_pressure_to, round_temp_to, round_ratio_to * 0.01f, tick_cap, opt_param, pre_restrictions, post_restrictions},
+          {mix_gases, primer_gases, optimise_measure_before, round_pressure_to, round_temp_to, round_ratio_to * 0.01f, tick_cap, opt_param, pre_restrictions, post_restrictions, tank_volume},
           as_seconds(max_runtime),
           sample_rounds,
           bounds_scale,

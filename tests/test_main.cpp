@@ -108,7 +108,7 @@ TEST_CASE("Vector math operations") {
 }
 
 TEST_CASE("Gas system performance benchmarks") {
-    gas_mixture bench_mix(tank_volume);
+    gas_mixture bench_mix(default_tank_volume);
 
     SECTION("total_gas() calculation") {
         bench_mix.canister_fill_to({ {oxygen, 0.2f}, {nitrogen, 0.5f}, {plasma, 0.3f} }, 500.f, 3000.f);
@@ -167,7 +167,7 @@ TEST_CASE("Gas system argparse test") {
 }
 
 TEST_CASE("Gas reactions") {
-    gas_mixture mix(tank_volume);
+    gas_mixture mix(default_tank_volume);
 
     // UP TO DATE AS OF: 21.06.2025
     SECTION("Plasma fire reaction") {
@@ -255,7 +255,7 @@ TEST_CASE("Gas reactions") {
 }
 
 TEST_CASE("Tank simulation validation") {
-    gas_tank tank;
+    gas_tank tank(default_tank_volume);
 
     // UP TO DATE AS OF: 03.07.2025
     SECTION("ticks-12.3r-22.5s-PT+O") {

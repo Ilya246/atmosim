@@ -112,7 +112,7 @@ struct bomb_data {
 
     std::string serialize() const;
     // deserialises us from an input string - note that this gives an unsimulated tank
-    static bomb_data deserialize(std::string_view str);
+    static bomb_data deserialize(std::string_view str, float tank_volume);
 
     std::string measure_tolerances(float tol = default_tol) const;
 
@@ -166,6 +166,7 @@ struct bomb_args {
     field_ref<bomb_data> opt_param;
     const std::vector<field_restriction<bomb_data>>& pre_restrictions;
     const std::vector<field_restriction<bomb_data>>& post_restrictions;
+    float tank_volume;
 };
 
 // args: target_temp, fuel_temp, thir_temp, mix ratios..., primer ratios...

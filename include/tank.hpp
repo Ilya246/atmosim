@@ -12,7 +12,8 @@ struct gas_tank {
         st_exploded = 2
     };
 
-    gas_mixture mix = gas_mixture(tank_volume);
+    gas_mixture mix;
+    gas_tank(float volume) : mix(volume) {}
     tank_state state = st_intact;
     int integrity = 3;
 

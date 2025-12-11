@@ -61,7 +61,7 @@ std::string bomb_data::serialize() const {
     return out_str;
 }
 
-bomb_data bomb_data::deserialize(std::string_view str) {
+bomb_data bomb_data::deserialize(std::string_view str, float tank_volume) {
     std::map<std::string, std::string> kv_pairs;
     size_t start = 0;
     // parse k=v into map
@@ -84,7 +84,7 @@ bomb_data bomb_data::deserialize(std::string_view str) {
     auto primer_gases = argp::parse_value<std::vector<std::pair<gas_ref, float>>>(kv_pairs["pm"]);
 
     // try to reconstruct the tank
-    gas_tank tank;
+    gas_tank tank(tank_volume);
     tank.mix.canister_fill_to(mix_gases, fuel_temp, fuel_pressure);
     tank.mix.canister_fill_to(primer_gases, thir_temp, to_pressure);
 
@@ -128,7 +128,7 @@ std::string bomb_data::measure_tolerances(float min_ratio) const {
         if (*std::min_element(d_copy.mix_ratios.begin(), d_copy.mix_ratios.end()) < 0.f) return false;
         if (*std::min_element(d_copy.primer_ratios.begin(), d_copy.primer_ratios.end()) < 0.f) return false;
         if (d_copy.fuel_temp < 0.f || d_copy.fuel_pressure < 0.f || d_copy.thir_temp < 0.f || d_copy.to_pressure < 0.f) return false;
-        gas_tank tank;
+        gas_tank tank(d_copy.tank.mix.volume);
         tank.mix.canister_fill_to(d_copy.mix_gases, get_fractions(d_copy.mix_ratios), d_copy.fuel_temp, d_copy.fuel_pressure);
         tank.mix.canister_fill_to(d_copy.primer_gases, get_fractions(d_copy.primer_ratios), d_copy.thir_temp, d_copy.to_pressure);
         size_t c_ticks = tank.tick_n(ticks / min_ratio);
@@ -325,7 +325,7 @@ opt_val_wrap do_sim(const std::vector<float>& in_args, const bomb_args& args) {
     primer_fractions *= 1.f / std::accumulate(primer_fractions.begin(), primer_fractions.end(), 0.f);
 
     // set up the tank
-    gas_tank mix_tank;
+    gas_tank mix_tank(args.tank_volume);
 
     // specific heat is heat capacity of 1mol and fractions sum up to 1mol
     float fuel_specheat = get_mix_heat_capacity(mix_gases, mix_fractions);
