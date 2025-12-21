@@ -168,7 +168,7 @@ bool gas_mixture::reaction_tick() {
         reacted |= react_tritium_fire(heat_capacity_cache);
     }
     if (temp >= plasma_fire_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(plasma) >= reaction_min_gas) {
-            reacted |= react_plasma_fire(heat_capacity_cache);
+        reacted |= react_plasma_fire(heat_capacity_cache);
     }
     return reacted;
 }
