@@ -4,7 +4,7 @@ STRIP := strip
 WIN_STRIP := x86_64-w64-mingw32-strip
 
 STANDARD := c++20
-SHAREDFLAGS ?= -Ofast -flto=auto -Wall -Wextra -pedantic -g
+SHAREDFLAGS ?= -O3 -ffast-math -flto=auto -Wall -Wextra -pedantic -g
 WIN_LDFLAGS ?= -static -static-libgcc -static-libstdc++
 WEB_SHAREDFLAGS ?= -O3 -ffast-math -flto=auto -Wall -Wextra -pedantic
 WEB_LDFLAGS ?= -sEXPORTED_RUNTIME_METHODS=callMain -sMODULARIZE=1 -sENVIRONMENT=web -sNO_EXIT_RUNTIME=1 -sEXPORT_NAME='createAtmosim' -sINVOKE_RUN=0

@@ -101,13 +101,14 @@ DecompositionEnergy
 
 [Reactions]
 ReactionMinGas
-FireTemp
+PlasmaFireTemp
+TritiumFireTemp
 FrezonCoolTemp
 N2ODecomposionTemp
 NitriumDecompositionTemp
 
 [Canister]
-PressureCap
+TransferPressureCap
 RequiredTransferVolume
 
 [Tank]

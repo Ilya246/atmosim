@@ -1,9 +1,12 @@
-# These variables come from Frontier, but Frontier doesn't have goob gases.
-# Still, this should work for regular plasma, tritium and oxygen maxcaps there
+# These variables (except tank volume) come from Frontier, but Frontier doesn't have goob gases.
+# Still, this should work for regular plasma, tritium and oxygen maxcaps there.
 
 [Plasma]
 SuperSaturationThreshold = 30
 UpperTemperature = 700
+
+[Reactions]
+TritiumFireTemp = 700
 
 [Tank]
 Volume = 10
