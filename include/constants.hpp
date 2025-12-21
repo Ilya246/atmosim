@@ -9,19 +9,20 @@ inline const size_t LOG_NONE = 0, LOG_BASIC = 1, LOG_INFO = 2, LOG_DEBUG = 3, LO
 
 inline static toml::table config = []() {
     try {
-        return toml::parse_file("configuration.toml");
+        char* env_path = std::getenv("ATMOSIM_CONFIG");
+        const char* path = (env_path != nullptr) ? env_path : "./configuration.toml";
+        return toml::parse_file(path);
     } catch (...) {
         return toml::table();
     }
 }();
 
-inline const float
-// goobstation defaults
-tickrate = config["Tickrate"].value_or(0.5f),
-default_tol = config["DefaultTol"].value_or(0.95f), // Comrade Ilya I have no idea on what this is
+inline const float // goobstation defaults
+// [Atmosim]
+default_tol = config["Atmosim"]["DefaultTolerance"].value_or(0.95f),
 
 // [Cvars]
-heat_scale = config["Cvars"]["HeatScale"].value_or(1.0 / 8.0),
+heat_scale = config["Cvars"]["HeatScale"].value_or(1.0 / 8.f), // inverted
 
 // [Atmospherics]
 R = config["Atmospherics"]["R"].value_or(8.314462618f),
@@ -61,7 +62,7 @@ frezon_production_trit_ratio = config["Frezon"]["ProductionTritRatio"].value_or(
 frezon_production_conversion_rate = config["Frezon"]["ProductionConversionRate"].value_or(50.f),
 
 // [N20]
-N2Odecomposition_rate = config["N20"]["DecompositionRate"].value_or(2.f),
+N2Odecomposition_rate = config["N20"]["DecompositionRate"].value_or(1.f / 2.f), // inverted
 
 // [Nitrium]
 nitrium_decomposition_energy = config["Nitrium"]["DecompositionEnergy"].value_or(30000.f),
@@ -73,19 +74,19 @@ frezon_cool_temp = config["Reactions"]["FrezonCoolTemp"].value_or(23.15f),
 n2o_decomp_temp = config["Reactions"]["N2ODecomposionTemp"].value_or(850.f),
 nitrium_decomp_temp = config["Reactions"]["NitriumDecompositionTemp"].value_or(T0C + 70.f),
 
-// [Pipe]
-pipe_pressure_cap = config["Pipe"]["PressureCap"].value_or(4500.f),
-
 // [Canister]
 pressure_cap = config["Canister"]["PressureCap"].value_or(1013.25f),
-required_transfer_volume = config["Canister"]["RequiredTransferVolume"].value_or(1900.f),
+required_transfer_volume = config["Canister"]["RequiredTransferVolume"].value_or(1500.f + 200.f * 2), // canister + two pipes volume
 
 // [Tank]
 tank_volume = config["Tank"]["Volume"].value_or(5.f),
 tank_leak_pressure = config["Tank"]["LeakPressure"].value_or(30.f * one_atmosphere),
 tank_rupture_pressure = config["Tank"]["RupturePressure"].value_or(40.f * one_atmosphere),
 tank_fragment_pressure = config["Tank"]["FragmentPressure"].value_or(50.f * one_atmosphere),
-tank_fragment_scale = config["Tank"]["FragmentScale"].value_or(2.25f * one_atmosphere);
+tank_fragment_scale = config["Tank"]["FragmentScale"].value_or(2.25f * one_atmosphere),
+
+// [Misc]
+tickrate = config["Misc"]["Tickrate"].value_or(0.5f);
 
 inline const size_t round_temp_dig = 2, round_pressure_dig = 1;
 
