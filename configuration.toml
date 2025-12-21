@@ -1,8 +1,0 @@
-# example for monolith
-
-[Plasma]
-#SuperSaturationThreshold = 30
-#UpperTemperature = 700
-
-[Tank]
-#Volume = 10
