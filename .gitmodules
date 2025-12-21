@@ -1,3 +1,6 @@
 [submodule "argparse"]
 	path = libs/argparse
 	url = https://github.com/Ilya246/argparse
+[submodule "libs/tomlplusplus"]
+	path = libs/tomlplusplus
+	url = https://github.com/marzer/tomlplusplus.git
