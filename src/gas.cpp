@@ -164,13 +164,11 @@ bool gas_mixture::reaction_tick() {
     if (temp >= n2o_decomp_temp && amount_of(nitrous_oxide) >= reaction_min_gas) {
         reacted |= react_N2O_decomposition(heat_capacity_cache);
     }
-    if (temp >= fire_temp) {
-        if (amount_of(oxygen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
-            reacted |= react_tritium_fire(heat_capacity_cache);
-        }
-        if (amount_of(oxygen) >= reaction_min_gas && amount_of(plasma) >= reaction_min_gas) {
-            reacted |= react_plasma_fire(heat_capacity_cache);
-        }
+    if (temp >= trit_fire_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
+        reacted |= react_tritium_fire(heat_capacity_cache);
+    }
+    if (temp >= plasma_fire_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(plasma) >= reaction_min_gas) {
+        reacted |= react_plasma_fire(heat_capacity_cache);
     }
     return reacted;
 }

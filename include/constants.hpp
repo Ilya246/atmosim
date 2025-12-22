@@ -69,13 +69,14 @@ nitrium_decomposition_energy = config["Nitrium"]["DecompositionEnergy"].value_or
 
 // [Reactions]
 reaction_min_gas = config["Reactions"]["ReactionMinGas"].value_or(0.01f),
-fire_temp = config["Reactions"]["FireTemp"].value_or(373.149f),
+plasma_fire_temp = config["Reactions"]["PlasmaFireTemp"].value_or(373.149f),
+trit_fire_temp = config["Reactions"]["TritiumFireTemp"].value_or(373.149f),
 frezon_cool_temp = config["Reactions"]["FrezonCoolTemp"].value_or(23.15f),
 n2o_decomp_temp = config["Reactions"]["N2ODecomposionTemp"].value_or(850.f),
 nitrium_decomp_temp = config["Reactions"]["NitriumDecompositionTemp"].value_or(T0C + 70.f),
 
 // [Canister]
-pressure_cap = config["Canister"]["PressureCap"].value_or(1013.25f),
+pressure_cap = config["Canister"]["TransferPressureCap"].value_or(1013.25f),
 required_transfer_volume = config["Canister"]["RequiredTransferVolume"].value_or(1500.f + 200.f * 2), // canister + two pipes volume
 
 // [Tank]

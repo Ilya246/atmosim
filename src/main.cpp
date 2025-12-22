@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     float mixt1 = 0.f, mixt2 = 0.f, thirt1 = 0.f, thirt2 = 0.f;
     float ratio_bound = 3.f;
     tuple<vector<float>, vector<float>> ratio_bounds;
-    float lower_target_temp = fire_temp + 0.1f;
+    float lower_target_temp = plasma_fire_temp + 0.1f;
     float lower_pressure = pressure_cap, upper_pressure = pressure_cap;
     bool step_target_temp = false;
     size_t tick_cap = numeric_limits<size_t>::max(); // 10 minutes
