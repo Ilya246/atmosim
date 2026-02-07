@@ -4,7 +4,6 @@
 #include <string>
 
 #include "gas.hpp"
-#include "constants.hpp"
 #include "utility.hpp"
 
 namespace asim {

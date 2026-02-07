@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "utility.hpp"
-#include "constants.hpp"
 
 namespace asim {
 
@@ -223,14 +222,17 @@ struct optimiser {
 
             std::uniform_real_distribution<float> dist01(0.f, 1.f);
 
+            // if we already have a best result, keep it as the first element of the population
+            size_t start = 0;
+            if (best_result.valid()) {
+                population[0] = best_arg;
+                fitness[0] = best_result;
+                start = 1;
+            }
+
             // 1. Initialize Population
-            for(size_t i = 0; i < pop_size; ++i) {
-                if (i == 0 && best_result.valid()) {
-                    // Elitism: Keep the best found so far in the new round/population
-                    population[i] = best_arg;
-                } else {
-                    population[i] = random_vec(cur_lower_bounds, cur_upper_bounds);
-                }
+            for (size_t i = start; i < pop_size; ++i) {
+                population[i] = random_vec(cur_lower_bounds, cur_upper_bounds);
                 fitness[i] = sample(population[i]);
             }
 
@@ -240,8 +242,8 @@ struct optimiser {
             // We run generation by generation until the 'until' time is hit
             // The outer loop in sampler handles the timing check
 
-            while(main_clock.now() < until && !status_SIGINT) {
-                for(size_t i = 0; i < pop_size; ++i) {
+            while (main_clock.now() < until && !status_SIGINT) {
+                for (size_t i = 0; i < pop_size; ++i) {
                     // Pick 3 distinct random indices (a, b, c) != i
                     size_t a, b, c;
                     do { a = std::uniform_int_distribution<size_t>(0, pop_size - 1)(rng); } while(a == i);
@@ -253,13 +255,13 @@ struct optimiser {
                     // Mutant = a + F * (b - c)
                     size_t R_idx = std::uniform_int_distribution<size_t>(0, dims - 1)(rng);
 
-                    for(size_t j = 0; j < dims; ++j) {
+                    for (size_t j = 0; j < dims; ++j) {
                         if (parent.fixed_dims[j]) {
                             trial[j] = cur_lower_bounds[j];
                             continue;
                         }
 
-                        if(dist01(rng) < CR || j == R_idx) {
+                        if (frand() < CR || j == R_idx) {
                             float val = population[a][j] + F * (population[b][j] - population[c][j]);
                             // Bound handling: Clamp
                             val = std::max(cur_lower_bounds[j], std::min(cur_upper_bounds[j], val));

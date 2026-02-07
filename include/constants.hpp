@@ -1,11 +1,8 @@
 #pragma once
 
-#include <chrono>
 #include <tomlplusplus/toml.hpp>
 
 namespace asim {
-
-inline const size_t LOG_NONE = 0, LOG_BASIC = 1, LOG_INFO = 2, LOG_DEBUG = 3, LOG_TRACE = 4;
 
 inline static toml::table config = []() {
     try {
@@ -90,9 +87,5 @@ tank_fragment_scale = config["Tank"]["FragmentScale"].value_or(2.25f * one_atmos
 tickrate = config["Misc"]["Tickrate"].value_or(0.5f);
 
 inline const size_t round_temp_dig = 2, round_pressure_dig = 1;
-
-inline std::chrono::system_clock main_clock;
-using duration_t = std::chrono::nanoseconds;
-using time_point_t = std::chrono::time_point<std::chrono::system_clock, duration_t>;
 
 }
