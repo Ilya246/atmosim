@@ -1,0 +1,21 @@
+name: Tested, works
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Packages
+        run: sudo apt update && sudo apt install catch2
+
+      - name: Get Submodule
+        run: make submodule
+
+      - name: Run Tests
+        run: make -j test

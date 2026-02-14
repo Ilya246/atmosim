@@ -79,6 +79,7 @@ FireEnergyReleased
 MinimumOxyburnEnergy
 BurnOxyFactor
 BurnTritFactor
+BurnFuelRatio # 0 by default, which uses pre https://github.com/space-wizards/space-station-14/pull/41870 logic
 
 [Frezon]
 CoolLowerTemperature

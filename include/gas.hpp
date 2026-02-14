@@ -132,7 +132,8 @@ private:
 
     // all supported reactions - if it's not here, it's not supported
     bool react_plasma_fire(float&);
-    bool react_tritium_fire(float&);
+    bool react_tritium_fire_old(float&);
+    bool react_tritium_fire_new(float&);
     bool react_N2O_decomposition(float&);
     bool react_frezon_production(float&);
     bool react_frezon_coolant(float&);

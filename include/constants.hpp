@@ -14,7 +14,7 @@ inline static toml::table config = []() {
     }
 }();
 
-inline const float // goobstation defaults
+inline const float // goobstation (non-reforged) defaults, up to date as of 14.02.2026
 // [Atmosim]
 default_tol = config["Atmosim"]["DefaultTolerance"].value_or(0.95f),
 
@@ -44,6 +44,7 @@ fire_hydrogen_energy_released = config["Tritium"]["FireEnergyReleased"].value_or
 minimum_tritium_oxyburn_energy = config["Tritium"]["MinimumOxyburnEnergy"].value_or(143000.f) * heat_scale,
 tritium_burn_oxy_factor = config["Tritium"]["BurnOxyFactor"].value_or(100.f),
 tritium_burn_trit_factor = config["Tritium"]["BurnTritFactor"].value_or(10.f),
+tritium_burn_fuel_ratio = config["Tritium"]["BurnFuelRatio"].value_or(0.f),
 
 // [Frezon]
 frezon_cool_lower_temperature = config["Frezon"]["CoolLowerTemperature"].value_or(23.15f),
