@@ -1,5 +1,6 @@
 # These variables (except tank volume) come from Frontier, but Frontier doesn't have goob gases.
 # Still, this should work for regular plasma, tritium and oxygen maxcaps there.
+# Up to date as of 14.02.2026
 
 [Plasma]
 SuperSaturationThreshold = 30

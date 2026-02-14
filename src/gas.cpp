@@ -164,7 +164,11 @@ bool gas_mixture::reaction_tick() {
         reacted |= react_N2O_decomposition(heat_capacity_cache);
     }
     if (temp >= trit_fire_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
-        reacted |= react_tritium_fire(heat_capacity_cache);
+        if (tritium_burn_fuel_ratio > 0) {
+            reacted |= react_tritium_fire_new(heat_capacity_cache);
+        } else {
+            reacted |= react_tritium_fire_old(heat_capacity_cache);
+        }
     }
     if (temp >= plasma_fire_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(plasma) >= reaction_min_gas) {
         reacted |= react_plasma_fire(heat_capacity_cache);
@@ -214,7 +218,7 @@ bool gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
 }
 
 // UP TO DATE AS OF: 21.06.2025
-bool gas_mixture::react_tritium_fire(float& heat_capacity_cache) {
+bool gas_mixture::react_tritium_fire_old(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_released = 0.f;
     float burned_fuel = 0.f;
@@ -228,6 +232,36 @@ bool gas_mixture::react_tritium_fire(float& heat_capacity_cache) {
 
         adjust_amount_of(tritium, trit_delta, heat_capacity_cache);
         adjust_amount_of(oxygen, -amount_of(tritium), heat_capacity_cache);
+
+        energy_released += fire_hydrogen_energy_released * burned_fuel * (tritium_burn_trit_factor - 1.f);
+    }
+    if (burned_fuel > 0.f) {
+        energy_released += fire_hydrogen_energy_released * burned_fuel;
+
+        adjust_amount_of(water_vapour, burned_fuel, heat_capacity_cache);
+    }
+    if (heat_capacity_cache > minimum_heat_capacity) {
+        temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
+    }
+    return burned_fuel > 0.f;
+}
+
+// UP TO DATE AS OF: 14.02.2026
+// post https://github.com/space-wizards/space-station-14/pull/41870
+bool gas_mixture::react_tritium_fire_new(float& heat_capacity_cache) {
+    float old_heat_capacity = heat_capacity_cache;
+    float energy_released = 0.f;
+    float burned_fuel = 0.f;
+
+    if (amount_of(oxygen) < amount_of(tritium) || minimum_tritium_oxyburn_energy > temperature * heat_capacity_cache) {
+        burned_fuel = std::min(amount_of(tritium), amount_of(oxygen) / tritium_burn_oxy_factor);
+        adjust_amount_of(tritium, -burned_fuel, heat_capacity_cache);
+        adjust_amount_of(oxygen, -burned_fuel / tritium_burn_fuel_ratio);
+    } else {
+        // it was math.max in the original PR but it got fixed
+        burned_fuel = std::min(amount_of(tritium), amount_of(oxygen) / tritium_burn_fuel_ratio / tritium_burn_trit_factor);
+        adjust_amount_of(tritium, -burned_fuel, heat_capacity_cache);
+        adjust_amount_of(oxygen, -burned_fuel / tritium_burn_fuel_ratio);
 
         energy_released += fire_hydrogen_energy_released * burned_fuel * (tritium_burn_trit_factor - 1.f);
     }

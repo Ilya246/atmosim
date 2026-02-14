@@ -1,0 +1,10 @@
+# Wizden doesn't have goob gases but this should be obvious
+# Up to date as of 14.02.2026
+
+[Tritium]
+FireEnergyReleased = 2840000
+BurnFuelRatio = 2
+
+# [Frezon]
+# ProductionTritRatio = 8
+# Unnerfed in https://github.com/space-wizards/space-station-14/pull/42400
