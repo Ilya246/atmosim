@@ -329,6 +329,8 @@ int main(int argc, char* argv[]) {
             cout << "\nSerialized string: " << best_res.data->serialize() << endl;
         }
         cout << default_tol << "x tolerances:\n" << best_res.data->measure_tolerances() << endl;
+    } else {
+        cout << "No viable recipes found." << endl;
     }
     if (silent) {
         cout.setstate(ios::failbit);
