@@ -323,11 +323,13 @@ int main(int argc, char* argv[]) {
 
     const opt_val_wrap& best_res = optim.best_result;
     cout.clear();
-    cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_res.data->print_very_simple() : best_res.data->print_full()) << endl;
-    if (!simple_output) {
-        cout << "\nSerialized string: " << best_res.data->serialize() << endl;
+    if (best_res.data != nullptr) {
+        cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_res.data->print_very_simple() : best_res.data->print_full()) << endl;
+        if (!simple_output) {
+            cout << "\nSerialized string: " << best_res.data->serialize() << endl;
+        }
+        cout << default_tol << "x tolerances:\n" << best_res.data->measure_tolerances() << endl;
     }
-    cout << default_tol << "x tolerances:\n" << best_res.data->measure_tolerances() << endl;
     if (silent) {
         cout.setstate(ios::failbit);
     }
