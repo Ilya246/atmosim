@@ -1,14 +1,7 @@
-deploy/*
-atmosim.exe
-atmosim
+deploy/
+out/
+.vscode/
 compile_commands.json
 *cache*
-*callgrind.out.*
-profile_out.txt
-*.asm
-fastmosim
 *.kate-swp
 .aider*
-.vscode
-out/*
-web/*

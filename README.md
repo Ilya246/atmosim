@@ -6,10 +6,11 @@
 
 1. Go to the [releases tab](https://github.com/Ilya246/atmosim/releases)
 2. Get the latest release depending on your system
+3. Unpack it
 
-## Compiling it yourself (will run faster)
+## Compiling it yourself
 
-1. Ensure you have git, make and a C++ compiler installed
+1. Ensure you have git, make, cmake and g++ (MinGW on Windows, MSVC is not supported) installed.
 2. Clone the repository with submodules:
 ```bash
 git clone --recursive https://github.com/ilya246/atmosim
@@ -17,8 +18,16 @@ cd atmosim
 ```
 3. Build using the Makefile:
 ```bash
-make -j
+make -j release
 ```
+
+Given you have MinGW, you can also cross-compile from Linux to Windows with
+```
+```
+make -j win
+```
+```
+(Using WSL and cross-compiling is probably the easiest way to compile this on Windows unless you have an IDE but then you probably already know how to compile this)
 
 ## Using AUR (on Arch Linux)
 ![AUR version](https://img.shields.io/aur/version/atmosim?label=AUR%20version)
@@ -29,8 +38,9 @@ This also installs configs into /etc/atmosim/
 
 ## Running
 
-1. Open a console (on Windows press win+r then type in `cmd`), then `cd .../path/to/atmosim`, path/to/atmosim being its location on your disk
-2. Run `atmosim -h` or `atmosim.exe -h`
+This assumes you use Windows, if you don't you probably don't need this anyway.
+1. Open a terminal (Win+R `cmd`) and cd into C:\the\folder\with\the\program.
+2. Run `atmosim.exe -h`
 3. Refer to the help readout for further usage instructions
 
 ### zsh
@@ -41,10 +51,11 @@ Zsh (default on MacOS) treats [] as pattern matching. And since atmosim takes ma
 
 (nearly) all the constants can be configured in a toml file, in case if they are different on a fork.
 By default, atmosim reads the configuration.toml file from the current working directory.
-You can overwrite this with ATMOSIM_CONFIG enviroment variable. In cmd on Windows:
+You can overwrite this with ATMOSIM_CONFIG enviroment variable.
+Windows cmd:
 ```
-set ATMOSIM_CONFIG=configs/monolith.toml
-out/atmosim.exe
+set ATMOSIM_CONFIG=configs\monolith.toml
+atmosim.exe
 ```
 Bash:
 `ATMOSIM_CONFIG=$HOME/.config/atmosim/my_fork.toml ./atmosim`.
