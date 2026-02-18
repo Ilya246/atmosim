@@ -21,12 +21,13 @@ release:
 	@cmake --build out/release --parallel
 
 win:
-	$(CMAKE) -B out/win -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/x86_64-w64-mingw32.cmake .
+	cmake -B out/win -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/x86_64-w64-mingw32.cmake .
 	@cmake --build out/win --parallel
 
 web:
-	$(CMAKE) -B out/web -DCMAKE_BUILD_TYPE=Web .
-	@cmake --build out/web --parallel
+	@emcmake cmake -B out/web -S . -DCMAKE_BUILD_TYPE=Web
+	@cmake --build out/web
+
 
 deploy: release win
 	@mkdir -p deploy

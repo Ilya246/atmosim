@@ -10,7 +10,7 @@
 
 ## Compiling it yourself
 
-1. Ensure you have git, make, cmake and g++ (MinGW on Windows, MSVC is not supported) installed.
+1. Ensure you have git, make, cmake and a POSIX-compliant C++ compiler (g++, clang or even zig c++) installed. On Windows, use MinGW g++. MSVC is explicitly not supported.
 2. Clone the repository with submodules:
 ```bash
 git clone --recursive https://github.com/ilya246/atmosim
@@ -27,24 +27,24 @@ Given you have MinGW, you can also cross-compile from Linux to Windows with
 make -j win
 ```
 ```
-(Using WSL and cross-compiling is probably the easiest way to compile this on Windows unless you have an IDE but then you probably already know how to compile this)
+Other kinds of cross-compiling are not supported, but feel free to implement and PR them.
 
 ## Using AUR (on Arch Linux)
 ![AUR version](https://img.shields.io/aur/version/atmosim?label=AUR%20version)
 ```bash
-yay -S atmosim
+yay -S atmosim # or whatever AUR helper you're using
 ```
 This also installs configs into /etc/atmosim/
 
 ## Running
 
-This assumes you use Windows, if you don't you probably don't need this anyway.
+This assumes you use Windows, if you don't you probably know this anyway.
 1. Open a terminal (Win+R `cmd`) and cd into C:\the\folder\with\the\program.
 2. Run `atmosim.exe -h`
 3. Refer to the help readout for further usage instructions
 
 ### zsh
-Zsh (default on MacOS) treats [] as pattern matching. And since atmosim takes many arguments in [], you would need to overwrite this behaviour by wrapping [] with "":
+Zsh treats [] as pattern matching. And since atmosim takes many arguments in [], you would need to overwrite this behaviour by wrapping [] with "":
 `-mg="[plasma,tritium]"`
 
 ## Configuring constants
