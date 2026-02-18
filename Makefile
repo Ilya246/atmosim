@@ -28,7 +28,6 @@ web:
 	@emcmake cmake -B out/web -S . -DCMAKE_BUILD_TYPE=Web
 	@cmake --build out/web
 
-
 deploy: release win
 	@mkdir -p deploy
 	@tar -czf deploy/atmosim-linux-glibc-amd64.tar.gz configs -C out/release atmosim
