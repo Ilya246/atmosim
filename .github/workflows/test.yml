@@ -2,20 +2,35 @@ name: Tested, works
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Packages
-        run: sudo apt update && sudo apt install catch2
-
       - name: Get Submodule
-        run: make submodule
+        run: git submodule update --init --recursive
 
-      - name: Run Tests
+      - name: Install Packages (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install -y mingw
+
+      - name: Install Packages (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get -y install catch2 g++-mingw-w64
+
+      - name: Try Compile Debug
+        run: make -j
+
+      - name: Run Tests (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: make -j test
+
+      - name: Try Cross Compile for Windows (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: make -j win

@@ -5,13 +5,12 @@
 namespace asim {
 
 inline static toml::table config = []() {
-    try {
-        char* env_path = std::getenv("ATMOSIM_CONFIG");
-        const char* path = (env_path != nullptr) ? env_path : "./configuration.toml";
-        return toml::parse_file(path);
-    } catch (...) {
-        return toml::table();
-    }
+    char* path = std::getenv("ATMOSIM_CONFIG");
+    if (path != nullptr)
+        try {
+            return toml::parse_file(path);
+        } catch (...) { }
+    return toml::table();
 }();
 
 inline const float // goobstation (non-reforged) defaults, up to date as of 14.02.2026

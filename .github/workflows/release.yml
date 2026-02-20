@@ -12,17 +12,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Packages
-        run: sudo apt update && sudo apt install g++ g++-mingw-w64-x86-64 make
+        run: sudo apt-get update && sudo apt-get -y install g++-mingw-w64
 
       - name: Get Submodule
-        run: make submodule
+        run: git submodule update --init --recursive
 
       - name: Build
         run: make deploy -j
 
-      - name: Upload artifacts
+      - name: Upload Artifacts
         uses: Roang-zero1/github-upload-release-artifacts-action@v2
         with:
-          args: "deploy/atmosim-windows-amd64.zip deploy/atmosim-linu-amd64.tar.gz"
+          args: "deploy/atmosim-windows-amd64.zip deploy/atmosim-linux-glibc-amd64.tar.gz"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
