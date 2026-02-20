@@ -50,15 +50,14 @@ Zsh treats [] as pattern matching. And since atmosim takes many arguments in [],
 ## Configuring constants
 
 (nearly) all the constants can be configured in a toml file, in case if they are different on a fork.
-By default, atmosim reads the configuration.toml file from the current working directory.
-You can overwrite this with ATMOSIM_CONFIG enviroment variable.
+Set the path to your ATMOSIM_CONFIG file as the enviroment variable.
 Windows cmd:
 ```
 set ATMOSIM_CONFIG=configs\monolith.toml
 atmosim.exe
 ```
 Bash:
-`ATMOSIM_CONFIG=$HOME/.config/atmosim/my_fork.toml ./atmosim`.
+`ATMOSIM_CONFIG=$HOME/.config/atmosim/my_fork.toml ./atmosim`
 Here are the options:
 ```
 [Atmosim]
