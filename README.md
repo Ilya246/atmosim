@@ -21,13 +21,7 @@ cd atmosim
 make -j release
 ```
 
-Given you have MinGW, you can also cross-compile from Linux to Windows with
-```
-```
-make -j win
-```
-```
-Other kinds of cross-compiling are not supported, but feel free to implement and PR them.
+Given you have MinGW, you can also cross-compile from Linux to Windows with `make -j win`. Other kinds of cross-compiling are not supported, but feel free to implement and PR them.
 
 ## Using AUR (on Arch Linux)
 ![AUR version](https://img.shields.io/aur/version/atmosim?label=AUR%20version)
