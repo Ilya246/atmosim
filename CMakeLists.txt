@@ -12,9 +12,15 @@ file(GLOB_RECURSE LIB_SOURCES "src/*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "main\\.cpp$")
 add_library(atmosim_lib STATIC ${LIB_SOURCES})
 
+find_package(PkgConfig REQUIRED)
+find_package(OpenGL REQUIRED)
+pkg_check_modules(IMGUI REQUIRED imgui)
+pkg_check_modules(GLFW REQUIRED glfw3)
+
 file(GLOB_RECURSE MAIN_SOURCE "src/main.cpp")
 add_executable(atmosim ${MAIN_SOURCE})
-target_link_libraries(atmosim PRIVATE atmosim_lib)
+target_link_libraries(atmosim PRIVATE atmosim_lib ${IMGUI_LDFLAGS} ${GLFW_LDFLAGS} OpenGL::GL)
+target_include_directories(atmosim PRIVATE ${IMGUI_INCLUDE_DIRS} ${GLFW_INCLUDE_DIRS})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_link_options(atmosim PRIVATE -static -static-libgcc -static-libstdc++)

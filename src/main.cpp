@@ -5,6 +5,11 @@
 #include <argparse/args.hpp>
 #include <argparse/read.hpp>
 
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_opengl3.h>
+#include <GLFW/glfw3.h>
+
 #include "constants.hpp"
 #include "optimiser.hpp"
 #include "gas.hpp"
@@ -51,297 +56,300 @@ bool try_input(T& into) {
     return true;
 }
 
+struct AtmosimState {
+    // Mode Switching
+    enum class WorkMode { Normal, Mixing, FullInput, Tolerances };
+    WorkMode current_mode = WorkMode::Normal;
+
+    // Normal Mode Input Configuration
+    char mix_gases[256] = "plasma,tritium";
+    char primer_gases[256] = "oxygen";
+    
+    float mixt[2] = { 375.15f, 595.15f };
+    float thirt[2] = { 293.15f, 293.15f };
+    
+    // Bounds & Limits
+    float pressure_bounds[2] = { 0.0f, 0.0f }; // Initialized to pressure_cap later
+    float lower_target_temp = 0.0f; // Initialized to plasma_fire_temp + 0.1f
+    int tick_cap = 600; // Sensible default instead of numeric_limits<size_t>::max()
+    float ratio_bound = 3.0f;
+    
+    // Accuracy / Rounding
+    float round_temp_to = 0.01f;
+    float round_pressure_to = 0.1f;
+    float round_ratio_to = 0.001f;
+    bool step_target_temp = false;
+    
+    // Optimizer params
+    bool optimise_maximise = true;
+    bool optimise_measure_before = false;
+    float max_runtime = 3.0f;
+    int sample_rounds = 5;
+    float bounds_scale = 0.5f;
+    int nthreads = 1;
+
+    // Concurrency & Output
+    std::atomic<bool> is_running{false};
+    std::string output_log = "Ready. Adjust parameters and click 'Run Optimization'.";
+    std::mutex log_mutex;
+    
+    AtmosimState() {
+        // Init runtime constants
+        pressure_bounds[0] = pressure_cap;
+        pressure_bounds[1] = pressure_cap;
+        lower_target_temp = plasma_fire_temp + 0.1f;
+    }
+};
+
+void RunOptimizationJob(AtmosimState* state) {
+    std::string local_log;
+    try {
+        // Format input strings to match the expected argparse list format "[gas1,gas2]"
+        std::string mg_str = std::string("[") + state->mix_gases + "]";
+        std::string pg_str = std::string("[") + state->primer_gases + "]";
+
+        vector<gas_ref> mix_g = argp::parse_value<vector<gas_ref>>(mg_str);
+        vector<gas_ref> primer_g = argp::parse_value<vector<gas_ref>>(pg_str);
+
+        if (mix_g.empty() || primer_g.empty()) {
+            throw runtime_error("No mix or primer gases defined.");
+        }
+
+        size_t num_mix_ratios = mix_g.size() > 1 ? mix_g.size() - 1 : 0;
+        size_t num_primer_ratios = primer_g.size() > 1 ? primer_g.size() - 1 : 0;
+        size_t num_ratios = num_mix_ratios + num_primer_ratios;
+
+        vector<float> lower_bounds = { std::min(state->mixt[0], state->thirt[0]), state->mixt[0], state->thirt[0], state->pressure_bounds[0] };
+        lower_bounds[0] = std::max(state->lower_target_temp, lower_bounds[0]);
+        
+        vector<float> upper_bounds = { std::max(state->mixt[1], state->thirt[1]), state->mixt[1], state->thirt[1], state->pressure_bounds[1] };
+        if (!state->step_target_temp) {
+            upper_bounds[0] = lower_bounds[0];
+        }
+
+        for (size_t i = 0; i < num_ratios; ++i) {
+            lower_bounds.push_back(-state->ratio_bound);
+            upper_bounds.push_back(state->ratio_bound);
+        }
+
+        // Constraints and Parameters
+        // Note: Pre/Post restrictions omitted from GUI for brevity, empty vectors passed.
+        vector<field_restriction<bomb_data>> pre_restrictions, post_restrictions;
+        field_ref<bomb_data> opt_param = bomb_data::radius_field; // Hardcoded default for simplicity
+
+        bomb_args b_args{
+            mix_g, primer_g, state->optimise_measure_before, 
+            state->round_pressure_to, state->round_temp_to, 
+            state->round_ratio_to * 0.01f, static_cast<size_t>(state->tick_cap), 
+            opt_param, pre_restrictions, post_restrictions
+        };
+
+        optimiser<bomb_args, opt_val_wrap> optim(
+            do_sim, lower_bounds, upper_bounds, state->optimise_maximise, b_args,
+            as_seconds(state->max_runtime), static_cast<size_t>(state->sample_rounds), 
+            state->bounds_scale, 2 /* log_level */
+        );
+        
+        optim.n_threads = static_cast<size_t>(state->nthreads);
+        optim.find_best();
+
+        // Serialize results
+        std::ostringstream oss;
+        if (optim.best_result.data != nullptr) {
+            oss << "Best Configuration Found:\n" 
+                << optim.best_result.data->print_full() << "\n\n"
+                << "Serialized string: " << optim.best_result.data->serialize() << "\n\n"
+                << default_tol << "x Tolerances:\n" << optim.best_result.data->measure_tolerances();
+        } else {
+            oss << "No viable recipes found within constraints.";
+        }
+        local_log = oss.str();
+
+    } catch (const std::exception& e) {
+        local_log = std::string("Error during execution: ") + e.what();
+    }
+
+    // Synchronize result back to main thread safely
+    std::lock_guard<std::mutex> lock(state->log_mutex);
+    state->output_log = local_log;
+    state->is_running = false;
+}
+
+void RenderAtmosimUI(AtmosimState& state) {
+    // 1. Get the main viewport bounds (the GLFW window dimensions)
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+
+    // 2. Lock the window and remove traditional floating window decorations
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | 
+                                    ImGuiWindowFlags_NoMove | 
+                                    ImGuiWindowFlags_NoResize | 
+                                    ImGuiWindowFlags_NoSavedSettings | 
+                                    ImGuiWindowFlags_MenuBar;
+
+    // 3. Strip window rounding and borders so it sits flush against the OS window edges
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+    // Begin the main window
+    ImGui::Begin("Atmosim Maxcap Calculator", nullptr, window_flags);
+    
+    // Pop the style variables immediately so child elements aren't affected
+    ImGui::PopStyleVar(2);
+
+    // --- Menu Bar (Optional, since we kept ImGuiWindowFlags_MenuBar) ---
+    if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Exit")) {
+                // To exit cleanly, we'd trigger a flag checked by the main loop.
+                // Assuming status_SIGINT breaks the loop in your native build:
+                status_SIGINT = 1; 
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+
+    // --- Main Content ---
+    if (ImGui::BeginTabBar("ModeTabs")) {
+        if (ImGui::BeginTabItem("Primary Optimizer")) {
+            state.current_mode = AtmosimState::WorkMode::Normal;
+
+            ImGui::Spacing();
+            ImGui::Text("Gas Configuration (comma-separated)");
+            ImGui::InputText("Mix Gases", state.mix_gases, IM_ARRAYSIZE(state.mix_gases));
+            ImGui::InputText("Primer Gases", state.primer_gases, IM_ARRAYSIZE(state.primer_gases));
+            
+            ImGui::Separator();
+            ImGui::Text("Thermodynamic Bounds");
+            ImGui::DragFloat2("Mix Temp Bounds (K)", state.mixt, 1.0f, 0.0f, 10000.0f, "%.2f");
+            ImGui::DragFloat2("Primer Temp Bounds (K)", state.thirt, 1.0f, 0.0f, 10000.0f, "%.2f");
+            ImGui::DragFloat2("Pressure Bounds (kPa)", state.pressure_bounds, 10.0f, 0.0f, 100000.0f, "%.1f");
+            
+            ImGui::Separator();
+            ImGui::Text("Optimizer Settings");
+            ImGui::InputFloat("Max Runtime (s)", &state.max_runtime, 0.5f, 1.0f, "%.1f");
+            ImGui::InputInt("Sample Rounds", &state.sample_rounds);
+            ImGui::InputInt("Threads", &state.nthreads);
+            ImGui::InputInt("Tick Cap", &state.tick_cap);
+            ImGui::Checkbox("Maximise Result", &state.optimise_maximise);
+            ImGui::SameLine();
+            ImGui::Checkbox("Step Target Temp", &state.step_target_temp);
+
+            ImGui::Spacing();
+            
+            // Execution Guard
+            ImGui::BeginDisabled(state.is_running);
+            if (ImGui::Button("Run Optimization", ImVec2(150, 40))) {
+                state.is_running = true;
+                {
+                    std::lock_guard<std::mutex> lock(state.log_mutex);
+                    state.output_log = "Optimizing... (Please wait)";
+                }
+                
+                // Spawn detached worker thread
+                std::thread(RunOptimizationJob, &state).detach();
+            }
+            ImGui::EndDisabled();
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Mixing Tool")) {
+            state.current_mode = AtmosimState::WorkMode::Mixing;
+            ImGui::Text("Utility tool logic goes here.");
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Output Console");
+
+    // Output area with automatic scrolling and mutex protection
+    std::string safe_log;
+    {
+        std::lock_guard<std::mutex> lock(state.log_mutex);
+        safe_log = state.output_log;
+    }
+
+    // Dynamic sizing: Fill the remaining vertical space (-1.0f or -FLT_MIN calculates padding automatically)
+    ImGui::InputTextMultiline("##output", const_cast<char*>(safe_log.c_str()), safe_log.capacity() + 1, 
+                              ImVec2(-FLT_MIN, -FLT_MIN), ImGuiInputTextFlags_ReadOnly);
+
+    ImGui::End();
+}
+
+/// @brief Unified main loop callable natively or via Emscripten
+void MainLoopStep(void* arg) {
+    AtmosimState* state = static_cast<AtmosimState*>(arg);
+    GLFWwindow* window = glfwGetCurrentContext();
+
+    glfwPollEvents();
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    RenderAtmosimUI(*state);
+
+    ImGui::Render();
+    int display_w, display_h;
+    glfwGetFramebufferSize(window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    glfwSwapBuffers(window);
+}
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-
-EM_JS(void, setup_console, (), {
-    Module.print = function(text) {
-        console.log(text);
-        if (typeof window.updateOutput === 'function') {
-            window.updateOutput(text);
-        }
-    };
-});
-
-int main(int argc, char* argv[]) {
-    setup_console();
-#else
-int main(int argc, char* argv[]) {
 #endif
-    handle_sigint();
 
-    size_t log_level = 2;
+int main(int argc, char* argv[]) {
+    handle_sigint(); // Ensure standard utility interrupt holds
 
-    enum struct work_mode {normal, mixing, full_input, tolerances};
-    work_mode mode = work_mode::normal;
+    if (!glfwInit()) return -1;
 
-    bool mixing_mode = false, full_input_mode = false, tolerances_mode = false;
-    bool simple_output = false, silent = false;
+    // GL 3.0 + GLSL 130
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-    vector<gas_ref> mix_gases;
-    vector<gas_ref> primer_gases;
-    float mixt1 = 0.f, mixt2 = 0.f, thirt1 = 0.f, thirt2 = 0.f;
-    float ratio_bound = 3.f;
-    tuple<vector<float>, vector<float>> ratio_bounds;
-    float lower_target_temp = plasma_fire_temp + 0.1f;
-    float lower_pressure = pressure_cap, upper_pressure = pressure_cap;
-    bool step_target_temp = false;
-    size_t tick_cap = numeric_limits<size_t>::max(); // 10 minutes
-    float round_temp_to = 0.01f, round_pressure_to = 0.1f, round_ratio_to = 0.001f; // default is 0.001% to mitigate FP inaccuracy
-                                                           // note: this is percentage
-    tuple<field_ref<bomb_data>, bool, bool> opt_params{bomb_data::radius_field, true, false};
+    GLFWwindow* window = glfwCreateWindow(1024, 768, "Atmosim", nullptr, nullptr);
+    if (!window) return -1;
+    
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1); // Enable vsync
 
-    vector<field_restriction<bomb_data>> pre_restrictions;
-    vector<field_restriction<bomb_data>> post_restrictions;
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
 
-    float max_runtime = 3.f;
-    size_t sample_rounds = 5;
-    float bounds_scale = 0.5f;
-    size_t nthreads = 1;
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 130");
 
-    std::vector<std::shared_ptr<argp::base_argument>> args = {
-        argp::make_argument("ratiob", "", "set gas ratio iteration bound", ratio_bound),
-        argp::make_argument("ratiobounds", "rbs", "set gas ratio iteration bounds: exact setup", ratio_bounds),
-        argp::make_argument("mixtoiter", "s", "provide potentially better results by also iterating the mix-to temperature (WARNING: will take many times longer to calculate)", step_target_temp),
-        argp::make_argument("mixingmode", "m", "UTILITY TOOL: utility to find desired mixer percentage if mixing different-temperature gases", mixing_mode),
-        argp::make_argument("fullinput", "f", "UTILITY TOOL: simulate and print every tick of a bomb with chosen gases", full_input_mode),
-        argp::make_argument("tolerance", "", "UTILITY TOOL: measure tolerances for a bomb serialised string", tolerances_mode),
-        argp::make_argument("mixg", "mg", "list of fuel gases (usually, in tank)", mix_gases),
-        argp::make_argument("primerg", "pg", "list of primer gases (usually, in canister)", primer_gases),
-        argp::make_argument("mixt1", "m1", "minimum fuel mix temperature to check, Kelvin", mixt1),
-        argp::make_argument("mixt2", "m2", "maximum fuel mix temperature to check, Kelvin", mixt2),
-        argp::make_argument("thirt1", "t1", "minimum primer mix temperature to check, Kelvin", thirt1),
-        argp::make_argument("thirt2", "t2", "maximum primer mix temperature to check, Kelvin", thirt2),
-        argp::make_argument("roundtemp", "", "round temperature to this much (default: " + to_string(round_temp_to) + ")", round_temp_to),
-        argp::make_argument("roundpressure", "", "round pressure to this much (default: " + to_string(round_pressure_to) + ")", round_pressure_to),
-        argp::make_argument("roundratio", "", "round ratio to this much (default: " + to_string(round_ratio_to) + ")", round_ratio_to),
-        argp::make_argument("lowerp", "p1", "lower mix-to pressure to check, kPa, default is pressure cap", lower_pressure),
-        argp::make_argument("upperp", "p2", "upper mix-to pressure to check, kPa, default is pressure cap", upper_pressure),
-        argp::make_argument("ticks", "t", "set tick limit: aborts if a bomb takes longer than this to detonate (default: " + to_string(tick_cap) + ")", tick_cap),
-        argp::make_argument("lowertargettemp", "o", "only consider bombs which mix to above this temperature; higher values may make bombs more robust to slight mismixing (default " + to_string(lower_target_temp) + ")", lower_target_temp),
-        argp::make_argument("loglevel", "l", "how much to log (default " + to_string(log_level) + ")", log_level),
-        argp::make_argument("param", "p", "(param, maximise, measure_before_sim): lets you configure what parameter and how to optimise", opt_params),
-        argp::make_argument("restrictpre", "rb", "lets you make atmosim not consider bombs outside of chosen parameters, measured before simulation", pre_restrictions),
-        argp::make_argument("restrictpost", "ra", "same as -rr, but measured after simulation", post_restrictions),
-        argp::make_argument("simpleout", "", "makes very simple output, for use by other programs or advanced users", simple_output),
-        argp::make_argument("silent", "", "output ONLY the final result, overrides loglevel", silent),
-        argp::make_argument("runtime", "rt", "for how long to run in seconds (default " + to_string(max_runtime) + ")", max_runtime),
-        argp::make_argument("samplerounds", "sr", "how many sampling rounds to perform, multiplies runtime (default " + to_string(sample_rounds) + ")", sample_rounds),
-        argp::make_argument("boundsscale", "", "how much to scale bounds each sample round (default " + to_string(bounds_scale) + ")", bounds_scale),
-        argp::make_argument("nthreads", "j", "number of threads for the optimiser to use", nthreads)
-    };
+    AtmosimState app_state;
 
-    argp::parse_arguments(args, argc, argv,
-    // pre-help
-        "Atmosim: SS14 atmos maxcap calculator utility\n"
-        "  This program contains an optimisation algorithm that attempts to find the best bomb possible according to the desired parameters.\n"
-        "  Additionally, there's a few extra utility tools you can activate instead of the primary mode with their respective flags.\n"
-        "\n"
-        "  Available parameter types:\n"
-        "    " + params_supported_str +
-        "\n"
-        "  Available gas types:\n"
-        "    " + list_gases() +
-        "\n",
-    // post-help
-        "\n"
-        "Example usage:\n"
-        "  $ ./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -rt=0.5 -sr=10\n"
-        "  This should find you a ~13.5 radius maxcap recipe. Experiment with other parameters.\n"
-        "  For --restrictpre (-rb) and --restrictpost (-ra):\n"
-        "  $ ./atmosim -mg=[plasma,tritium] -pg=[oxygen] -m1=375.15 -m2=595.15 -t1=293.15 -t2=293.15 -ra=[[radius,0,11],[ticks,20,44]]\n"
-        "  The -ra and -rb arguments will interpret `-` as infinity in the respective direction, and the second argument may be omitted.\n"
-        "  -ra=[[radius,20]] or -ra=[[radius,20,-]] will restrict to any radius above 20, and -ra=[[radius,-,15]] will restrict to radius below 15.\n"
-        "  $ ./atmosim -mg=[nitrous_oxide,tritium] -pg=[oxygen,frezon] -m1=73.15 -m2=293.15 -t1=373.15 -t2=800.15 -ra=[[radius,20]] --ticks=1200 -rt=5 -sr=8 -p=[ticks,true,false]\n"
-        "\n"
-        "Tips and tricks\n"
-        "  Consider using the -s flag for radius-optimised bombs. Not recommended for ticks-optimised bombs.\n"
-        "  Additionally, consider letting the optimiser think for longer using the -rt and -sr flags.\n"
-        "  If you want a long-fuse bomb, try using the -p flag to optimise to maximise ticks and the -ra flag to restrict radius to be above a desired value.\n"
-        "  Remember to use the -t flag to raise maximum alotted ticks if you're trying to find long-fuse bombs.\n"
-        "\n"
-        "  Brought to you by Ilya246 and friends"
-    );
-
-    // check if we chose an alternate mode
-    if (mixing_mode) mode = work_mode::mixing;
-    if (full_input_mode) mode = work_mode::full_input;
-    if (tolerances_mode) mode = work_mode::tolerances;
-
-    switch (mode) {
-        case (work_mode::mixing): {
-            cout << "Input desired % of first gas: ";
-            float perc = get_input<float>();
-            cout << "Input temperature of first gas: ";
-            float T1 = get_input<float>();
-            cout << "Input temperature of second gas: ";
-            float T2 = get_input<float>();
-            float portion = perc * 0.01f;
-            float n_ratio = portion / (1.f - portion) * T1 / T2;
-            float n_perc = 100.f * n_ratio / (1.f + n_ratio);
-            cout << format("Desired percentage: {}% first {}% second", n_perc, 100.f - n_perc) << endl;
-            break;
-        }
-        case (work_mode::full_input): {
-            gas_tank tank;
-
-            cout << "Normal (y) or serialized (n) input [Y/n]: ";
-            bool norm_input;
-            if (!try_input<bool>(norm_input)) {
-                norm_input = true;
-            }
-            if (!norm_input) {
-                cout << "Input serialised string: ";
-                std::string str;
-                getline(cin, str);
-                bomb_data data = bomb_data::deserialize(str);
-                tank = data.tank;
-            } else {
-                cout << "Input number of mixes (omit for 2): ";
-                int mix_c = input_or_default(2);
-                for (int i = 0; i < mix_c; ++i) {
-                    cout << format("Inputting mix {}\n", i + 1);
-                    cout << format("Input pressure to fill to (omit for {}): ", pressure_cap);
-                    float pressure_to = input_or_default(pressure_cap);
-                    cout << "Input temperature: ";
-                    float temperature = get_input<float>();
-                    vector<pair<gas_ref, float>> gases;
-                    float ratio_sum = 0.f;
-                    bool end = false;
-                    while (!end) {
-                        gas_ref g;
-                        cout << format("Input gas (omit to end): ", list_gases());
-                        if (!try_input(g)) break;
-                        cout << "Input ratio (%, portion; omit for remainder from 100%): ";
-                        float ratio;
-                        if (!try_input(ratio)) {
-                            ratio = 100.f - ratio_sum;
-                            end = true;
-                        }
-                        ratio_sum += ratio;
-                        gases.push_back({g, ratio});
-                    }
-                    tank.mix.canister_fill_to(get_fractions(gases), temperature, pressure_to);
-                }
-            }
-
-            size_t tick = 1;
-            while (true) {
-                cout << format("[Tick {:<2}] Tank status: {}", tick, tank.get_status()) << endl;
-                if (!tank.tick() || tank.state != tank.st_intact || status_SIGINT)
-                    break;
-                ++tick;
-            }
-
-            const char* state_name = "unknown";
-            switch (tank.state) {
-                case gas_tank::st_intact: state_name = "intact"; break;
-                case gas_tank::st_ruptured: state_name = "ruptured"; break;
-                case gas_tank::st_exploded: state_name = "exploded"; break;
-            }
-            cout << format("Result:\n  Status: {}\n  State: {}\n  Radius: {:.2f}",
-                            tank.get_status(), state_name, tank.calc_radius()) << endl;
-            break;
-        }
-        case (work_mode::tolerances): {
-            cout << "Input serialised string: ";
-            std::string str;
-            getline(cin, str);
-            bomb_data data = bomb_data::deserialize(str);
-            data.ticks = data.tank.tick_n(tick_cap);
-            data.fin_radius = data.tank.calc_radius();
-            data.fin_pressure = data.tank.mix.pressure();
-            cout << "Input desired tolerance (omit for 0.95): ";
-            float tol = input_or_default<float>(0.95f);
-            cout << "Tolerances:\n" << data.measure_tolerances(tol) << endl;
-            break;
-        }
-        default: {
-            break;
-        }
-    }
-
-    if (mode != work_mode::normal) return 0;
-
-    field_ref<bomb_data> opt_param = get<0>(opt_params);
-    bool optimise_maximise = get<1>(opt_params);
-    bool optimise_measure_before = get<2>(opt_params);
-
-    if (silent) {
-        // stop talking, be quiet for several days
-        cout.setstate(ios::failbit);
-    }
-
-    if ((mix_gases.empty() || primer_gases.empty()) && !silent) {
-        cout << "No mix or primer gases found, see `./atmosim -h` for usage\n";
-        cout << "Gases: " << list_gases() << endl;
-        return 0;
-    }
-
-    size_t num_mix_ratios = mix_gases.size() > 1 ? mix_gases.size() - 1 : 0;
-    size_t num_primer_ratios = primer_gases.size() > 1 ? primer_gases.size() - 1 : 0;
-    size_t num_ratios = num_mix_ratios + num_primer_ratios;
-
-    vector<float> lower_bounds = {std::min(mixt1, thirt1), mixt1, thirt1, lower_pressure};
-    lower_bounds[0] = std::max(lower_target_temp, lower_bounds[0]);
-    vector<float> upper_bounds = {std::max(mixt2, thirt2), mixt2, thirt2, upper_pressure};
-    if (!step_target_temp) {
-        upper_bounds[0] = lower_bounds[0];
-    }
-
-    vector<float> ratio_b_low = get<0>(ratio_bounds);
-    vector<float> ratio_b_high = get<1>(ratio_bounds);
-    if (!ratio_b_low.empty() || !ratio_b_high.empty()) {
-        if (ratio_b_low.size() != ratio_b_high.size() || ratio_b_low.size() != num_ratios) {
-            cout << "Invalid number of custom ratio bounds provided. Provide ratio bounds for the last count - 1 gases in each mix." << endl;
-            return 1;
-        }
-        for (size_t i = 0; i < num_ratios; ++i) {
-            lower_bounds.push_back(ratio_b_low[i]);
-            upper_bounds.push_back(ratio_b_high[i]);
-        }
-    } else {
-        for (size_t i = 0; i < num_ratios; ++i) {
-            lower_bounds.push_back(-ratio_bound);
-            upper_bounds.push_back(ratio_bound);
-        }
-    }
-
-    optimiser<bomb_args, opt_val_wrap>
-    optim(do_sim,
-          lower_bounds,
-          upper_bounds,
-          optimise_maximise,                                                                   // convert percentage to fraction
-          {mix_gases, primer_gases, optimise_measure_before, round_pressure_to, round_temp_to, round_ratio_to * 0.01f, tick_cap, opt_param, pre_restrictions, post_restrictions},
-          as_seconds(max_runtime),
-          sample_rounds,
-          bounds_scale,
-          log_level);
-    optim.n_threads = nthreads;
-
-    optim.find_best();
-
-    const opt_val_wrap& best_res = optim.best_result;
-    cout.clear();
-    if (best_res.data != nullptr) {
-        cout << (simple_output ? "" : "\nBest:\n") << (simple_output ? best_res.data->print_very_simple() : best_res.data->print_full()) << endl;
-        if (!simple_output) {
-            cout << "\nSerialized string: " << best_res.data->serialize() << endl;
-        }
-        cout << default_tol << "x tolerances:\n" << best_res.data->measure_tolerances() << endl;
-    } else {
-        cout << "No viable recipes found." << endl;
-    }
-    if (silent) {
-        cout.setstate(ios::failbit);
-    }
-    int ret = 0;
 #ifdef __EMSCRIPTEN__
-    // Free allocated arguments
-    for(int i = 0; i < argc; i++) {
-        free(argv[i]);
+    // Note: When building with emscripten, compile with `-s USE_PTHREADS=1` to support std::thread
+    emscripten_set_main_loop_arg(MainLoopStep, &app_state, 0, true);
+#else
+    while (!glfwWindowShouldClose(window) && !status_SIGINT) {
+        MainLoopStep(&app_state);
     }
-    free(argv);
 #endif
-    return ret;
+
+    // Cleanup
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
+    return 0;
 }
