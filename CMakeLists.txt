@@ -26,11 +26,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_D
 
 file(GLOB_RECURSE LIB_SOURCES "src/*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "main_.*\\.cpp$")
-add_library(atmosim_lib STATIC ${LIB_SOURCES})
 
 if(BUILD_TUI)
-    add_executable(atmosim src/main_tui.cpp)
-    target_link_libraries(atmosim PRIVATE atmosim_lib)
+    add_executable(atmosim src/main_tui.cpp ${LIB_SOURCES})
 endif()
 
 # Pull GUI deps if GUI

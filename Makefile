@@ -17,11 +17,11 @@ test:
 	@build/tests
 
 release-tui:
-	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=Release .
+	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF -DBUILD_TUI=ON .
 	@cmake --build build --parallel
 
 release:
-	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON .
+	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=ON -DBUILD_TUI=OFF .
 	@cmake --build build --parallel
 
 win-tui:
@@ -37,7 +37,7 @@ web:
 	@emcmake cmake -B build/web -S . -DCMAKE_BUILD_TYPE=Web
 	@cmake --build build/web --parallel
 
-deploy: release win-tui
+deploy: release release-tui win-tui
 	@mkdir -p deploy
 	@tar -czf deploy/atmosim-linux-glibc-amd64.tar.gz configs -C build atmosim
 	@tar -czf deploy/atmosim-gui-linux-glibc-amd64.tar.gz configs -C build atmosim_gui
