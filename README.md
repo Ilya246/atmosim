@@ -43,6 +43,17 @@ Zsh treats [] as pattern matching. And since atmosim takes many arguments in [],
 
 ## Configuring constants
 
+Defaults target Goob Station's implemented reactions at
+[`ba5f781` (2026-11-11)](https://github.com/Goob-Station/Goob-Station/commit/ba5f781d76b6ba4490ad1821f9770007e43bb4a5).
+The default tritium model consumes oxygen and uses `FireEnergyReleased = 2840000`
+and `BurnFuelRatio = 2`. To use the previous tritium model for historical recipes,
+set `ATMOSIM_CONFIG=configs/goob-legacy.toml`.
+
+This is a subset of Goob atmospherics: ammonia, BZ, healium, pluoxium, and their
+reactions are not implemented. Some omitted reactions can consume gases that
+are supported here. Radius reporting is intentionally uncapped; the game applies
+its own explosion cap.
+
 (nearly) all the constants can be configured in a toml file, in case if they are different on a fork.
 Set the path to your ATMOSIM_CONFIG file as the enviroment variable.
 Windows cmd:
@@ -83,7 +94,7 @@ FireEnergyReleased
 MinimumOxyburnEnergy
 BurnOxyFactor
 BurnTritFactor
-BurnFuelRatio # 0 by default, which uses pre https://github.com/space-wizards/space-station-14/pull/41870 logic
+BurnFuelRatio # 2 by default; 0 selects pre https://github.com/space-wizards/space-station-14/pull/41870 logic
 
 [Frezon]
 CoolLowerTemperature
@@ -125,4 +136,17 @@ FragmentScale
 
 [Misc]
 Tickrate
+```
+
+## Tests
+
+Install Catch2 3, then run `make test`. CTest runs the current-default tests and
+the historical recipe tests separately, selecting `configs/goob-legacy.toml`
+for the latter. Performance benchmarks are excluded from the correctness run.
+For a separate build directory or a custom Catch2 installation:
+
+```bash
+cmake -S . -B build/test -DCMAKE_BUILD_TYPE=Test -DCMAKE_PREFIX_PATH=/path/to/catch2/install
+cmake --build build/test --parallel
+ctest --test-dir build/test --output-on-failure
 ```

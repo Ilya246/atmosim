@@ -14,7 +14,7 @@ debug:
 test:
 	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=Test .
 	@cmake --build build --parallel
-	@build/tests
+	@ctest --test-dir build --output-on-failure
 
 release-tui:
 	$(CMAKE) -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF -DBUILD_TUI=ON .

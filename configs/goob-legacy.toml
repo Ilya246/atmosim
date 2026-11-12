@@ -1,0 +1,5 @@
+# Use the old Goob tritium reaction for old recipes.
+# Other simulator fixes still apply.
+[Tritium]
+FireEnergyReleased = 284000
+BurnFuelRatio = 0

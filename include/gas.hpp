@@ -23,7 +23,7 @@ struct gas_type {
 };
 
 // all supported gases - if it's not here, it's not supported
-// UP TO DATE AS OF: 21.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781, supported gases only)
 inline const gas_type gas_types[] {
     {20.f  * heat_scale, "oxygen"},
     {30.f  * heat_scale, "nitrogen"},

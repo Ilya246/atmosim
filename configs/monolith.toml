@@ -2,6 +2,11 @@
 # Still, this should work for regular plasma, tritium and oxygen maxcaps there.
 # Up to date as of 14.02.2026
 
+# Keep this config's old tritium settings when Goob defaults change.
+[Tritium]
+FireEnergyReleased = 284000
+BurnFuelRatio = 0
+
 [Plasma]
 SuperSaturationThreshold = 30
 UpperTemperature = 700

@@ -13,7 +13,9 @@ inline static toml::table config = []() {
     return toml::table();
 }();
 
-inline const float // goobstation (non-reforged) defaults, up to date as of 14.02.2026
+// goobstation defaults for supported gases and reactions
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
+inline const float
 // [Atmosim]
 default_tol = config["Atmosim"]["DefaultTolerance"].value_or(0.95f),
 
@@ -39,11 +41,11 @@ plasma_oxygen_fullburn = config["Plasma"]["OxygenFullburn"].value_or(10.f),
 plasma_burn_rate_delta = config["Plasma"]["BurnRateDelta"].value_or(9.f),
 
 // [Tritium]
-fire_hydrogen_energy_released = config["Tritium"]["FireEnergyReleased"].value_or(284000.f) * heat_scale,
+fire_hydrogen_energy_released = config["Tritium"]["FireEnergyReleased"].value_or(2840000.f) * heat_scale,
 minimum_tritium_oxyburn_energy = config["Tritium"]["MinimumOxyburnEnergy"].value_or(143000.f) * heat_scale,
 tritium_burn_oxy_factor = config["Tritium"]["BurnOxyFactor"].value_or(100.f),
 tritium_burn_trit_factor = config["Tritium"]["BurnTritFactor"].value_or(10.f),
-tritium_burn_fuel_ratio = config["Tritium"]["BurnFuelRatio"].value_or(0.f),
+tritium_burn_fuel_ratio = config["Tritium"]["BurnFuelRatio"].value_or(2.f),
 
 // [Frezon]
 frezon_cool_lower_temperature = config["Frezon"]["CoolLowerTemperature"].value_or(23.15f),

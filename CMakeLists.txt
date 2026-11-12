@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(atmosim LANGUAGES CXX)
 
-option(BUILD_GUI OFF)
-option(BUILD_TUI ON)
+option(BUILD_GUI "Build the graphical interface" OFF)
+option(BUILD_TUI "Build the command-line interface" ON)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,9 +26,11 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_D
 
 file(GLOB_RECURSE LIB_SOURCES "src/*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX "main_.*\\.cpp$")
+add_library(atmosim_lib STATIC ${LIB_SOURCES})
 
 if(BUILD_TUI)
-    add_executable(atmosim src/main_tui.cpp ${LIB_SOURCES})
+    add_executable(atmosim src/main_tui.cpp)
+    target_link_libraries(atmosim PRIVATE atmosim_lib)
 endif()
 
 # Pull GUI deps if GUI
@@ -75,7 +77,7 @@ if(BUILD_GUI)
 
 endif()
 
-set(MAIN_TARGETS "")
+set(MAIN_TARGETS atmosim_lib)
 if(BUILD_TUI)
     list(APPEND MAIN_TARGETS atmosim)
 endif()
@@ -117,10 +119,14 @@ if(CMAKE_BUILD_TYPE STREQUAL "Test")
     endforeach()
 
     file(GLOB_RECURSE TEST_SOURCES "tests/*.cpp")
-    find_package(Catch2 REQUIRED)
+    find_package(Catch2 3 REQUIRED)
     add_executable(tests ${TEST_SOURCES})
     target_link_libraries(tests PRIVATE atmosim_lib Catch2::Catch2WithMain)
     target_include_directories(tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests include libs)
     enable_testing()
-    add_test(NAME AllTests COMMAND tests)
+    add_test(NAME AllTests COMMAND tests "~[legacy]~[benchmark]")
+    set_tests_properties(AllTests PROPERTIES ENVIRONMENT "ATMOSIM_CONFIG=")
+    add_test(NAME LegacyRecipes COMMAND tests "[legacy]")
+    set_tests_properties(LegacyRecipes PROPERTIES
+        ENVIRONMENT "ATMOSIM_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/configs/goob-legacy.toml")
 endif()

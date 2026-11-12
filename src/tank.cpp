@@ -9,12 +9,14 @@ float gas_tank::calc_radius() {
     return calc_radius(mix.pressure());
 }
 
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781, without the game's radius cap)
 float gas_tank::calc_radius(float pressure) {
     if (pressure < tank_fragment_pressure) return 0.f;
     return std::sqrt((pressure - tank_fragment_pressure) / tank_fragment_scale);
 }
 
 // do one reaction tick and check state
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 bool gas_tank::tick() {
     bool reacted = mix.reaction_tick();
 

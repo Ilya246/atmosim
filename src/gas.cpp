@@ -145,16 +145,18 @@ std::string gas_mixture::to_string(char sep) const {
     return out_str;
 }
 
-// UP TO DATE AS OF: 21.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781, supported reactions only)
 bool gas_mixture::reaction_tick() {
     // calculating heat capacity is somewhat expensive, so cache it
     float heat_capacity_cache = heat_capacity();
-    float temp = temperature; // original code caches temperature for some reason
+    // Temperature checks use the value from the start of the tick.
+    // The reactions themselves use the current temperature.
+    float temp = temperature;
     bool reacted = false;
-    if (temp < frezon_production_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrogen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
+    if (temp <= frezon_production_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrogen) >= reaction_min_gas && amount_of(tritium) >= reaction_min_gas) {
         reacted |= react_frezon_production(heat_capacity_cache);
     }
-    if (temp < nitrium_decomp_temp && amount_of(oxygen) >= reaction_min_gas && amount_of(nitrium) >= reaction_min_gas) {
+    if (amount_of(oxygen) >= reaction_min_gas && amount_of(nitrium) >= reaction_min_gas) {
         reacted |= react_nitrium_decomposition(heat_capacity_cache);
     }
     if (temp >= frezon_cool_temp && amount_of(nitrogen) >= reaction_min_gas && amount_of(frezon) >= reaction_min_gas) {
@@ -181,7 +183,7 @@ void gas_mixture::adjust_gas_cached_heat(gas_ref gas, float by, float& heat_capa
     amounts[gas.idx] += by;
 }
 
-// UP TO DATE AS OF: 21.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 bool gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_released = 0.f;
@@ -218,6 +220,7 @@ bool gas_mixture::react_plasma_fire(float& heat_capacity_cache) {
 }
 
 // UP TO DATE AS OF: 21.06.2025
+// Old tritium reaction, kept for old configs.
 bool gas_mixture::react_tritium_fire_old(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_released = 0.f;
@@ -246,7 +249,7 @@ bool gas_mixture::react_tritium_fire_old(float& heat_capacity_cache) {
     return burned_fuel > 0.f;
 }
 
-// UP TO DATE AS OF: 14.02.2026
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 // post https://github.com/space-wizards/space-station-14/pull/41870
 bool gas_mixture::react_tritium_fire_new(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
@@ -258,8 +261,8 @@ bool gas_mixture::react_tritium_fire_new(float& heat_capacity_cache) {
         adjust_gas_cached_heat(tritium, -burned_fuel, heat_capacity_cache);
         adjust_gas_cached_heat(oxygen, -burned_fuel / tritium_burn_fuel_ratio, heat_capacity_cache);
     } else {
-        // it was math.max in the original PR but it got fixed
-        burned_fuel = std::min(amount_of(tritium), amount_of(oxygen) / tritium_burn_fuel_ratio / tritium_burn_trit_factor);
+        // The burn factor applies to both fuel limits.
+        burned_fuel = std::min(amount_of(tritium), amount_of(oxygen) / tritium_burn_fuel_ratio) / tritium_burn_trit_factor;
         adjust_gas_cached_heat(tritium, -burned_fuel, heat_capacity_cache);
         adjust_gas_cached_heat(oxygen, -burned_fuel / tritium_burn_fuel_ratio, heat_capacity_cache);
 
@@ -276,7 +279,7 @@ bool gas_mixture::react_tritium_fire_new(float& heat_capacity_cache) {
     return burned_fuel > 0.f;
 }
 
-// UP TO DATE AS OF: 21.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 bool gas_mixture::react_N2O_decomposition(float& heat_capacity_cache) {
     float n2o = amount_of(nitrous_oxide);
     float burned_fuel = n2o * N2Odecomposition_rate;
@@ -287,7 +290,7 @@ bool gas_mixture::react_N2O_decomposition(float& heat_capacity_cache) {
     return burned_fuel > 0.f;
 }
 
-// UP TO DATE AS OF: 29.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 bool gas_mixture::react_frezon_production(float& heat_capacity_cache) {
     float efficiency = temperature / frezon_production_max_efficiency_temperature;
     float loss = 1.f - efficiency;
@@ -310,7 +313,7 @@ bool gas_mixture::react_frezon_production(float& heat_capacity_cache) {
     return true;
 }
 
-// UP TO DATE AS OF: 21.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 bool gas_mixture::react_frezon_coolant(float& heat_capacity_cache) {
     float old_heat_capacity = heat_capacity_cache;
     float energy_modifier = 1.f;
@@ -319,6 +322,7 @@ bool gas_mixture::react_frezon_coolant(float& heat_capacity_cache) {
         energy_modifier = std::min(scale, frezon_cool_maximum_energy_modifier);
         scale = 1.f;
     }
+    if (scale <= 0.f) return false;
     float burn_rate = amount_of(frezon) * scale / frezon_cool_rate_modifier;
     float energy_released = 0.f;
     if (burn_rate > minimum_heat_capacity) {
@@ -331,17 +335,20 @@ bool gas_mixture::react_frezon_coolant(float& heat_capacity_cache) {
 
         energy_released = burn_rate * frezon_cool_energy_released * energy_modifier;
     }
+    if (energy_released >= 0.f) return false;
     if (heat_capacity_cache > minimum_heat_capacity) {
         temperature = (temperature * old_heat_capacity + energy_released) / heat_capacity_cache;
     }
-    return energy_released > 0.f;
+    return true;
 }
 
-// UP TO DATE AS OF: 21.06.2025
+// UP TO DATE AS OF: 12.11.2026 (Goob ba5f781)
 bool gas_mixture::react_nitrium_decomposition(float& heat_capacity_cache) {
+    // This check uses the current temperature.
+    if (temperature > nitrium_decomp_temp) return false;
     float efficiency = std::min(temperature / 2984.f, amount_of(nitrium));
 
-    if (amount_of(nitrium) - efficiency < 0.f)
+    if (efficiency <= 0.f || amount_of(nitrium) - efficiency < 0.f)
         return false;
 
     adjust_gas_cached_heat(nitrium, -efficiency, heat_capacity_cache);
